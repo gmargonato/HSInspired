@@ -12,6 +12,7 @@ import {
 } from 'pixi.js'
 import 'pixi.js/advanced-blend-modes'
 import type { CardDefinition } from '../../game-rules/content/cards'
+import type { CardCostResource } from '../../game-rules/match/rules/card-cost-resource'
 import { supportsPremiumFormat } from '../../game-rules/progression/premium-support'
 import { CardAssetResolver } from '../assets/card-asset-resolver'
 import { CARD_NAME_FIT, CARD_RULES_COMPACT_SPACING } from './card-layout'
@@ -391,7 +392,7 @@ export class CardView extends Container {
     { dirty: boolean; refresh: () => void }
   >()
   private snapshotRevision = 0
-  private costResource: 'mana' | 'health' = 'mana'
+  private costResource: CardCostResource = 'mana'
   private costTextures!: Record<'mana' | 'health', Texture>
   private readonly content: Container
   private staticLayers: Container | null = null
@@ -978,13 +979,14 @@ export class CardView extends Container {
   }
 
   /** Swaps the payment icon at its authored size without moving the cost label. */
-  setCostResource(resource: 'mana' | 'health'): void {
+  setCostResource(resource: CardCostResource): void {
     if (this.costResource === resource) return
     const entry = this.treeObjects.get('card.stats.mana.icon')
     if (!entry || !(entry.object instanceof Sprite)) return
     this.costResource = resource
     this.manaShimmer?.setEnabled(resource === 'mana')
-    entry.object.texture = this.costTextures[resource]
+    entry.object.texture =
+      this.costTextures[resource === 'opponent-health' ? 'health' : resource]
     this.updateCacheTexture()
     for (const refresh of this.appearanceSnapshots) refresh()
   }

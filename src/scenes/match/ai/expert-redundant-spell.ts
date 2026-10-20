@@ -109,6 +109,7 @@ export function isRedundantSpellPrefixCandidate(
       ) &&
     cards.length === 1 &&
     plainTargetedDamage(cards[0]!) &&
+    !self.nextCardCostsOpponentHealth &&
     !self.nextSpellCostsHealth &&
     !self.pendingCostModifiers?.length
   )

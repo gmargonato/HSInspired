@@ -94,6 +94,7 @@ export interface CardMetadata {
   readonly tribes?: readonly string[]
   readonly spellSchool: string | null
   readonly cost: number
+  readonly corruptTo?: CardId
   readonly spellDamage?: number
   readonly rulesText: string
   readonly keywords: readonly CardKeyword[]
@@ -134,6 +135,7 @@ export function cardHasTribe(
 }
 
 export interface MinionCardDefinition extends CardMetadata {
+  readonly dormantTurns?: number
   readonly type: 'Minion'
   readonly attack: number
   readonly health: number

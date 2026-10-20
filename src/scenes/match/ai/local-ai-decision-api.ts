@@ -1,4 +1,9 @@
 import {
+  cardCostResource,
+  cardPaymentCost,
+  canPayCardCost
+} from '../../../game-rules/match/rules/card-cost-resource'
+import {
   CARD_CATALOG,
   HERO_POWER_CATALOG,
   cardHasTribe
@@ -2672,7 +2677,9 @@ export class LocalAiDecisionApi implements AiDecisionApi {
           ? healingSynergyPrior(
               player,
               definition.effects,
-              number(card?.currentCost, definition.cost)
+              player.nextCardCostsOpponentHealth
+                ? 0
+                : number(card?.currentCost, definition.cost)
             )
           : 0) +
         (player && definition ? cthunBuffPrior(definition.effects, player) : 0) +
@@ -2681,7 +2688,9 @@ export class LocalAiDecisionApi implements AiDecisionApi {
               definition.effects,
               player,
               card.instanceId,
-              number(card.currentCost, definition.cost)
+              player.nextCardCostsOpponentHealth
+                ? 0
+                : number(card.currentCost, definition.cost)
             )
           : 0) +
         (player && opponent && definition?.type === 'Minion' && card
@@ -2690,7 +2699,9 @@ export class LocalAiDecisionApi implements AiDecisionApi {
               number(definition.health),
               player,
               opponent,
-              number(card.currentCost, definition.cost),
+              player.nextCardCostsOpponentHealth
+                ? 0
+                : number(card.currentCost, definition.cost),
               state.turnNumber
             )
           : 0) +
@@ -2904,13 +2915,37 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       (card) => card.instanceId === command.cardInstanceId
     )
     const currentDefinition = current ? CARD_CATALOG.get(current.cardId) : undefined
-    const opponentHealth = opponent
+    let opponentHealth = opponent
       ? number(record(opponent.hero).health) + number(record(opponent.hero).armor)
       : Number.POSITIVE_INFINITY
     if (!player || !opponent || !current || !currentDefinition) return 0
+    if (
+      player.nextCardCostsOpponentHealth &&
+      !canPayCardCost(
+        currentDefinition,
+        player,
+        number(current.currentCost, currentDefinition.cost)
+      )
+    )
+      return 0
 
     let availableMana = number(record(player.mana).available)
-    availableMana -= number(current.currentCost, currentDefinition.cost)
+    const resource = cardCostResource(currentDefinition, player)
+    if (resource !== 'opponent-health')
+      availableMana -= number(current.currentCost, currentDefinition.cost)
+    const opponentHealthPayment =
+      resource === 'opponent-health'
+        ? cardPaymentCost(
+            currentDefinition,
+            player,
+            number(current.currentCost, currentDefinition.cost)
+          )
+        : 0
+    // Health payment bypasses Armor; subsequent spell damage does not.
+    if (opponentHealthPayment > 0) {
+      if (opponentHealthPayment >= opponent.hero.health) return 300
+      opponentHealth -= opponentHealthPayment
+    }
     if (availableMana < 0) return 0
 
     let spellPower = player.board.reduce(
@@ -2938,6 +2973,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     const currentEffects = JSON.stringify(currentDefinition.effects).toLowerCase()
     if (
       candidateDamage <= 0 &&
+      opponentHealthPayment <= 0 &&
       !isSpellPower(currentDefinition) &&
       !currentEffects.includes('mana')
     )
@@ -3016,7 +3052,13 @@ export class LocalAiDecisionApi implements AiDecisionApi {
           const definition = CARD_CATALOG.get(card.cardId)
           return (
             definition &&
-            number(card.currentCost, definition.cost) <= actor.mana.available &&
+            (actor.nextCardCostsOpponentHealth
+              ? canPayCardCost(
+                  definition,
+                  actor,
+                  number(card.currentCost, definition.cost)
+                )
+              : number(card.currentCost, definition.cost) <= actor.mana.available) &&
             containsEffectAction(definition.effects, 'destroy-secrets')
           )
         })

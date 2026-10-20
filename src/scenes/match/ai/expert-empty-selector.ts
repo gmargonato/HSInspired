@@ -119,6 +119,7 @@ export function wastesEmptySelectorSpell(
           (CARD_CATALOG.get(player.weapon.cardId)?.effects.length !== 0 ||
             player.weapon.enchantments?.length)) ||
         player.pendingCostModifiers?.length ||
+        player.nextCardCostsOpponentHealth ||
         player.nextSpellCostsHealth ||
         player.nextMurlocCostsHealth ||
         player.lockAndLoadCount ||

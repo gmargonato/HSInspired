@@ -1359,6 +1359,7 @@
         ],
         "repeat": {
           "until": "repeat-ended-without-minion-death",
+          "maxCount": 13,
           "actions": [
             {
               "action": "damage",

@@ -33,6 +33,7 @@ import { HERO_POWER_CATALOG } from '../../../game-rules/content/hero-powers'
 import {
   getHeroAttack,
   cardCostResource,
+  cardPaymentCost,
   isBoardMinionSleeping,
   MAX_BOARD_SIZE,
   type AttackCharacterRef,
@@ -345,6 +346,13 @@ type MatchHoverTarget =
 
 function cardDefinition(card: OpeningCard): CardDefinition {
   return CARD_CATALOG.require(card.cardId)
+}
+
+function handCardRulesText(card: OpeningCard, rulesText: string): string {
+  const text = cthunCardRulesText(card, rulesText)
+  return card.temporaryUntilTurn === undefined
+    ? text
+    : `${text}\nTemporary: Discard at the end of this turn.`
 }
 
 function cloneCard(card: OpeningCard): OpeningCard {
@@ -2086,7 +2094,11 @@ export class GameBoardView extends Actor {
       entry.card = cloneCard(card)
       const definition = cardDefinition(card)
       const baseCost = card.baseCost ?? definition.cost
-      const currentCost = card.currentCost ?? baseCost
+      const currentCost = cardPaymentCost(
+        definition,
+        player,
+        card.currentCost ?? baseCost
+      )
       entry.slot.card.applySnapshot(definition, {
         attack:
           card.attack ?? (definition.type === 'Minion' ? definition.attack : undefined),
@@ -2094,7 +2106,7 @@ export class GameBoardView extends Actor {
           card.health ?? (definition.type === 'Minion' ? definition.health : undefined)
       })
       entry.slot.card.setRulesText(
-        cthunCardRulesText(card, spellDamageRulesText(definition, player))
+        handCardRulesText(card, spellDamageRulesText(definition, player))
       )
       entry.slot.card.setManaCost(currentCost)
       entry.slot.card.setManaCostColor(cardCostColor(baseCost, currentCost))
@@ -3875,9 +3887,15 @@ export class GameBoardView extends Actor {
       snapshot: card
     })
     const baseCost = card.baseCost ?? definition.cost
-    const currentCost = card.currentCost ?? baseCost
+    const player = this.findPlayer(this.presentationState(), this.localParticipantId)
+    const inHand = player.hand.some(
+      (candidate) => candidate.instanceId === card.instanceId
+    )
+    const currentCost = inHand
+      ? cardPaymentCost(definition, player, card.currentCost ?? baseCost)
+      : (card.currentCost ?? baseCost)
     view.setRulesText(
-      cthunCardRulesText(
+      handCardRulesText(
         card,
         spellDamageRulesText(
           definition,
@@ -3887,8 +3905,7 @@ export class GameBoardView extends Actor {
     )
     view.setManaCost(currentCost)
     view.setManaCostColor(cardCostColor(baseCost, currentCost))
-    const player = this.findPlayer(this.presentationState(), this.localParticipantId)
-    if (player.hand.some((candidate) => candidate.instanceId === card.instanceId)) {
+    if (inHand) {
       view.setCostResource(cardCostResource(definition, player))
     }
     const outlineTexture = await this.resolver.load(

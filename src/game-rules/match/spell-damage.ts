@@ -6,13 +6,15 @@ type SpellDamagePlayer = Pick<OpeningPlayerState, 'hero' | 'board'>
 
 export function spellDamageBonus(player: SpellDamagePlayer): number {
   return (
-    player.board.reduce((sum, minion) => sum + (minion.spellDamage ?? 0), 0) +
-    (player.hero.spellDamage ?? 0)
+    player.board.reduce(
+      (sum, minion) => sum + (minion.dormant ? 0 : (minion.spellDamage ?? 0)),
+      0
+    ) + (player.hero.spellDamage ?? 0)
   )
 }
 
 export function spellDamageMultiplier(player: SpellDamagePlayer): number {
-  return [player.hero, ...player.board].reduce(
+  return [player.hero, ...player.board.filter((minion) => !minion.dormant)].reduce(
     (value, source) => value * Math.max(0, source.spellDamageMultiplier ?? 1),
     1
   )

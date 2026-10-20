@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "decks": [
+    {
+      "id": "future-past-yore",
+      "name": "Yore Warlock",
+      "heroId": "guldan",
+      "cards": {
+        "future_past_cursed_catacombs": 2,
+        "future_past_dark_pact": 2,
+        "future_past_touch_of_the_nathrezim": 2,
+        "future_past_shallow_grave": 2,
+        "future_past_cursed_campaign": 2,
+        "future_past_domino_effect": 2,
+        "future_past_ancient_of_yore": 2,
+        "future_past_table_flip": 2,
+        "journey_to_ungoro_glacial_shard": 2,
+        "knights_of_the_frozen_throne_defile": 2,
+        "knights_of_the_frozen_throne_drain_soul": 2,
+        "future_past_raise_dead": 1,
+        "future_past_maiev_shadowsong": 1,
+        "future_past_carnivorous_cube": 1,
+        "future_past_puppetmaster_dorian": 1,
+        "future_past_bob_the_bartender": 1,
+        "future_past_shaladrassil": 1,
+        "future_past_agamaggan": 1,
+        "future_past_fyrakk_the_blazing": 1
+      },
+      "createdAt": "2026-10-19T00:00:00.000Z",
+      "updatedAt": "2026-10-19T00:00:00.000Z"
+    }
+  ]
+}

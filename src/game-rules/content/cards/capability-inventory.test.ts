@@ -230,28 +230,59 @@ describe('card classification metadata', () => {
 })
 
 describe('Future Past approved card content', () => {
-  it('registers exactly eleven collectibles and the non-collectible Snake Oil', () => {
+  it('registers the approved collectibles and generated tokens', () => {
     const expansion = EXPANSION_CATALOG.require('future-past')
     expect(expansion.displayName).toBe('Future Past')
     expect(expansion.releaseOrder).toBe(12)
     expect(expansion.source).toBe(FUTURE_PAST_CARD_SOURCE)
     expect(expansion.sourceModule.expansionId).toBe('future-past')
     expect(expansion.sourceModule.load()).toBe(FUTURE_PAST_CARD_SOURCE)
-    expect(FUTURE_PAST_CARD_SOURCE).toHaveLength(12)
-    expect(FUTURE_PAST_CARD_SOURCE.filter((card) => card.collectible)).toHaveLength(11)
+    expect(FUTURE_PAST_CARD_SOURCE).toHaveLength(43)
+    expect(FUTURE_PAST_CARD_SOURCE.filter((card) => card.collectible)).toHaveLength(27)
     expect(FUTURE_PAST_CARD_SOURCE.map((card) => card.id).sort()).toEqual([
+      'future_past_agamaggan',
+      'future_past_ancient_of_yore',
       'future_past_animated_broomstick',
       'future_past_armor_vendor',
+      'future_past_bob_the_bartender',
+      'future_past_carnivorous_cube',
+      'future_past_corrupted_awakening',
+      'future_past_corrupted_drake',
+      'future_past_corrupted_dream',
+      'future_past_corrupted_laughing_sister',
+      'future_past_corrupted_nightmare',
       'future_past_critter_caretaker',
+      'future_past_cursed_campaign',
+      'future_past_cursed_catacombs',
+      'future_past_dark_pact',
       'future_past_depth_charge',
+      'future_past_domino_effect',
       'future_past_dragonscale_armaments',
+      'future_past_dream',
+      'future_past_emerald_drake',
+      'future_past_find_a_triple',
+      'future_past_freeze_the_shop',
+      'future_past_fyrakk_the_blazing',
       'future_past_knight_of_anointment',
+      'future_past_laughing_sister',
+      'future_past_maiev_shadowsong',
       'future_past_miracle_salesman',
+      'future_past_nightmare',
       'future_past_nozdormu_the_timeless',
       'future_past_order_in_the_court',
       'future_past_peasant',
+      'future_past_puppetmaster_dorian',
+      'future_past_raise_dead',
+      'future_past_recruit_a_minion',
+      'future_past_refresh_the_tavern',
+      'future_past_shaladrassil',
+      'future_past_shaladrassil_corrupted',
+      'future_past_shallow_grave',
       'future_past_sing_along_buddy',
-      'future_past_snake_oil'
+      'future_past_snake_oil',
+      'future_past_table_flip',
+      'future_past_touch_of_the_nathrezim',
+      'future_past_ysera_awakens'
     ])
     for (const card of FUTURE_PAST_CARD_SOURCE) {
       expect(CARD_CATALOG.require(card.id)).toBe(card)

@@ -379,5 +379,1126 @@
     ],
     "collectible": false,
     "deckLegal": false
+  },
+  {
+    "id": "future_past_cursed_catacombs",
+    "name": "Cursed Catacombs",
+    "rarity": "Epic",
+    "cardClass": "Warlock",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 0,
+    "spellSchool": "Fel",
+    "rulesText": "Discover a minion from your deck. Make it Temporary.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "source": "deck",
+            "filter": {
+              "type": "Minion"
+            },
+            "count": 3,
+            "drawChosen": true,
+            "temporary": true
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "future_past_dark_pact",
+    "name": "Dark Pact",
+    "rarity": "Common",
+    "cardClass": "Warlock",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 1,
+    "spellSchool": "Shadow",
+    "rulesText": "Destroy a friendly minion. Restore 8 Health to your hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          },
+          {
+            "action": "restore",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "hero"
+            },
+            "amount": 8
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "future_past_touch_of_the_nathrezim",
+    "name": "Touch of the Nathrezim",
+    "rarity": "Rare",
+    "cardClass": "Warlock",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 1,
+    "spellSchool": "Shadow",
+    "rulesText": "Deal 2 damage to a minion. If it dies, restore 3 Health to your hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "amount": 2
+          }
+        ],
+        "then": {
+          "condition": {
+            "type": "target-died"
+          },
+          "actions": [
+            {
+              "action": "restore",
+              "target": {
+                "controller": "self",
+                "type": "hero",
+                "selection": "hero"
+              },
+              "amount": 3
+            }
+          ]
+        }
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "future_past_shallow_grave",
+    "name": "Shallow Grave",
+    "rarity": "Epic",
+    "cardClass": "Warlock",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 2,
+    "rulesText": "Trigger a friendly minion's Deathrattle, then destroy it.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "trigger-deathrattle",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          },
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "future_past_cursed_campaign",
+    "name": "Cursed Campaign",
+    "rarity": "Epic",
+    "cardClass": "Warlock",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 3,
+    "spellSchool": "Shadow",
+    "rulesText": "Give a friendly minion \"Deathrattle: Summon two copies of this minion that are Dormant for 2 turns.\"",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "grant-deathrattle",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "actions": [
+              {
+                "action": "summon-fresh-copy",
+                "count": 2,
+                "dormantTurns": 2
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "future_past_domino_effect",
+    "name": "Domino Effect",
+    "rarity": "Rare",
+    "cardClass": "Warlock",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 3,
+    "rulesText": "Deal 2 damage to a minion. Repeat to the left or right, dealing 1 more damage each time.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "domino-effect",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "future_past_ancient_of_yore",
+    "name": "Ancient of Yore",
+    "rarity": "Epic",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": null,
+    "cost": 5,
+    "attack": 5,
+    "health": 5,
+    "rulesText": "Dormant for 2 turns. While Dormant, gain 3 Armor and draw a card at the end of your turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "gain-armor",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "hero"
+            },
+            "amount": 3
+          },
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ],
+        "whileDormant": true
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true,
+    "dormantTurns": 2
+  },
+  {
+    "id": "future_past_table_flip",
+    "name": "Table Flip",
+    "rarity": "Common",
+    "cardClass": "Warlock",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 10,
+    "spellSchool": "Shadow",
+    "rulesText": "Deal 3 damage to all enemy minions. Costs (1) less for each other card in your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": 3
+          }
+        ]
+      },
+      {
+        "trigger": "while-in-hand",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "type": "card",
+              "selection": "source"
+            },
+            "amount": {
+              "reference": "other-cards-in-hand",
+              "operation": "subtract"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "future_past_raise_dead",
+    "name": "Raise Dead",
+    "rarity": "Common",
+    "cardClass": "Warlock",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 0,
+    "spellSchool": "Shadow",
+    "rulesText": "Deal 3 damage to your hero. Return two friendly minions that died this game to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "hero"
+            },
+            "amount": 3
+          },
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "source": "friendly-minions-died-this-game",
+            "selection": "random",
+            "count": 2,
+            "withoutReplacement": true
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true,
+    "classes": ["Priest", "Warlock"]
+  },
+  {
+    "id": "future_past_maiev_shadowsong",
+    "name": "Maiev Shadowsong",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": null,
+    "cost": 4,
+    "attack": 4,
+    "health": 3,
+    "rulesText": "Battlecry: Choose a minion. It goes Dormant for 2 turns.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "go-dormant",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "turns": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "future_past_carnivorous_cube",
+    "name": "Carnivorous Cube",
+    "rarity": "Epic",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": null,
+    "cost": 5,
+    "attack": 4,
+    "health": 6,
+    "rulesText": "Battlecry: Destroy a friendly minion. Deathrattle: Summon 2 copies of it.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "storeCardId": true
+          }
+        ]
+      },
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "player": "self",
+            "cardId": {
+              "reference": "source.destroyed-card"
+            },
+            "count": 2,
+            "controller": "self"
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "future_past_puppetmaster_dorian",
+    "name": "Puppetmaster Dorian",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": null,
+    "cost": 5,
+    "attack": 2,
+    "health": 6,
+    "rulesText": "Whenever you draw a minion, get a 1/1 copy of it that costs (1).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-draw",
+        "actions": [
+          {
+            "action": "copy",
+            "target": {
+              "type": "drawn-card",
+              "selection": "event-target"
+            },
+            "destination": "hand",
+            "stats": {
+              "attack": 1,
+              "health": 1
+            },
+            "cost": 1
+          }
+        ],
+        "event": {
+          "controller": "self",
+          "filter": {
+            "cardType": "Minion"
+          }
+        },
+        "activeZone": "board"
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "future_past_bob_the_bartender",
+    "name": "Bob the Bartender",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": null,
+    "cost": 6,
+    "attack": 4,
+    "health": 5,
+    "rulesText": "Battlecry: Choose an action from the Battlegrounds!",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "choice": {
+          "options": [
+            {
+              "presentationCardId": "future_past_freeze_the_shop",
+              "actions": [
+                {
+                  "action": "freeze",
+                  "target": {
+                    "controller": "opponent",
+                    "type": "minion",
+                    "selection": "all"
+                  }
+                }
+              ]
+            },
+            {
+              "presentationCardId": "future_past_recruit_a_minion",
+              "actions": [
+                {
+                  "action": "copy",
+                  "target": {
+                    "controller": "opponent",
+                    "type": "minion",
+                    "selection": "chosen"
+                  },
+                  "destination": "hand"
+                },
+                {
+                  "action": "add-to-hand",
+                  "player": "opponent",
+                  "cardId": "basic_the_coin",
+                  "count": 3
+                }
+              ]
+            },
+            {
+              "presentationCardId": "future_past_refresh_the_tavern",
+              "actions": [
+                {
+                  "action": "discover",
+                  "player": "self",
+                  "source": "random-card",
+                  "filter": {
+                    "cardType": "Minion",
+                    "cost": 3
+                  },
+                  "count": 3
+                },
+                {
+                  "action": "refresh-mana",
+                  "player": "self",
+                  "amount": 3
+                }
+              ]
+            },
+            {
+              "presentationCardId": "future_past_find_a_triple",
+              "actions": [
+                {
+                  "action": "draw",
+                  "player": "self",
+                  "count": 1,
+                  "source": {
+                    "controller": "self",
+                    "type": "minion-card",
+                    "selection": "random",
+                    "zone": "deck",
+                    "count": 1
+                  }
+                },
+                {
+                  "action": "copy",
+                  "target": {
+                    "type": "drawn-card",
+                    "selection": "all"
+                  },
+                  "destination": "hand",
+                  "count": 2
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "future_past_freeze_the_shop",
+    "name": "Freeze the Shop",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 0,
+    "rulesText": "Freeze all enemy minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "freeze",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "all"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "future_past_recruit_a_minion",
+    "name": "Recruit a Minion",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 0,
+    "rulesText": "Put a copy of an enemy minion into your hand. Your opponent gets 3 Coins.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "copy",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "destination": "hand"
+          },
+          {
+            "action": "add-to-hand",
+            "player": "opponent",
+            "cardId": "basic_the_coin",
+            "count": 3
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "future_past_refresh_the_tavern",
+    "name": "Refresh the Tavern",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 0,
+    "rulesText": "Discover a 3-Cost minion. Refresh 3 Mana Crystals.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "source": "random-card",
+            "filter": {
+              "cardType": "Minion",
+              "cost": 3
+            },
+            "count": 3
+          },
+          {
+            "action": "refresh-mana",
+            "player": "self",
+            "amount": 3
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "future_past_find_a_triple",
+    "name": "Find a Triple",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 0,
+    "rulesText": "Draw a minion. Get 2 copies of it.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1,
+            "source": {
+              "controller": "self",
+              "type": "minion-card",
+              "selection": "random",
+              "zone": "deck",
+              "count": 1
+            }
+          },
+          {
+            "action": "copy",
+            "target": {
+              "type": "drawn-card",
+              "selection": "all"
+            },
+            "destination": "hand",
+            "count": 2
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "future_past_shaladrassil",
+    "name": "Shaladrassil",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 8,
+    "spellSchool": "Nature",
+    "rulesText": "Get all 5 Dream cards. If you've played a higher Cost card while holding this, corrupt them!",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "add-dream-cards",
+            "pool": [
+              "future_past_dream",
+              "future_past_nightmare",
+              "future_past_laughing_sister",
+              "future_past_emerald_drake",
+              "future_past_ysera_awakens"
+            ]
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true,
+    "corruptTo": "future_past_shaladrassil_corrupted"
+  },
+  {
+    "id": "future_past_shaladrassil_corrupted",
+    "name": "Shaladrassil",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 8,
+    "spellSchool": "Nature",
+    "rulesText": "Get all 5 Corrupted Dream cards.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "add-dream-cards",
+            "pool": [
+              "future_past_corrupted_dream",
+              "future_past_corrupted_nightmare",
+              "future_past_corrupted_laughing_sister",
+              "future_past_corrupted_drake",
+              "future_past_corrupted_awakening"
+            ]
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "future_past_agamaggan",
+    "name": "Agamaggan",
+    "rarity": "Legendary",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 10,
+    "attack": 9,
+    "health": 9,
+    "rulesText": "Battlecry: The next card you play costs your OPPONENT'S Health instead of Mana (up to 10).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "set-next-card-costs-opponent-health"
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "future_past_fyrakk_the_blazing",
+    "name": "Fyrakk the Blazing",
+    "rarity": "Legendary",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Dragon",
+    "cost": 10,
+    "attack": 7,
+    "health": 7,
+    "rulesText": "Battlecry: Cast 15 Mana worth of Fire spells at random enemies.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "cast-random-spells",
+            "manaBudget": 15,
+            "preferEnemies": true,
+            "filter": {
+              "spellSchool": "Fire"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "future_past_dream",
+    "collectible": false,
+    "name": "Dream",
+    "rarity": "Dream",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "spellSchool": "Nature",
+    "cost": 0,
+    "rulesText": "Return a minion to its owner's hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "return-to-hand",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            }
+          }
+        ]
+      }
+    ],
+    "deckLegal": false
+  },
+  {
+    "id": "future_past_nightmare",
+    "collectible": false,
+    "name": "Nightmare",
+    "rarity": "Dream",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "spellSchool": "Shadow",
+    "cost": 0,
+    "rulesText": "Give a minion +5/+5. At the start of your next turn, destroy it.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 5,
+            "health": 5
+          },
+          {
+            "action": "schedule",
+            "attachedToTarget": true,
+            "trigger": "start-of-turn",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "actions": [
+              {
+                "action": "destroy",
+                "target": {
+                  "type": "minion",
+                  "selection": "event-target"
+                },
+                "vfx": "shadow-missile-small"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "deckLegal": false
+  },
+  {
+    "id": "future_past_laughing_sister",
+    "collectible": false,
+    "name": "Laughing Sister",
+    "rarity": "Dream",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 3,
+    "health": 5,
+    "rulesText": "Elusive.",
+    "keywords": ["spell-immune"],
+    "effects": [],
+    "deckLegal": false
+  },
+  {
+    "id": "future_past_emerald_drake",
+    "collectible": false,
+    "name": "Emerald Drake",
+    "rarity": "Dream",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Dragon",
+    "cost": 4,
+    "attack": 7,
+    "health": 6,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "deckLegal": false
+  },
+  {
+    "id": "future_past_ysera_awakens",
+    "collectible": false,
+    "name": "Ysera Awakens",
+    "rarity": "Dream",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": "General",
+    "spellSchool": "Nature",
+    "cost": 2,
+    "rulesText": "Deal 5 damage to all characters except Ysera.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "all",
+              "excludeCardId": "classic_ysera"
+            },
+            "amount": 5,
+            "vfx": "fire-blast-all-characters"
+          }
+        ]
+      }
+    ],
+    "deckLegal": false
+  },
+  {
+    "id": "future_past_corrupted_dream",
+    "name": "Corrupted Dream",
+    "rarity": "Dream",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 0,
+    "spellSchool": "Shadow",
+    "rulesText": "Shuffle a minion into its owner's deck.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "shuffle-into-deck",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "toOwner": true
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "future_past_corrupted_nightmare",
+    "name": "Corrupted Nightmare",
+    "rarity": "Dream",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 0,
+    "spellSchool": "Shadow",
+    "rulesText": "Give a minion Immune this turn and +5/+5.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "keyword": "immune",
+            "duration": "this-turn"
+          },
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 5,
+            "health": 5
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "future_past_corrupted_laughing_sister",
+    "name": "Corrupted Laughing Sister",
+    "rarity": "Dream",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": null,
+    "cost": 2,
+    "attack": 6,
+    "health": 10,
+    "rulesText": "Elusive. Your hero is Elusive.",
+    "keywords": ["spell-immune"],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "controller": "self",
+              "type": "hero",
+              "selection": "hero"
+            },
+            "keyword": "spell-immune",
+            "duration": "while-source-in-play"
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "future_past_corrupted_drake",
+    "name": "Corrupted Drake",
+    "rarity": "Dream",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Dragon",
+    "cost": 4,
+    "attack": 14,
+    "health": 12,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "future_past_corrupted_awakening",
+    "name": "Corrupted Awakening",
+    "rarity": "Dream",
+    "cardClass": "Neutral",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 2,
+    "spellSchool": "Shadow",
+    "rulesText": "Deal 5 damage to all enemies. (ESPECIALLY Ysera!)",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "destroy",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all",
+              "filter": {
+                "cardId": "classic_ysera"
+              }
+            }
+          },
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "all"
+            },
+            "amount": 5
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
   }
 ]

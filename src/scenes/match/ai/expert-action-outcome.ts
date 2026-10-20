@@ -1,3 +1,4 @@
+import { canPayCardCost } from '../../../game-rules/match/rules/card-cost-resource'
 import { CARD_CATALOG } from '../../../game-rules/content'
 import type { AiObservedPlayer } from '../../../game-rules/match/ai'
 import { createFairHypothesisCheckpoint } from '../../../game-rules/match/ai/fair-hypothesis-checkpoint'
@@ -289,12 +290,17 @@ function attackBeforeBuffPenalty(
   if (command.attacker.kind !== 'minion') return { penalty: 0 }
   const attackerId = command.attacker.instanceId
   const player = root.getState().players.find((p) => p.participantId === actorId)!
+  const playable = player.nextCardCostsOpponentHealth
+    ? new Set(root.getLegality(actorId).playableCardInstanceIds)
+    : null
   const buffs = new Set(
     player.hand
       .filter(
         (card) =>
-          (card.currentCost ?? CARD_CATALOG.get(card.cardId)?.cost ?? Infinity) <=
-            player.mana.available &&
+          (playable
+            ? playable.has(card.instanceId)
+            : (card.currentCost ?? CARD_CATALOG.get(card.cardId)?.cost ?? Infinity) <=
+              player.mana.available) &&
           CARD_CATALOG.get(card.cardId)?.effects.some((effect) =>
             effect.actions?.some(
               (action) =>
@@ -384,8 +390,15 @@ function hasDeferredCastPayoff(player: AiObservedPlayer): boolean {
     const definition = CARD_CATALOG.get(card.cardId)
     return (
       JSON.stringify(definition?.effects)?.includes('friendly-spells-cast-this-game') ||
-      ((card.currentCost ?? definition?.cost ?? Infinity) <= player.mana.available &&
-        definition?.effects.some((effect) =>
+      (definition !== undefined &&
+        (player.effects.nextCardCostsOpponentHealth
+          ? canPayCardCost(
+              definition,
+              { ...player, ...player.effects },
+              card.currentCost ?? definition.cost
+            )
+          : (card.currentCost ?? definition.cost) <= player.mana.available) &&
+        definition.effects.some((effect) =>
           JSON.stringify(effect.condition)?.includes('"combo"')
         ))
     )
