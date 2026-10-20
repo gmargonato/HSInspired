@@ -99,6 +99,11 @@ export function createAiObservation(
       murlocSummonBonus: player.murlocSummonBonus,
       ninjaCycle: player.ninjaCycle,
       futureAdaptations: player.futureAdaptations,
+      ...(player.nextSpellCostsHealth ? { nextSpellCostsHealth: true } : {}),
+      ...(player.nextMurlocCostsHealth ? { nextMurlocCostsHealth: true } : {}),
+      ...(player.nextCardCostsOpponentHealth
+        ? { nextCardCostsOpponentHealth: true }
+        : {}),
       lockAndLoadCount: player.lockAndLoadCount,
       lockAndLoadTurn: player.lockAndLoadTurn,
       ...(player.participantId === perspectivePlayerId

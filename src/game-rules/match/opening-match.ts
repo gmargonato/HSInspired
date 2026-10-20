@@ -392,6 +392,9 @@ function applyDevSummonMinion(
     player
   )
   const minion: BoardMinion = {
+    ...(definition.dormantTurns && definition.dormantTurns > 0
+      ? { dormant: true, dormantTurnsRemaining: definition.dormantTurns }
+      : {}),
     instanceId: `${player.participantId}:dev:${counter}`,
     cardId: definition.id,
     attack: runtimeCard.attack ?? definition.attack,

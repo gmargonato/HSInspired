@@ -54,6 +54,8 @@ export interface RawCardRecord {
   readonly tribes?: unknown
   readonly spellSchool?: unknown
   readonly cost?: unknown
+  readonly corruptTo?: unknown
+  readonly dormantTurns?: unknown
   readonly spellDamage?: unknown
   readonly attack?: unknown
   readonly health?: unknown
@@ -175,6 +177,14 @@ function actionRecord(value: unknown, path: string): CardActionName {
 }
 
 const ACTION_FIELDS = new Set([
+  'drawChosen',
+  'temporary',
+  'turns',
+  'dormantTurns',
+  'manaBudget',
+  'preferEnemies',
+  'withoutReplacement',
+  'toOwner',
   'allowEmptyTargets',
   'action',
   'appliesToFutureHeroPowers',
@@ -781,10 +791,17 @@ function branchValue(value: unknown, path: string): void {
 function repeatValue(value: unknown, path: string): void {
   const repeat = recordObject(value, path) as Record<string, unknown>
   for (const key of Object.keys(repeat)) {
-    if (key !== 'until' && key !== 'actions') {
+    if (key !== 'until' && key !== 'actions' && key !== 'maxCount') {
       return fail(`${path}.${key}`, 'unknown repeat field')
     }
   }
+  if (
+    repeat['maxCount'] !== undefined &&
+    (typeof repeat['maxCount'] !== 'number' ||
+      !Number.isInteger(repeat['maxCount']) ||
+      repeat['maxCount'] < 0)
+  )
+    return fail(`${path}.maxCount`, 'must be a non-negative integer')
   if (repeat['until'] === undefined) return fail(`${path}.until`, 'is required')
   if (typeof repeat['until'] === 'string') {
     enumValue(repeat['until'], CARD_CONDITIONS, `${path}.until`)
@@ -915,6 +932,20 @@ function actionsValue(value: unknown, path: string): void {
       if (record['action'] !== 'grant-deathrattle')
         fail(`${actionPath}.concealed`, 'is only supported by grant-deathrattle')
       booleanValue(record['concealed'], `${actionPath}.concealed`, false)
+    }
+    for (const field of [
+      'drawChosen',
+      'temporary',
+      'preferEnemies',
+      'withoutReplacement',
+      'toOwner'
+    ]) {
+      if (record[field] !== undefined)
+        booleanValue(record[field], `${actionPath}.${field}`, false)
+    }
+    for (const field of ['turns', 'dormantTurns', 'manaBudget']) {
+      if (record[field] !== undefined)
+        statistic(record[field], `${actionPath}.${field}`, true)
     }
     const actionName = actionRecord(record, actionPath)
     validateActionShape(actionName, record, actionPath)
@@ -1068,6 +1099,8 @@ function effectsValue(value: unknown, path: string): readonly CardEffectBlock[] 
     for (const key of Object.keys(record)) {
       if (
         ![
+          'activeZone',
+          'whileDormant',
           'actions',
           'choice',
           'condition',
@@ -1080,6 +1113,10 @@ function effectsValue(value: unknown, path: string): readonly CardEffectBlock[] 
         return fail(`${path}[${index}].${key}`, 'unknown effect field')
       }
     }
+    if (record['activeZone'] !== undefined)
+      enumValue(record['activeZone'], ['board', 'hand'], `${path}[${index}].activeZone`)
+    if (record['whileDormant'] !== undefined)
+      booleanValue(record['whileDormant'], `${path}[${index}].whileDormant`, false)
     enumValue(record['trigger'], CARD_TRIGGERS, `${path}[${index}].trigger`)
     const actions = record['actions']
     if (actions !== undefined && !Array.isArray(actions)) {
@@ -1188,6 +1225,9 @@ export function validateCardRecord(
     ...(raw.spellDamage !== undefined
       ? { spellDamage: statistic(raw.spellDamage, `${indexOrPath}.spellDamage`, true)! }
       : {}),
+    ...(raw.corruptTo !== undefined
+      ? { corruptTo: asCardId(stringValue(raw.corruptTo, `${indexOrPath}.corruptTo`)) }
+      : {}),
     rulesText,
     keywords,
     effects,
@@ -1204,7 +1244,21 @@ export function validateCardRecord(
     if (raw.armor !== undefined && raw.armor !== null) {
       return fail(`${indexOrPath}.armor`, 'is not valid for minions')
     }
-    return { ...metadata, type, attack, health }
+    return {
+      ...metadata,
+      type,
+      attack,
+      health,
+      ...(raw.dormantTurns !== undefined
+        ? {
+            dormantTurns: statistic(
+              raw.dormantTurns,
+              `${indexOrPath}.dormantTurns`,
+              true
+            )!
+          }
+        : {})
+    }
   }
 
   if (type === 'Spell') {

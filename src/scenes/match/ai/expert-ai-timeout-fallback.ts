@@ -1,3 +1,7 @@
+import {
+  cardCostResource,
+  cardPaymentCost
+} from '../../../game-rules/match/rules/card-cost-resource'
 import { CARD_CATALOG } from '../../../game-rules/content/cards'
 import { HERO_POWER_CATALOG } from '../../../game-rules/content/hero-powers'
 import type { AiObservation, AiObservedPlayer } from '../../../game-rules/match/ai'
@@ -705,6 +709,12 @@ function scoreCardPlay(
   const definition = CARD_CATALOG.get(card.cardId)
   if (!definition) return 0
   const cost = card.currentCost ?? card.baseCost ?? definition.cost
+  const paymentState = { ...context.self, ...context.self.effects }
+  const healthPayment =
+    cardCostResource(definition, paymentState) === 'opponent-health'
+      ? cardPaymentCost(definition, paymentState, cost)
+      : 0
+  const paymentScore = healthPayment * 1.5
   const input =
     context.session.match.getPlayInput?.(
       command.participantId,
@@ -738,11 +748,11 @@ function scoreCardPlay(
       effectScore < removalScore(clearTrigger, context)
         ? 16
         : 0
-    return bodyScore + urgentBlock + effectScore - boardClearPenalty
+    return bodyScore + urgentBlock + effectScore - boardClearPenalty + paymentScore
   }
 
   if (definition.type === 'Spell') {
-    return immediateEffectScore()
+    return immediateEffectScore() + paymentScore
   }
 
   if (definition.type === 'Weapon') {
@@ -752,11 +762,13 @@ function scoreCardPlay(
         0.7
       : 0
     return (
-      cardBodyScore(card.cardId, cost, context.self.board.length) - replacedWeaponValue
+      cardBodyScore(card.cardId, cost, context.self.board.length) -
+      replacedWeaponValue +
+      paymentScore
     )
   }
 
-  return cardBodyScore(card.cardId, cost, context.self.board.length)
+  return cardBodyScore(card.cardId, cost, context.self.board.length) + paymentScore
 }
 
 function attackerStats(

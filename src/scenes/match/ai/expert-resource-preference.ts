@@ -59,6 +59,8 @@ export function expertResourceSetupPreference(
   const played = before?.hand.find((card) => card.instanceId === command.cardInstanceId)
   const definition = played && CARD_CATALOG.get(played.cardId)
   if (!before || !definition) return 0
+  // Avoid treating every held card as free under a one-use payment modifier.
+  if (before.nextCardCostsOpponentHealth) return 0
   // A sampled secret resolution is not a reliable setup opportunity.
   if (state.players.some((player) => (player.secrets?.length ?? 0) > 0)) return 0
   const handSizeBuff =

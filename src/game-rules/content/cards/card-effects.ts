@@ -442,6 +442,10 @@ export const CARD_ACTIONS = [
   'copy-stats',
   'summon-jade-golem',
   'shuffle-dead-cthun',
+  'domino-effect',
+  'summon-fresh-copy',
+  'set-next-card-costs-opponent-health',
+  'add-dream-cards',
   'cast-random-spells',
   'cast-discovered-spell',
   'set-next-spell-costs-health',
@@ -540,6 +544,9 @@ export type CardAction =
     })
 
 export interface CardEffectBlock {
+  /** Explicit zone for abilities whose event name is also used by drawn-card effects. */
+  readonly activeZone?: 'board' | 'hand'
+  readonly whileDormant?: boolean
   readonly trigger: CardTrigger
   readonly actions?: readonly CardAction[]
   readonly condition?: { readonly [key: string]: CardEffectValue }

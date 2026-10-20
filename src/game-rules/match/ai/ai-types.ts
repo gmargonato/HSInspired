@@ -67,6 +67,9 @@ export interface AiObservedPlayer {
     | 'murlocSummonBonus'
     | 'ninjaCycle'
     | 'futureAdaptations'
+    | 'nextSpellCostsHealth'
+    | 'nextMurlocCostsHealth'
+    | 'nextCardCostsOpponentHealth'
   >
   readonly fatigueDamage: number
   readonly secrets: readonly Readonly<{

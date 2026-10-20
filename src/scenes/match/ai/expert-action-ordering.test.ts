@@ -19,7 +19,7 @@ import { reviewRedundantSpellPrefix } from './expert-redundant-spell'
 import * as redundantSpellReview from './expert-redundant-spell'
 import { createOpeningMatchFromCheckpoint } from '../../../game-rules/match/opening-match'
 import { createFairHypothesisCheckpoint } from '../../../game-rules/match/ai/fair-hypothesis-checkpoint'
-import { asCardId } from '../../../game-rules/content'
+import { asCardId, CARD_CATALOG } from '../../../game-rules/content'
 import healingRecorded from './expert-redundant-healing-recorded.json'
 import { ExpertAiDecisionApi } from './expert-ai-decision-api'
 import { LocalAiDecisionApi } from './local-ai-decision-api'
@@ -576,6 +576,28 @@ describe('Selected redundant healing prefix', () => {
 
   it('shortens the historical real fixed-work choice only in the Expert controller', async () => {
     vi.restoreAllMocks()
+    // This controller regression needs the historical search to emit its redundant
+    // heal prefix. Pin only Future Past to the catalog present when recorded:
+    // new cards legitimately change seeded hidden-card hypotheses and the line.
+    // The unmocked expanded-catalog case below checks current search behavior.
+    const historicalFuturePast = new Set([
+      'future_past_animated_broomstick',
+      'future_past_armor_vendor',
+      'future_past_critter_caretaker',
+      'future_past_depth_charge',
+      'future_past_dragonscale_armaments',
+      'future_past_knight_of_anointment',
+      'future_past_miracle_salesman',
+      'future_past_peasant',
+      'future_past_order_in_the_court',
+      'future_past_sing_along_buddy',
+      'future_past_nozdormu_the_timeless',
+      'future_past_snake_oil'
+    ])
+    const historicalCatalog = CARD_CATALOG.all.filter(
+      (card) => !card.id.startsWith('future_past_') || historicalFuturePast.has(card.id)
+    )
+    vi.spyOn(CARD_CATALOG, 'all', 'get').mockReturnValue(historicalCatalog)
     const checkpoint = healingRecorded.checkpoint as unknown as OpeningMatchCheckpoint
     const session = new GameBoardSession({
       setup: checkpoint.setup,
@@ -670,6 +692,82 @@ describe('Selected redundant healing prefix', () => {
     expect(session.match.getCheckpoint()).toEqual(before)
     const shortened = line.slice(1)
     for (const intent of shortened) {
+      if (intent.type === 'end-turn') break
+      const command = enumerateLegalCommands(
+        {
+          getState: session.match.getState,
+          getPlayInput: session.match.getPlayInput!,
+          getLegality: session.match.getLegality!
+        },
+        actor
+      ).find(
+        (command) =>
+          JSON.stringify(aiActionIntent(command, session.localParticipantId)) ===
+          JSON.stringify(intent)
+      )!
+      expect(command).toBeDefined()
+      expect(session.dispatch(command).accepted).toBe(true)
+    }
+    const self = session
+      .getState()
+      .players.find((player) => player.participantId === actor)!
+    expect(self.hero.health).toBe(30)
+    expect(self.mana.available).toBe(2)
+    expect(self.heroPower.available).toBe(true)
+    expect(self.board.map((minion) => minion.cardId).sort()).toEqual([
+      'classic_loot_hoarder',
+      'league_of_explorers_reno_jackson'
+    ])
+  }, 60_000)
+
+  it('keeps the expanded-catalog historical line legal without redundant healing', async () => {
+    vi.restoreAllMocks()
+    const checkpoint = healingRecorded.checkpoint as unknown as OpeningMatchCheckpoint
+    const session = new GameBoardSession({
+      setup: checkpoint.setup,
+      decks: checkpoint.decks,
+      checkpoint
+    })
+    const actor = session.remoteParticipantId
+    const actions = aiActions(
+      session,
+      enumerateLegalCommands(
+        {
+          getState: session.match.getState,
+          getPlayInput: session.match.getPlayInput!,
+          getLegality: session.match.getLegality!
+        },
+        actor
+      )
+    )
+    const request: AiDecisionRequest = {
+      matchId: 'historical-heal',
+      requestId: 'historical-heal-1',
+      expectedRevision: checkpoint.state.revision,
+      phase: 'action',
+      allowInspection: false,
+      messages: [],
+      actionIds: actions.map((action) => action.id)
+    }
+    const before = session.match.getCheckpoint()
+    const baselineApi = new LocalAiDecisionApi(session, undefined, {
+      profile: 'expert',
+      workBudget: 256
+    })
+    const baseline = await baselineApi.decide(request)
+    const baselineAction = actions.find(
+      (action) =>
+        'actionId' in baseline.choice && action.id === baseline.choice.actionId
+    )!
+    expect(baselineAction.command.type).toBe('play-card')
+    expect(session.match.getCheckpoint()).toEqual(before)
+    const line = baselineApi
+      .getLastTrace()!
+      .candidates.find(
+        (entry) => entry.actionId === baselineAction.id
+      )!.sequenceIntents!
+    expect(line.some((intent) => intent.type === 'use-hero-power')).toBe(false)
+    for (const intent of line) {
       if (intent.type === 'end-turn') break
       const command = enumerateLegalCommands(
         {

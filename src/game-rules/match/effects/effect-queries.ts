@@ -1,5 +1,6 @@
 import { countBoardMinions, isPermanentBoardObject } from '../rules/board-objects'
 import { cthunSnapshot } from '../cthun'
+import { spellDamageBonus } from '../spell-damage'
 import { HERO_CATALOG } from '../../content/heroes'
 import {
   cardHasTribe,
@@ -1232,9 +1233,7 @@ export class EffectQueries {
         )
       }
       case 'player-has-spell-damage': {
-        const spellDamage =
-          (player.hero.spellDamage ?? 0) +
-          player.board.reduce((sum, minion) => sum + (minion.spellDamage ?? 0), 0)
+        const spellDamage = spellDamageBonus(player)
         return spellDamage >= Number(condition.minimum ?? condition.value ?? 1)
       }
       case 'target-matches':

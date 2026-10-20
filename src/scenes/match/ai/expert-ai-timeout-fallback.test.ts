@@ -1060,3 +1060,38 @@ describe('Expert timeout plain-combat rescue', () => {
     ).toEqual({ status: 'unknown', simulations: 0 })
   })
 })
+
+describe('opponent Health payment timeout fallback', () => {
+  it('finds a zero-mana lethal payment through Armor without a damage effect', () => {
+    const fixture = createAiFixture({
+      seed: 0xa6a7,
+      aiHeroId: 'guldan',
+      opponentHeroId: 'jaina',
+      aiHand: ['basic_boulderfist_ogre'],
+      aiMana: 0,
+      aiMaximumMana: 10,
+      opponentHealth: 6,
+      opponentArmor: 100,
+      aiDeck: ['basic_acidic_swamp_ooze'],
+      opponentDeck: ['basic_acidic_swamp_ooze']
+    })
+    const checkpoint = {
+      ...fixture.checkpoint,
+      state: {
+        ...fixture.checkpoint.state,
+        players: fixture.checkpoint.state.players.map((player) =>
+          player.participantId === fixture.aiParticipantId
+            ? { ...player, nextCardCostsOpponentHealth: true }
+            : player
+        ) as unknown as typeof fixture.checkpoint.state.players
+      }
+    }
+    const session = new GameBoardSession({ ...fixture, checkpoint })
+    const action = selectExpertTimeoutFallbackAction(session, legalCommands(session))
+    expect(action?.command.type).toBe('play-card')
+    const result = session.match.dispatch(action!.command)
+    expect(result.accepted).toBe(true)
+    expect(result.state.phase).toBe('ended')
+    expect(result.state.winnerId).toBe(session.remoteParticipantId)
+  })
+})

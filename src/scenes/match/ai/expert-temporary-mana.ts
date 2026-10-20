@@ -66,6 +66,7 @@ export function wastesImmediateTemporaryMana(
     return false
   if (
     self.pendingCostModifiers?.length ||
+    self.nextCardCostsOpponentHealth ||
     self.nextSpellCostsHealth ||
     self.nextMurlocCostsHealth ||
     state.players.some(

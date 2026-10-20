@@ -57,6 +57,8 @@ export function unpaidActionPenalty(
     return unpaidFriendlyDamageHeroPowerPenalty(command, state, actorId)
   }
   if (command.type !== 'play-card') return 0
+  // One-use opponent Health payment changes setup order; let actual search decide.
+  if (player.nextCardCostsOpponentHealth) return 0
   const card = player.hand.find((entry) => entry.instanceId === command.cardInstanceId)
   const definition = card ? CARD_CATALOG.get(card.cardId) : undefined
   if (

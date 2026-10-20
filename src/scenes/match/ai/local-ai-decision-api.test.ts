@@ -804,3 +804,96 @@ describe('CThun ritual-total scoring', () => {
     })
   }
 })
+
+describe('opponent Health payment AI awareness', () => {
+  function paymentSession(cardId: string, opponentHealth: number, armor = 0) {
+    const fixture = createAiFixture({
+      seed: 0xa6a6,
+      aiHeroId: 'guldan',
+      opponentHeroId: 'jaina',
+      aiHand: [cardId, 'basic_chillwind_yeti'],
+      aiMana: 0,
+      aiMaximumMana: 10,
+      aiHealth: 30,
+      opponentHealth,
+      opponentArmor: armor,
+      aiDeck: ['basic_acidic_swamp_ooze'],
+      opponentDeck: ['basic_acidic_swamp_ooze']
+    })
+    const checkpoint = {
+      ...fixture.checkpoint,
+      state: {
+        ...fixture.checkpoint.state,
+        players: fixture.checkpoint.state.players.map((player) =>
+          player.participantId === fixture.aiParticipantId
+            ? { ...player, nextCardCostsOpponentHealth: true }
+            : player
+        ) as unknown as typeof fixture.checkpoint.state.players
+      }
+    }
+    return new GameBoardSession({ ...fixture, checkpoint })
+  }
+
+  it.each([
+    ['basic_boulderfist_ogre', 6, 100, 300],
+    ['classic_deathwing', 10, 100, 300],
+    ['classic_molten_giant', 11, 100, 0]
+  ] as const)(
+    'prices %s Health payment separately from mana and Armor',
+    (cardId, health, armor, expected) => {
+      const session = paymentSession(cardId, health, armor)
+      const actorId = session.remoteParticipantId
+      const self = session.findPlayer(session.getState(), actorId)
+      const card = self.hand.find((entry) => entry.cardId === cardId)!
+      const command = legal(session).find(
+        (entry) =>
+          entry.type === 'play-card' && entry.cardInstanceId === card.instanceId
+      )!
+      if (cardId === 'classic_molten_giant') expect(command).toBeUndefined()
+      else expect(command).toBeDefined()
+      expect(
+        session.getAiObservation().players.find((player) => player.role === 'self')
+          ?.effects.nextCardCostsOpponentHealth
+      ).toBe(true)
+      const api = new LocalAiDecisionApi(session)
+      const seam = api as unknown as {
+        lethalBurstPrior(
+          command: TurnMatchCommand,
+          state: ReturnType<GameBoardSession['getState']>,
+          actorId: string
+        ): number
+      }
+      expect(
+        seam.lethalBurstPrior(
+          command ?? {
+            type: 'play-card',
+            participantId: actorId,
+            cardInstanceId: card.instanceId,
+            position: 0
+          },
+          session.getState(),
+          actorId
+        )
+      ).toBe(expected)
+    }
+  )
+
+  it('consumes the modifier once and leaves later cards mana-gated', () => {
+    const session = paymentSession('basic_boulderfist_ogre', 30)
+    const actorId = session.remoteParticipantId
+    const card = session
+      .findPlayer(session.getState(), actorId)
+      .hand.find((entry) => entry.cardId === 'basic_boulderfist_ogre')!
+    const command = legal(session).find(
+      (entry) => entry.type === 'play-card' && entry.cardInstanceId === card.instanceId
+    )!
+    const result = session.match.dispatch(command)
+    expect(result.accepted).toBe(true)
+    expect(session.findPlayer(session.getState(), actorId).mana.available).toBe(0)
+    expect(
+      session.getAiObservation().players.find((player) => player.role === 'self')
+        ?.effects.nextCardCostsOpponentHealth
+    ).toBeUndefined()
+    expect(legal(session).some((entry) => entry.type === 'play-card')).toBe(false)
+  })
+})

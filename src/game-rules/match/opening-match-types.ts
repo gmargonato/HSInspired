@@ -20,6 +20,8 @@ export interface MinionBaseStats {
 }
 
 export interface OpeningCard {
+  /** Discard this card at the end of this turn if still in hand. */
+  readonly temporaryUntilTurn?: number
   /** Persistent base stats, retained across control and zone changes. */
   readonly baseStatsOverride?: MinionBaseStats
   readonly instanceId: string
@@ -444,6 +446,7 @@ export interface BoardMinion {
   readonly healingMultiplier?: number
   readonly heroPowerMultiplier?: number
   readonly dormant?: boolean
+  readonly dormantTurnsRemaining?: number
   readonly dormantProgress?: number
   readonly dormantProgressTurn?: number
   readonly rememberedSpellIds?: readonly CardId[]
@@ -609,6 +612,8 @@ export interface OpeningPlayerState {
   readonly nextSpellCostsHealth?: boolean
   /** The next Murloc played this turn consumes Health instead of Mana. */
   readonly nextMurlocCostsHealth?: boolean
+  /** The next card must cost at most 10 and spends opponent Health; persists across turns. */
+  readonly nextCardCostsOpponentHealth?: boolean
   /** One-shot discounts that apply when the next matching card is played. */
   readonly pendingCostModifiers?: readonly PendingCostModifier[]
   /** Turn-scoped count of Lock and Load rewards. */
@@ -648,6 +653,8 @@ export interface OpeningMatchState {
 }
 
 export interface PendingDiscoverChoice {
+  readonly drawChosen?: boolean
+  readonly temporary?: boolean
   readonly fromHeroPower?: boolean
   readonly setChosenCost?: number
   /** Summoning choices never enter the hand. Omitted for ordinary Discover. */

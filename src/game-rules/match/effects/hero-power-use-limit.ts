@@ -20,7 +20,7 @@ export function heroPowerUseLimit(
   let limit = 1
   for (const boardPlayer of state.players) {
     for (const minion of boardPlayer.board) {
-      if (minion.silenced) continue
+      if (minion.silenced || minion.dormant) continue
       const definition = cardDefinition(minion.cardId)
       for (const block of definition?.effects ?? []) {
         if (block.trigger !== 'aura') continue

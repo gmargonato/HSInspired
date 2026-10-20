@@ -20,6 +20,8 @@ export function expertDrawPreference(
   if (command.type !== 'play-card' && command.type !== 'use-hero-power') return 0
   const state = root.getState()
   const before = state.players.find((p) => p.participantId === actorId)!
+  // This information hint assumes mana expenditure and cannot price a one-use Health token.
+  if (before.nextCardCostsOpponentHealth) return 0
   const played =
     command.type === 'play-card'
       ? before.hand.find((card) => card.instanceId === command.cardInstanceId)
