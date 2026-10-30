@@ -7,7 +7,10 @@ import {
   MatchVisualResources,
   matchVisualTextures
 } from './loading/match-visual-resources'
+import { TableView } from './board/table-view'
 import type { Texture } from 'pixi.js'
+import { TABLE_CORNERS } from '../../visual-components/assets/table-corners'
+import { hasPremiumHeroPortrait } from '../../visual-components/hero-portrait-appearance'
 import { GameLoadingView } from './loading/game-loading-view'
 import { OPENING_TIMING } from './presentation/game-presentation-timing'
 import { selectRandomBoardTexture } from './board/board-selection'
@@ -26,7 +29,6 @@ import { createMatchSeed } from '../../application/match-seed'
 import { createRestartGameRoute } from '../../application/navigation/game-route'
 import {
   ASSET_BUNDLE_IDS,
-  GAME_BOARD_BUNDLE_IDS,
   type GameBoardAssets,
   type GameLoadingAssets,
   type DeckPresentationAssets,
@@ -74,7 +76,9 @@ export class GameScene extends Scene {
   private readonly logger?: AppLogger
   private view: GameBoardView | null = null
   private loadingView: GameLoadingView | null = null
-  private boardTexture?: Texture
+  private tableAssets?: GameBoardAssets
+  private selectedCorner: string | null = null
+  private loadingTable?: TableView
   private expertAiApi: ExpertAiDecisionApi | null = null
   private recorder?: MatchRecorder
   private readonly rewardMatchId = crypto.randomUUID()
@@ -154,11 +158,26 @@ export class GameScene extends Scene {
     }
   }
 
+  get boardCorners(): {
+    options: readonly { id: string; label: string }[]
+    selected: string | null
+  } {
+    return { options: TABLE_CORNERS, selected: this.selectedCorner }
+  }
+
+  setBoardCorner(id: string): void {
+    if (!TABLE_CORNERS.some((corner) => corner.id === id)) return
+    this.selectedCorner = id
+    this.view?.setBoardCorner(id)
+  }
+
   private async showLoadingScreen(): Promise<void> {
-    const boardBundle = selectRandomBoardTexture(GAME_BOARD_BUNDLE_IDS)
+    this.selectedCorner = TABLE_CORNERS.length
+      ? selectRandomBoardTexture(TABLE_CORNERS).id
+      : null
     // Settle both acquisitions before failure cleanup releases the scene's scope.
     const results = await Promise.allSettled([
-      this.assetScope.acquire<GameBoardAssets>(boardBundle),
+      this.assetScope.acquire<GameBoardAssets>(ASSET_BUNDLE_IDS.gameTable),
       this.assetScope.acquire<GameLoadingAssets>(ASSET_BUNDLE_IDS.gameLoading)
     ])
     const [boardResult, loadingResult] = results
@@ -166,8 +185,13 @@ export class GameScene extends Scene {
     if (loadingResult.status === 'rejected') throw loadingResult.reason
     const board = boardResult.value
     const loading = loadingResult.value
-    this.boardTexture = board.board
-    this.loadingView = new GameLoadingView(board.board, loading.overlay, loading.noise)
+    this.tableAssets = board
+    this.loadingTable = new TableView(board, this.selectedCorner)
+    this.loadingView = new GameLoadingView(
+      this.loadingTable,
+      loading.overlay,
+      loading.noise
+    )
     this.root.addChild(this.loadingView)
     this.sceneManager.presentLoadingRoot?.(this.root)
     await this.reportLoading(0.03, 'Setting up decks')
@@ -288,6 +312,13 @@ export class GameScene extends Scene {
       )
     const heroAssets = { ...deckPresentationAssets, ...gameAssets }
     await this.playerStatsStore.load()
+    const local = this.route.setup.participants.find(
+      (p) => p.controllerKind === 'human'
+    )
+    this.loadingTable?.setGoldenFrames(
+      !!local && hasPremiumHeroPortrait(this.playerStatsStore, local.heroId),
+      false
+    )
     this.logger?.info('[GameScene] hero assets acquired')
     await this.reportLoading(0.26, 'Loading card frames')
     const cardAssets = await this.assetScope.acquire<Record<string, Texture>>(
@@ -298,7 +329,10 @@ export class GameScene extends Scene {
     await this.visualResources.prepare(
       this.appInstance.renderer,
       Object.values(cardAssets),
-      matchVisualTextures(heroAssets, this.boardTexture!),
+      [
+        ...matchVisualTextures(heroAssets, this.tableAssets!.board),
+        ...Object.values(this.tableAssets!)
+      ],
       (progress) =>
         this.reportLoading(0.3 + progress * 0.04, 'Preparing match textures')
     )
@@ -358,7 +392,8 @@ export class GameScene extends Scene {
 
     await this.reportLoading(0.46, 'Building game board')
     this.view = new GameBoardView({
-      boardTexture: this.boardTexture,
+      tableAssets: this.tableAssets,
+      cornerId: this.selectedCorner,
       onLoadProgress: (progress) =>
         this.reportLoading(
           0.46 + progress * 0.52,

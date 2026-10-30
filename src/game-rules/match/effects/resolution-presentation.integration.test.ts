@@ -1091,6 +1091,104 @@ describe('explicit action VFX', () => {
         (e.action === 'damage' || e.action === 'destroy')
     )
 
+  it.each([
+    ['future_past_table_flip', 'shadow-blast-enemy-board', false],
+    ['future_past_corrupted_awakening', 'shadow-blast-enemy-side', true]
+  ] as const)(
+    '%s emits enemy-only area VFX with the correct hero coverage',
+    (cardId, vfxId, hitsHero) => {
+      const f = damagePhaseFixture(cardId)
+      const friend = f.summon('basic_chillwind_yeti', f.self)
+      const enemy = f.summon('basic_chillwind_yeti')
+      const r = f.play()
+      const visual = cues(r.events)
+      expect(visual).toHaveLength(1)
+      expect(visual[0]).toMatchObject({ vfxId })
+      expect(visual[0]!.targetInstanceIds).toContain(enemy.instanceId)
+      expect(visual[0]!.targetInstanceIds).not.toContain(friend.instanceId)
+      expect((visual[0]!.targetInstanceIds ?? []).includes(`${f.enemy}:hero`)).toBe(
+        hitsHero
+      )
+      expect(f.player(f.self).hero.health).toBe(30)
+    }
+  )
+
+  it('Domino Effect emits a separately correlated missile for each sequential hit', () => {
+    const f = damagePhaseFixture('future_past_domino_effect')
+    const targets = Array.from({ length: 3 }, () => f.summon('basic_chillwind_yeti'))
+    const r = f.play(targets[0])
+    const missiles = cues(r.events)
+    expect(missiles).toHaveLength(3)
+    expect(new Set(missiles.map((cue) => cue.vfxGroupId)).size).toBe(3)
+    for (const [index, cue] of missiles.entries()) {
+      expect(cue).toMatchObject({
+        vfxId: 'shadow-missile-small',
+        targetInstanceIds: [targets[index]!.instanceId]
+      })
+      const hit = outcomes(r.events).find(
+        (outcome) => outcome.vfxGroupId === cue.vfxGroupId
+      )
+      expect(hit).toBeDefined()
+      expect(r.events.indexOf(cue)).toBeLessThan(r.events.indexOf(hit!))
+    }
+    expect(f.player().board.map((minion) => minion.health)).toEqual([3, 2, 1])
+  })
+
+  it.each([
+    'future_past_dark_pact',
+    'future_past_shallow_grave',
+    'future_past_carnivorous_cube'
+  ])('%s emits a destruction missile at its friendly victim', (cardId) => {
+    const f = damagePhaseFixture(cardId)
+    const victim = f.summon('basic_chillwind_yeti', f.self)
+    const r = f.s.match.dispatch({
+      type: 'play-card',
+      participantId: f.self,
+      cardInstanceId: f.player(f.self).hand.find((card) => card.cardId === cardId)!
+        .instanceId,
+      targets: [
+        { kind: 'minion', participantId: f.self, instanceId: victim.instanceId }
+      ],
+      ...(CARD_CATALOG.require(cardId).type === 'Minion' ? { position: 0 } : {})
+    })
+    expect(r.accepted).toBe(true)
+    expect(cues(r.events)).toMatchObject([
+      { vfxId: 'shadow-missile-small', targetInstanceIds: [victim.instanceId] }
+    ])
+    expect(
+      f.player(f.self).board.some((minion) => minion.instanceId === victim.instanceId)
+    ).toBe(false)
+  })
+
+  it.each(['future_past_bob_the_bartender', 'future_past_freeze_the_shop'])(
+    '%s emits frost board VFX for the freeze action',
+    (cardId) => {
+      const f = damagePhaseFixture(cardId)
+      const target = f.summon('basic_chillwind_yeti')
+      const friend = f.summon('basic_chillwind_yeti', f.self)
+      const r = f.s.match.dispatch({
+        type: 'play-card',
+        participantId: f.self,
+        cardInstanceId: f.player(f.self).hand.find((card) => card.cardId === cardId)!
+          .instanceId,
+        ...(cardId === 'future_past_bob_the_bartender'
+          ? { position: 0, choice: 0 }
+          : {})
+      })
+      expect(r.accepted).toBe(true)
+      expect(cues(r.events)).toMatchObject([
+        { vfxId: 'frost-blast-enemy-board', targetInstanceIds: [target.instanceId] }
+      ])
+      expect(f.player().board[0]!.frozenUntilTurn).toBeGreaterThan(0)
+      expect(
+        f
+          .player(f.self)
+          .board.find((minion) => minion.instanceId === friend.instanceId)!
+          .frozenUntilTurn
+      ).toBeFalsy()
+    }
+  )
+
   it.each(['basic_frost_nova', 'knights_of_the_frozen_throne_frost_lich_jaina'])(
     '%s shares Blizzard VFX, freezes only enemy minions, and deals no damage',
     (cardId) => {

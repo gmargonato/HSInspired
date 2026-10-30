@@ -401,6 +401,7 @@
   },
   {
     "id": "naxxramas_nerubar_weblord",
+    "auraVisual": true,
     "name": "Nerub'ar Weblord",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -853,6 +854,7 @@
   },
   {
     "id": "naxxramas_baron_rivendare",
+    "auraVisual": true,
     "name": "Baron Rivendare",
     "rarity": "Legendary",
     "cardClass": "Neutral",

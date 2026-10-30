@@ -5,6 +5,11 @@ import { CARD_PROFILES } from '../../../visual-components/cards/card-layout'
 import { CardView } from '../../../visual-components/cards/card-view'
 import { isClassFrameClass } from '../../../visual-components/cards/class-frame-colors'
 import { AnimatedOutline } from '../../../visual-components/effects/animated-outline'
+import {
+  acquireTradeableAura,
+  tradeableAuraOcclusion,
+  type TradeableAuraLease
+} from '../../../visual-components/cards/tradeable-aura'
 
 /** One real class card per layout, rather than constructing the whole catalog. */
 export function matchCardRenderSamples(): readonly CardDefinition[] {
@@ -35,6 +40,7 @@ export async function prewarmCardRenderPaths(
     let target: RenderTexture | undefined
     let outline: AnimatedOutline | undefined
     let tradeableOutline: AnimatedOutline | undefined
+    let tradeableAura: TradeableAuraLease | undefined
     try {
       const card = await CardView.create(definition, resolver, {
         artwork: Texture.WHITE,
@@ -55,16 +61,22 @@ export async function prewarmCardRenderPaths(
       }
       frame.scale.set(0.04)
       root.addChild(frame)
-      outline = new AnimatedOutline(frame, { palette: 'green', preset: 'card' })
+      outline = new AnimatedOutline(frame, {
+        palette: 'green',
+        preset: 'card',
+        fillHolesForSmoothing: card.plan.template === 'minion'
+      })
       outline.prebuild(renderer)
       if (card.tradeableTexture) {
-        const banner = new Sprite(card.tradeableTexture)
+        tradeableAura = acquireTradeableAura(renderer, card.tradeableTexture)
+        const banner = new Sprite(tradeableAura.texture)
         banner.scale.set(0.1)
         banner.label = 'game.tradeable-outline-warmup'
         root.addChild(banner)
         tradeableOutline = new AnimatedOutline(banner, {
           palette: 'green',
-          preset: 'card'
+          preset: 'card',
+          occlusion: () => tradeableAuraOcclusion(card.costIconTexture)
         })
         tradeableOutline.prebuild(renderer)
       }
@@ -77,6 +89,7 @@ export async function prewarmCardRenderPaths(
       outline?.dispose()
       tradeableOutline?.dispose()
       root.destroy({ children: true, texture: false, textureSource: false })
+      tradeableAura?.release()
       target?.destroy(true)
     }
     if (onProgress) await onProgress((index + 1) / cards.length)

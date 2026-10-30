@@ -5,7 +5,7 @@ import { configureCardTexture } from '../../../visual-components/assets/card-ass
 // the original setting, including textures already pinned by menu startup.
 const residency = new WeakMap<TextureSource, { count: number; automatic: boolean }>()
 
-/** Board variants are fixed for the match; do not pin nine unused full-screen images. */
+/** Exclude legacy board aliases; the scene supplies its complete table bundle separately. */
 export function matchVisualTextures(
   assets: Readonly<Record<string, Texture>>,
   board: Texture

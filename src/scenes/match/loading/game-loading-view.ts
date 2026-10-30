@@ -34,15 +34,20 @@ export class GameLoadingView extends Container {
   private readonly status: Text
   private progress = 0
 
-  constructor(boardTexture: Texture, overlayTexture: Texture, noiseTexture: Texture) {
+  constructor(
+    boardTexture: Texture | Container,
+    overlayTexture: Texture,
+    noiseTexture: Texture
+  ) {
     super()
     this.label = 'game.loading'
     this.eventMode = 'static'
     this.interactiveChildren = false
     this.hitArea = new Rectangle(0, 0, 1920, 1080)
-    const board = new Sprite(boardTexture)
+    const board =
+      boardTexture instanceof Container ? boardTexture : new Sprite(boardTexture)
     board.label = 'game.loading-board'
-    applyAnchoredPlacement(board, GAME_BOARD_LAYOUT.board)
+    if (board instanceof Sprite) applyAnchoredPlacement(board, GAME_BOARD_LAYOUT.board)
     const backdrop = new Graphics()
     const { area, color, alpha } = GAME_BOARD_LAYOUT.openingBackdrop
     backdrop.label = 'game.loading-backdrop'

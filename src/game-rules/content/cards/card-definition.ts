@@ -98,6 +98,8 @@ export interface CardMetadata {
   readonly spellDamage?: number
   readonly rulesText: string
   readonly keywords: readonly CardKeyword[]
+  /** Native AURA visual tag; independent of how the persistent effect is modeled. */
+  readonly auraVisual?: boolean
   readonly effects: readonly CardEffectBlock[]
   /** Optional condition that must be true before the card can be played. */
   readonly playCondition?: Readonly<Record<string, CardEffectValue>>

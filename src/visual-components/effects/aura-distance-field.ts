@@ -132,11 +132,40 @@ function distanceTransform(
   return distances
 }
 
+/** Fill only enclosed transparency; the padded image boundary is always exterior. */
+function fillEnclosedHoles(
+  mask: Uint8Array,
+  width: number,
+  height: number
+): Uint8Array {
+  const exterior = new Uint8Array(mask.length)
+  const queue = new Int32Array(mask.length)
+  let head = 0
+  let tail = 1
+  exterior[0] = 1
+  queue[0] = 0
+  const visit = (index: number): void => {
+    if (mask[index] || exterior[index]) return
+    exterior[index] = 1
+    queue[tail++] = index
+  }
+  while (head < tail) {
+    const index = queue[head++]
+    const x = index % width
+    if (x > 0) visit(index - 1)
+    if (x + 1 < width) visit(index + 1)
+    if (index >= width) visit(index - width)
+    if (index + width < width * height) visit(index + width)
+  }
+  return exterior.map((value) => 1 - value)
+}
+
 /** Ported from ShaderTest/distanceField.js; blue retains alpha for outline-only compositing. */
 export function createAuraDistanceField(
   image: CanvasImageSource,
   sourceWidth: number,
-  sourceHeight: number
+  sourceHeight: number,
+  fillHolesForSmoothing = false
 ) {
   const fieldScale = REFERENCE_CARD_WIDTH / sourceWidth
   const cardWidth = REFERENCE_CARD_WIDTH
@@ -164,11 +193,19 @@ export function createAuraDistanceField(
   // Red: exact distance to the card alpha.
   const exact = distanceTransform(width, height, (index) => mask[index] === 1)
   // Green: distance to the smoothed outline (closing, then blur and cut).
+  // A hollow portrait rim can disappear under blur. Fill its interior only
+  // for smoothing, preserving original alpha and exact distances for compositing.
+  const smoothingMask = fillHolesForSmoothing
+    ? fillEnclosedHoles(mask, width, height)
+    : mask
+  const smoothingDistance = fillHolesForSmoothing
+    ? distanceTransform(width, height, (index) => smoothingMask[index] === 1)
+    : exact
   const radius = SMOOTH_OUTLINE_RADIUS
   const outsideDilated = distanceTransform(
     width,
     height,
-    (index) => exact[index] > radius
+    (index) => smoothingDistance[index] > radius
   )
   const smoothMask = new Float32Array(width * height)
   for (let index = 0; index < smoothMask.length; index++) {

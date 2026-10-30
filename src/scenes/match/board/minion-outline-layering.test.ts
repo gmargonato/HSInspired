@@ -4,6 +4,10 @@ import {
   MatchVisualResources
 } from '../loading/match-visual-resources'
 import { MinionStatusCurtainEffect } from './minion-status-curtain-effect'
+import { minionAuraSample } from './minion-aura-effect'
+import { CARD_CATALOG } from '../../../game-rules/content/cards'
+import type { BoardMinion } from '../../../game-rules/match/opening-match-types'
+import { boardMinionAbilityMarkers } from './board-ability-markers'
 import type { GameAssets } from '../../../visual-components/assets'
 import { prewarmWindfury } from '../loading/windfury-warmup'
 import { WINDFURY_DEFAULTS } from '../../../desktop/contracts/ipc/windfury-tuning'
@@ -93,70 +97,206 @@ const tauntMinion: MinionViewModel = {
 }
 
 describe('MinionView dormant overlay', () => {
+  it('shows progress briefly, ignores refreshes, and cancels timers on disposal', async () => {
+    const view = await MinionView.create(
+      { ...tauntMinion, dormant: true },
+      textures,
+      undefined
+    )
+    const timers = vi.spyOn(AnimationScope.prototype, 'timeline')
+    try {
+      const label = view.getChildByLabel('minion.dormant-progress') as Text
+      expect(label.visible).toBe(false)
+      view.showDormantProgress(1, 2, 5)
+      const first = timers.mock.results[0]!.value as ReturnType<
+        AnimationScope['timeline']
+      >
+      first.pause()
+      expect(label.text).toBe('1/2')
+      expect(label.visible).toBe(true)
+      expect(label.eventMode).toBe('none')
+      const trigger = view.getChildByLabel('minion.trigger')!
+      expect(label.position).toMatchObject({ x: trigger.x, y: trigger.y })
+      expect(view.getChildIndex(label)).toBeGreaterThan(view.getChildIndex(trigger))
+      view.setDormant(true)
+      view.showDormantProgress(1, 2, 5)
+      expect(timers).toHaveBeenCalledTimes(1)
+      first.seek(1.99, false)
+      expect(label.visible).toBe(true)
+      first.seek(2, false)
+      expect(label.visible).toBe(false)
+      view.showDormantProgress(1, 2, 5)
+      expect(label.visible).toBe(false)
+      view.setDormant(false)
+      view.showDormantProgress(2, 2, 7)
+      expect(label.text).toBe('2/2')
+      expect(label.visible).toBe(true)
+      const final = timers.mock.results[1]!.value as ReturnType<
+        AnimationScope['timeline']
+      >
+      const kill = vi.spyOn(final, 'kill')
+      view.destroy({ children: true })
+      expect(kill).toHaveBeenCalled()
+      expect(label.destroyed).toBe(true)
+      expect(() => view.showDormantProgress(2, 2, 9)).not.toThrow()
+    } finally {
+      timers.mockRestore()
+      if (!view.destroyed) view.destroy({ children: true })
+    }
+  })
+
+  it('keeps simultaneous counters independent and replaces an unfinished hold', async () => {
+    const first = await MinionView.create(
+      { ...tauntMinion, dormant: true },
+      textures,
+      undefined
+    )
+    const second = await MinionView.create(
+      { ...tauntMinion, dormant: true },
+      textures,
+      undefined
+    )
+    const timers = vi.spyOn(AnimationScope.prototype, 'timeline')
+    try {
+      first.showDormantProgress(1, 2, 5)
+      const oldTimer = timers.mock.results[0]!.value as ReturnType<
+        AnimationScope['timeline']
+      >
+      oldTimer.pause()
+      const cancel = vi.spyOn(oldTimer, 'kill')
+      second.showDormantProgress(1, 2, 5)
+      const otherTimer = timers.mock.results[1]!.value as ReturnType<
+        AnimationScope['timeline']
+      >
+      otherTimer.pause()
+      first.setDormant(false)
+      first.showDormantProgress(2, 2, 6)
+      expect(cancel).toHaveBeenCalled()
+      const newTimer = timers.mock.results[2]!.value as ReturnType<
+        AnimationScope['timeline']
+      >
+      newTimer.pause().seek(2, false)
+      expect(first.getChildByLabel('minion.dormant-progress')!.visible).toBe(false)
+      expect(second.getChildByLabel('minion.dormant-progress')!.visible).toBe(true)
+    } finally {
+      timers.mockRestore()
+      first.destroy({ children: true })
+      second.destroy({ children: true })
+    }
+  })
+
   it.each([
     { label: 'Nether Portal', statsVisible: false },
     { label: 'Underfel Rift', statsVisible: false },
     { label: 'Sherazin', statsVisible: true }
-  ])('layers the dormant veil without changing $label stats', async (model) => {
-    const dormantTexture = new Texture({
-      source: new TextureSource({ width: 115, height: 157 })
-    })
-    const view = await MinionView.create(
-      {
-        ...tauntMinion,
-        ...model,
-        dormant: true,
-        taunt: false,
-        trigger: true
-      },
-      { ...textures, dormant: dormantTexture },
-      Texture.WHITE
-    )
-    try {
-      const overlay = view.getChildByLabel('minion.dormant') as Sprite
-      const index = (label: string) => view.getChildIndex(view.getChildByLabel(label)!)
-      expect(overlay.texture).toBe(dormantTexture)
-      expect(overlay.visible).toBe(true)
-      expect(overlay.position).toMatchObject({ x: 80, y: 90 })
-      expect(overlay.anchor).toMatchObject({ x: 0.5, y: 0.5 })
-      expect(overlay.scale).toMatchObject({ x: 1, y: 1 })
-      expect(overlay.width).toBe(115)
-      expect(overlay.height).toBe(157)
-      expect(overlay.eventMode).toBe('none')
-      expect(index('minion.dormant')).toBeGreaterThan(index('minion.artwork'))
-      expect(index('minion.dormant')).toBeLessThan(index('minion.frame'))
-      expect(index('minion.dormant')).toBeLessThan(index('minion.trigger'))
-      expect(view.getChildByLabel('minion.trigger')?.visible).toBe(true)
-      for (const name of ['attack', 'health']) {
-        expect(view.getChildByLabel(`minion.stat-${name}`)?.visible).toBe(
-          model.statsVisible
-        )
-      }
-      const silhouette = view.shadow.silhouette!.create()
-      expect(silhouette.getChildByLabel('minion.dormant.shadow-surface')).toBeNull()
-      silhouette.destroy({ children: true })
+  ])(
+    'hides $label stats while dormant and restores its visibility on awakening',
+    async (model) => {
+      const dormantTexture = new Texture({
+        source: new TextureSource({ width: 115, height: 157 })
+      })
+      const view = await MinionView.create(
+        {
+          ...tauntMinion,
+          ...model,
+          dormant: true,
+          taunt: false,
+          trigger: true
+        },
+        { ...textures, dormant: dormantTexture },
+        Texture.WHITE
+      )
+      try {
+        const overlay = view.getChildByLabel('minion.dormant') as Sprite
+        const index = (label: string) =>
+          view.getChildIndex(view.getChildByLabel(label)!)
+        expect(overlay.texture).toBe(dormantTexture)
+        expect(overlay.visible).toBe(true)
+        expect(overlay.position).toMatchObject({ x: 80, y: 90 })
+        expect(overlay.anchor).toMatchObject({ x: 0.5, y: 0.5 })
+        expect(overlay.scale).toMatchObject({ x: 1, y: 1 })
+        expect(overlay.width).toBe(115)
+        expect(overlay.height).toBe(157)
+        expect(overlay.eventMode).toBe('none')
+        expect(index('minion.dormant')).toBeGreaterThan(index('minion.artwork'))
+        expect(index('minion.dormant')).toBeLessThan(index('minion.frame'))
+        expect(index('minion.dormant')).toBeLessThan(index('minion.trigger'))
+        expect(view.getChildByLabel('minion.trigger')?.visible).toBe(true)
+        for (const name of ['attack', 'health']) {
+          expect(view.getChildByLabel(`minion.stat-${name}`)?.visible).toBe(false)
+        }
+        const silhouette = view.shadow.silhouette!.create()
+        expect(silhouette.getChildByLabel('minion.dormant.shadow-surface')).toBeNull()
+        silhouette.destroy({ children: true })
 
-      view.setDormant(false)
-      expect(overlay.visible).toBe(false)
-      view.setDormant(true)
-      view.setDormant(true)
-      expect(overlay.visible).toBe(true)
-      view.setDormant(false)
-      expect(overlay.visible).toBe(false)
-      expect(view.getChildByLabel('minion.dormant')).toBe(overlay)
-      for (const name of ['attack', 'health']) {
-        expect(view.getChildByLabel(`minion.stat-${name}`)?.visible).toBe(
-          model.statsVisible
-        )
+        view.setDormant(false)
+        expect(overlay.visible).toBe(false)
+        view.setDormant(true)
+        view.setDormant(true)
+        expect(overlay.visible).toBe(true)
+        view.setDormant(false)
+        expect(overlay.visible).toBe(false)
+        expect(view.getChildByLabel('minion.dormant')).toBe(overlay)
+        for (const name of ['attack', 'health']) {
+          expect(view.getChildByLabel(`minion.stat-${name}`)?.visible).toBe(
+            model.statsVisible
+          )
+        }
+        view.destroy({ children: true })
+        expect(overlay.destroyed).toBe(true)
+        expect(dormantTexture.destroyed).toBe(false)
+      } finally {
+        if (!view.destroyed) view.destroy({ children: true })
+        dormantTexture.destroy(true)
       }
-      view.destroy({ children: true })
-      expect(overlay.destroyed).toBe(true)
-      expect(dormantTexture.destroyed).toBe(false)
-    } finally {
-      if (!view.destroyed) view.destroy({ children: true })
-      dormantTexture.destroy(true)
     }
-  })
+  )
+
+  it.each(['stats-first', 'dormant-first'] as const)(
+    'keeps badges hidden through refreshes and restores current values (%s)',
+    async (order) => {
+      const view = await MinionView.create(tauntMinion, textures, undefined)
+      try {
+        const revision = view.shadow.silhouette!.revision
+        if (order === 'stats-first') {
+          view.setStatsVisible(true)
+          view.setDormant(true)
+        } else {
+          view.setDormant(true)
+          view.setStatsVisible(true)
+        }
+        expect(view.shadow.silhouette!.revision).toBeGreaterThan(revision)
+        const hiddenRevision = view.shadow.silhouette!.revision
+        view.setStats(7, 3, 5)
+        view.setStatsVisible(true)
+        view.setDormant(true)
+        expect(view.shadow.silhouette!.revision).toBe(hiddenRevision)
+        for (const name of ['attack', 'health']) {
+          const group = view.getChildByLabel(`minion.stat-${name}`)!
+          expect(group.visible).toBe(false)
+          expect(group.getChildByLabel(`minion.stat-${name}-badge`)!.parent).toBe(group)
+          expect(group.getChildByLabel(`minion.stat-${name}-value`)!.parent).toBe(group)
+        }
+        view.setDormant(false)
+        for (const [name, value] of [
+          ['attack', '7'],
+          ['health', '3']
+        ]) {
+          expect(view.getChildByLabel(`minion.stat-${name}`)!.visible).toBe(true)
+          expect(
+            (view.getChildByLabel(`minion.stat-${name}-value`, true) as Text).text
+          ).toBe(value)
+        }
+        view.setDormant(true)
+        view.setStatsVisible(false)
+        view.setDormant(false)
+        expect(view.getChildByLabel('minion.stat-attack')!.visible).toBe(false)
+        expect(view.getChildByLabel('minion.stat-health')!.visible).toBe(false)
+      } finally {
+        view.destroy({ children: true })
+      }
+    }
+  )
 
   it('starts hidden on an awake view and reveals the same sprite when dormant', async () => {
     const view = await MinionView.create(
@@ -263,6 +403,7 @@ describe('MinionView outline layering', () => {
       hidden.destroy({ children: true })
 
       const revision = silhouette.revision
+      view.setDormant(false)
       view.setStatsVisible(true)
       expect(stats.every((group) => group.visible)).toBe(true)
       expect(silhouette.revision).toBeGreaterThan(revision)
@@ -570,8 +711,8 @@ describe('MinionView outline layering', () => {
       childIndex('minion.poisonous')
     )
     expect(childIndex('minion.trigger')).toBeLessThan(childIndex('minion.inspire'))
-    expect(childIndex('minion.stat-health')).toBeLessThan(childIndex('minion.aura'))
-    expect(childIndex('minion.aura')).toBe(view.children.length - 2)
+    expect(childIndex('minion.aura')).toBeLessThan(childIndex('minion.artwork'))
+    expect(childIndex('minion.aura')).toBeLessThan(childIndex('minion.windfury.rear'))
 
     view.setCanAttack(true)
     expect(view.children[childIndex('minion.attack-outline-proxy')].visible).toBe(true)
@@ -716,6 +857,126 @@ describe('Windfury wind lifecycle', () => {
       animate.mockRestore()
     }
   })
+})
+
+describe('Persistent minion aura', () => {
+  it.each(
+    CARD_CATALOG.all
+      .filter((card) => card.type === 'Minion' && card.auraVisual)
+      .map((card) => card.id)
+  )('connects %s to the shared aura on creation and state refresh', async (cardId) => {
+    const definition = CARD_CATALOG.require(cardId)
+    if (definition.type !== 'Minion') throw new Error('Expected a minion')
+    const minion = {
+      instanceId: cardId,
+      cardId: definition.id,
+      attack: definition.attack,
+      health: definition.health,
+      maxHealth: definition.health,
+      keywords: definition.keywords,
+      summonedOnTurn: 1,
+      lastAttackedOnTurn: null
+    } as BoardMinion
+    const markers = boardMinionAbilityMarkers(minion, definition, 1)
+    expect(markers.aura).toBe(true)
+    const view = await MinionView.create(
+      { ...tauntMinion, ...markers },
+      textures,
+      undefined
+    )
+    try {
+      const aura = view.getChildByLabel('minion.aura')!
+      expect(aura.visible).toBe(true)
+      expect(aura.getChildByLabel('minion.aura.glow')).toBeInstanceOf(Sprite)
+      view.setAbilityEffects(
+        boardMinionAbilityMarkers({ ...minion, silenced: true }, definition, 1)
+      )
+      expect(aura.visible).toBe(false)
+      view.setAbilityEffects(markers)
+      expect(aura.visible).toBe(true)
+      const transformed = CARD_CATALOG.require('basic_chillwind_yeti')
+      view.setAbilityEffects(
+        boardMinionAbilityMarkers({ ...minion, cardId: transformed.id }, transformed, 1)
+      )
+      expect(aura.visible).toBe(false)
+    } finally {
+      view.destroy({ children: true })
+    }
+  })
+
+  it('samples the recovered expansion, fade and quiet interval', () => {
+    expect(minionAuraSample(0)).toEqual({ size: 0, alpha: 1 })
+    expect(minionAuraSample(0.5).alpha).toBe(1)
+    expect(minionAuraSample(1.25).size).toBeCloseTo(0.7634128034)
+    expect(minionAuraSample(2).alpha).toBeCloseTo(0.31502, 4)
+    expect(minionAuraSample(2.5)).toEqual({ size: 0, alpha: 0 })
+    expect(minionAuraSample(3.99)).toEqual({ size: 0, alpha: 0 })
+    expect(minionAuraSample(4.5)).toEqual(minionAuraSample(0.5))
+  })
+
+  it('preserves phase on refresh, suppresses inactive minions and releases its clock', async () => {
+    const animate = vi.spyOn(AnimationScope.prototype, 'to')
+    const view = await MinionView.create(
+      { ...tauntMinion, aura: true },
+      textures,
+      undefined
+    )
+    try {
+      const aura = view.getChildByLabel('minion.aura')!
+      const glow = aura.getChildByLabel('minion.aura.glow') as Sprite
+      const loopIndex = animate.mock.calls.findIndex(
+        ([target]) => 'seconds' in (target as object)
+      )
+      const loop = animate.mock.results[loopIndex].value
+      const bodyBounds = view.getInteractionBounds()
+      loop.totalTime(1.25)
+      expect(glow.width).toBeGreaterThan(0)
+      expect(view.getInteractionBounds()).toEqual(bodyBounds)
+      expect(glow.width).toBeGreaterThan(bodyBounds.width)
+      loop.totalTime(2)
+      expect(glow.alpha).toBeCloseTo(0.63004, 4)
+      loop.totalTime(1.25)
+      const width = glow.width
+      view.setAbilityEffects({ ...tauntMinion, aura: true })
+      expect(loop.totalTime()).toBe(1.25)
+      expect(glow.width).toBe(width)
+      expect(aura.eventMode).toBe('none')
+      expect(glow.blendMode).toBe('add')
+      view.setDormant(true)
+      expect(aura.visible).toBe(false)
+      expect(loop.parent).toBeNull()
+      view.setDormant(false)
+      expect(aura.visible).toBe(true)
+      expect(glow.width).toBe(0)
+      view.setPendingDestruction(true)
+      expect(aura.visible).toBe(false)
+      view.setPendingDestruction(false)
+      expect(aura.visible).toBe(true)
+      view.setAbilityEffects({ ...tauntMinion, aura: false })
+      expect(aura.visible).toBe(false)
+      view.setAbilityEffects({ ...tauntMinion, aura: true })
+      const lastLoop = animate.mock.results.at(-1)!.value
+      view.destroy({ children: true })
+      expect(lastLoop.parent).toBeNull()
+      expect(aura.destroyed && glow.destroyed).toBe(true)
+    } finally {
+      if (!view.destroyed) view.destroy({ children: true })
+      animate.mockRestore()
+    }
+  })
+
+  it.each([{ dormant: true }, { pendingDestruction: true }])(
+    'suppresses the aura at construction for %j',
+    async (state) => {
+      const view = await MinionView.create(
+        { ...tauntMinion, aura: true, ...state },
+        textures,
+        undefined
+      )
+      expect(view.getChildByLabel('minion.aura')!.visible).toBe(false)
+      view.destroy({ children: true })
+    }
+  )
 })
 
 describe('Windfury scene warm-up', () => {

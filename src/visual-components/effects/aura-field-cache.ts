@@ -14,26 +14,39 @@ interface Entry {
   valid: boolean
   detach(): void
 }
-const caches = new WeakMap<Renderer, Map<Texture, Entry>>()
+const caches = new WeakMap<Renderer, Map<Texture, Map<boolean, Entry>>>()
 
 function signature(source: Texture): string {
   const frame = source.frame
   return `${source.source.uid}:${frame.x}:${frame.y}:${frame.width}:${frame.height}:${source.source.resolution}`
 }
 
-export function hasAuraField(renderer: Renderer, source: Texture): boolean {
-  const entry = caches.get(renderer)?.get(source)
+export function hasAuraField(
+  renderer: Renderer,
+  source: Texture,
+  fillHolesForSmoothing = false
+): boolean {
+  const entry = caches.get(renderer)?.get(source)?.get(fillHolesForSmoothing)
   return !!entry?.valid && entry.signature === signature(source)
 }
 
 /** Shared by equal source silhouettes, never keyed by animation, palette or pose. */
-export function acquireAuraField(renderer: Renderer, source: Texture): AuraFieldLease {
+export function acquireAuraField(
+  renderer: Renderer,
+  source: Texture,
+  fillHolesForSmoothing = false
+): AuraFieldLease {
   let cache = caches.get(renderer)
   if (!cache) {
     cache = new Map()
     caches.set(renderer, cache)
   }
-  let entry = cache.get(source)
+  let variants = cache.get(source)
+  if (!variants) {
+    variants = new Map()
+    cache.set(source, variants)
+  }
+  let entry = variants.get(fillHolesForSmoothing)
   if (!entry?.valid || entry.signature !== signature(source)) {
     const sprite = new Sprite(source)
     let canvas
@@ -45,7 +58,8 @@ export function acquireAuraField(renderer: Renderer, source: Texture): AuraField
     const field = createAuraDistanceField(
       canvas as CanvasImageSource,
       canvas.width,
-      canvas.height
+      canvas.height,
+      fillHolesForSmoothing
     )
     const invalidate = (): void => {
       created.valid = false
@@ -67,7 +81,7 @@ export function acquireAuraField(renderer: Renderer, source: Texture): AuraField
     textureSource.on('update', invalidate)
     textureSource.on('unload', invalidate)
     textureSource.on('destroy', invalidate)
-    cache.set(source, created)
+    variants.set(fillHolesForSmoothing, created)
     entry = created
   }
   const acquired = entry
@@ -82,7 +96,10 @@ export function acquireAuraField(renderer: Renderer, source: Texture): AuraField
       if (released) return
       released = true
       if (--acquired.references !== 0) return
-      if (cache.get(source) === acquired) cache.delete(source)
+      if (variants.get(fillHolesForSmoothing) === acquired) {
+        variants.delete(fillHolesForSmoothing)
+        if (variants.size === 0) cache.delete(source)
+      }
       acquired.detach()
       acquired.field.texture.destroy(true)
     }

@@ -12,7 +12,11 @@ import {
 import { createHingedDoorMesh } from './hinged-door'
 import { createManaHighlightFilter } from './highlight'
 import { PremiumArtworkBreath } from './premium-artwork-breath'
-import { AnimatedOutline, type OutlinePresetName } from './animated-outline'
+import {
+  AnimatedOutline,
+  type OutlinePresetName,
+  type AnimatedOutlineOptions
+} from './animated-outline'
 import { acquireAuraField, type AuraFieldLease } from './aura-field-cache'
 import { GhostAura } from './ghost-aura'
 import type { ArenaAssets } from '../assets'
@@ -21,7 +25,8 @@ import type { ArenaAssets } from '../assets'
 export function prepareMenuOutline(
   renderer: Renderer,
   texture: Texture,
-  preset: OutlinePresetName
+  preset: OutlinePresetName,
+  occlusion?: AnimatedOutlineOptions['occlusion']
 ): AuraFieldLease {
   const field = acquireAuraField(renderer, texture)
   const root = new Container()
@@ -31,7 +36,7 @@ export function prepareMenuOutline(
   sprite.position.set(16, 16)
   sprite.scale.set(32 / Math.max(texture.width, texture.height))
   root.addChild(sprite)
-  const outline = new AnimatedOutline(sprite, { palette: 'blue', preset })
+  const outline = new AnimatedOutline(sprite, { palette: 'blue', preset, occlusion })
   const target = RenderTexture.create({ width: 64, height: 64, resolution: 1 })
   try {
     outline.prebuild(renderer)

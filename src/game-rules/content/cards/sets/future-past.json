@@ -117,7 +117,8 @@
               "type": "minion",
               "selection": "all"
             },
-            "amount": 5
+            "amount": 5,
+            "vfx": "fire-blast-both-boards"
           }
         ]
       }
@@ -300,6 +301,7 @@
   },
   {
     "id": "future_past_sing_along_buddy",
+    "auraVisual": true,
     "name": "Sing-Along Buddy",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -372,7 +374,8 @@
               "type": "character",
               "selection": "chosen"
             },
-            "amount": 0
+            "amount": 0,
+            "vfx": "neutral-missile-raw"
           }
         ]
       }
@@ -433,7 +436,8 @@
               "controller": "self",
               "type": "minion",
               "selection": "chosen"
-            }
+            },
+            "vfx": "shadow-missile-small"
           },
           {
             "action": "restore",
@@ -472,7 +476,8 @@
               "type": "minion",
               "selection": "chosen"
             },
-            "amount": 2
+            "amount": 2,
+            "vfx": "shadow-missile-small"
           }
         ],
         "then": {
@@ -524,7 +529,8 @@
               "controller": "self",
               "type": "minion",
               "selection": "chosen"
-            }
+            },
+            "vfx": "shadow-missile-small"
           }
         ]
       }
@@ -588,7 +594,8 @@
               "controller": "any",
               "type": "minion",
               "selection": "chosen"
-            }
+            },
+            "vfx": "shadow-missile-small"
           }
         ]
       }
@@ -656,7 +663,8 @@
               "type": "minion",
               "selection": "all"
             },
-            "amount": 3
+            "amount": 3,
+            "vfx": "shadow-blast-enemy-board"
           }
         ]
       },
@@ -702,7 +710,8 @@
               "type": "hero",
               "selection": "hero"
             },
-            "amount": 3
+            "amount": 3,
+            "vfx": "shadow-missile-small"
           },
           {
             "action": "add-to-hand",
@@ -773,7 +782,8 @@
               "type": "minion",
               "selection": "chosen"
             },
-            "storeCardId": true
+            "storeCardId": true,
+            "vfx": "shadow-missile-small"
           }
         ]
       },
@@ -863,7 +873,8 @@
                     "controller": "opponent",
                     "type": "minion",
                     "selection": "all"
-                  }
+                  },
+                  "vfx": "frost-blast-enemy-board"
                 }
               ]
             },
@@ -960,7 +971,8 @@
               "controller": "opponent",
               "type": "minion",
               "selection": "all"
-            }
+            },
+            "vfx": "frost-blast-enemy-board"
           }
         ]
       }
@@ -1484,7 +1496,8 @@
               "filter": {
                 "cardId": "classic_ysera"
               }
-            }
+            },
+            "vfx": "shadow-missile-small"
           },
           {
             "action": "damage",
@@ -1493,7 +1506,8 @@
               "type": "character",
               "selection": "all"
             },
-            "amount": 5
+            "amount": 5,
+            "vfx": "shadow-blast-enemy-side"
           }
         ]
       }

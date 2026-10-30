@@ -93,6 +93,7 @@
   },
   {
     "id": "whispers_of_the_old_gods_fandral_staghelm",
+    "auraVisual": true,
     "name": "Fandral Staghelm",
     "rarity": "Legendary",
     "cardClass": "Druid",

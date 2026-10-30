@@ -102,6 +102,7 @@ export class GameCombatPresentation {
     ActiveCombatPresentation
   >()
   private readonly deathGhostTemplates = new Map<string, DeathGhostTemplate>()
+  private readonly deathSourcePositions = new Map<string, { x: number; y: number }>()
   private readonly deathBatchSources = new Map<string, readonly string[]>()
   private readonly activeDeathGhosts = new Set<Sprite>()
   private readonly combatPreviewMarkers = new Map<CombatView, Sprite>()
@@ -144,6 +145,12 @@ export class GameCombatPresentation {
     this.deathGhostTemplates.set(instanceId, { sourceInstanceId: instanceId, snapshot })
   }
 
+  deathSourcePosition(
+    instanceId: string
+  ): { readonly x: number; readonly y: number } | undefined {
+    return this.deathSourcePositions.get(instanceId)
+  }
+
   dispose(): void {
     for (const view of this.attackWarnings)
       if (!view.destroyed) view.setAttackWarning(false)
@@ -155,6 +162,7 @@ export class GameCombatPresentation {
     this.clearCombatPreview()
     this.activeCombatPresentations.clear()
     this.deathGhostTemplates.clear()
+    this.deathSourcePositions.clear()
     this.deathBatchSources.clear()
     for (const warp of this.activeWarps.values()) warp.dispose()
     this.activeWarps.clear()
@@ -448,7 +456,10 @@ export class GameCombatPresentation {
             ? this.context.weaponView(death.participantId)
             : undefined
       if (!view || view.destroyed) continue
-      if (view instanceof MinionView) view.setCanAttack(false)
+      if (view instanceof MinionView) {
+        this.deathSourcePositions.set(death.instanceId, view.getGlobalPosition())
+        view.setCanAttack(false)
+      }
       if (death.hasDeathrattle && !this.deathGhostTemplates.has(death.instanceId)) {
         view.setDeathrattle(true)
         const snapshot = view.getAbilityMarkerSnapshot('deathrattle')
@@ -499,8 +510,10 @@ export class GameCombatPresentation {
   }
 
   completeDeathBatch(batchId: string): void {
-    for (const instanceId of this.deathBatchSources.get(batchId) ?? [])
+    for (const instanceId of this.deathBatchSources.get(batchId) ?? []) {
       this.deathGhostTemplates.delete(instanceId)
+      this.deathSourcePositions.delete(instanceId)
+    }
     this.deathBatchSources.delete(batchId)
   }
 

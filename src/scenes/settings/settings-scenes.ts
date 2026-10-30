@@ -3,6 +3,7 @@ import { SETTINGS_LAYOUT } from './settings-layout'
 import { CursorSizeSlider } from './cursor-size-slider'
 import { AiModeSelector } from './ai-mode-selector'
 import { ResolutionSelector } from './resolution-selector'
+import { BoardCornerSelector, type BoardCornerSelection } from './board-corner-selector'
 import { applyAnchoredPlacement, applyPlacement } from '../../visual-components/layout'
 import {
   ASSET_BUNDLE_IDS,
@@ -14,8 +15,8 @@ import { Button } from '../../visual-components/controls/button'
 import { Scene } from '../../visual-components/lifecycle/scene'
 
 export interface GameSettingsCallbacks {
+  readonly boardCorners?: BoardCornerSelection
   readonly onConcede: () => void | Promise<void>
-  readonly onRestart: () => void | Promise<void>
   readonly onQuit: () => void | Promise<void>
 }
 
@@ -127,6 +128,7 @@ export class MenuSettingsScene extends SettingsScene {
 
 /** Settings overlay used while a match is active. */
 export class GameSettingsScene extends SettingsScene {
+  private boardCornerSelector: BoardCornerSelector | null = null
   private readonly actionButtons: Button[] = []
   private actionPending = false
 
@@ -150,20 +152,20 @@ export class GameSettingsScene extends SettingsScene {
     )
     this.addAction(
       assets.baseFrameLarge,
-      assets.restartButton,
-      SETTINGS_LAYOUT.gameActions.restartFrame,
-      SETTINGS_LAYOUT.gameActions.restartButton,
-      'game-settings.restart',
-      this.callbacks.onRestart
-    )
-    this.addAction(
-      assets.baseFrameLarge,
       assets.quitButton,
       SETTINGS_LAYOUT.gameActions.quitFrame,
       SETTINGS_LAYOUT.gameActions.quitButton,
       'game-settings.quit',
       this.callbacks.onQuit
     )
+    if (this.callbacks.boardCorners?.options.length) {
+      await this.waitForFonts()
+      this.boardCornerSelector = new BoardCornerSelector(
+        assets,
+        this.callbacks.boardCorners
+      )
+      this.root.addChild(this.boardCornerSelector)
+    }
   }
 
   update(_deltaMS: number): void {}
@@ -171,6 +173,8 @@ export class GameSettingsScene extends SettingsScene {
   protected override onExit(): void {
     super.onExit()
     for (const button of this.actionButtons) button.setEnabled(false)
+    this.boardCornerSelector?.dispose()
+    this.boardCornerSelector = null
     this.actionButtons.length = 0
   }
 

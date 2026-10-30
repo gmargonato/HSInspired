@@ -447,6 +447,8 @@ export interface BoardMinion {
   readonly heroPowerMultiplier?: number
   readonly dormant?: boolean
   readonly dormantTurnsRemaining?: number
+  /** Original duration of the current timed Dormant effect. */
+  readonly dormantTurnsTotal?: number
   readonly dormantProgress?: number
   readonly dormantProgressTurn?: number
   readonly rememberedSpellIds?: readonly CardId[]
@@ -1001,6 +1003,12 @@ export interface TurnStartedEvent {
   readonly participantId: PlayerId
   readonly turnNumber: number
   readonly mana: PlayerMana
+  /** Countdown snapshots captured before start-of-turn effects resolve. */
+  readonly dormantProgress?: readonly {
+    readonly instanceId: string
+    readonly current: number
+    readonly total: number
+  }[]
 }
 
 export interface CardDrawnEvent {

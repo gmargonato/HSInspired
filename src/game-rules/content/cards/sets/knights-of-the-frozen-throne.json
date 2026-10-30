@@ -2088,6 +2088,7 @@
   },
   {
     "id": "knights_of_the_frozen_throne_doomed_apprentice",
+    "auraVisual": true,
     "name": "Doomed Apprentice",
     "rarity": "Rare",
     "cardClass": "Mage",
@@ -3043,6 +3044,7 @@
   },
   {
     "id": "knights_of_the_frozen_throne_runeforge_haunter",
+    "auraVisual": true,
     "name": "Runeforge Haunter",
     "rarity": "Rare",
     "cardClass": "Rogue",
@@ -3064,6 +3066,7 @@
   },
   {
     "id": "knights_of_the_frozen_throne_corpse_widow",
+    "auraVisual": true,
     "name": "Corpse Widow",
     "rarity": "Rare",
     "cardClass": "Hunter",
@@ -3750,6 +3753,7 @@
   },
   {
     "id": "knights_of_the_frozen_throne_nerubian_unraveler",
+    "auraVisual": true,
     "name": "Nerubian Unraveler",
     "rarity": "Epic",
     "cardClass": "Neutral",
@@ -4570,6 +4574,7 @@
   },
   {
     "id": "knights_of_the_frozen_throne_drakkari_enchanter",
+    "auraVisual": true,
     "name": "Drakkari Enchanter",
     "rarity": "Epic",
     "cardClass": "Neutral",

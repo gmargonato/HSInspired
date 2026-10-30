@@ -4,6 +4,9 @@ struct GlobalFilterUniforms {
  uInputSize: vec4<f32>, uInputPixel: vec4<f32>, uInputClamp: vec4<f32>, uOutputFrame: vec4<f32>, uGlobalFrame: vec4<f32>, uOutputTexture: vec4<f32>,
 }
 struct AuraUniforms {
+  uOcclusionEnabled: f32,
+  uOcclusionBounds: vec4<f32>,
+  uOcclusionUvs: vec4<f32>,
   uMapX: vec4<f32>,
   uMapY: vec4<f32>,
   uProjection0: vec4<f32>,
@@ -57,6 +60,8 @@ struct AuraUniforms {
 @group(1) @binding(0) var<uniform> auraUniforms: AuraUniforms;
 @group(1) @binding(1) var uDistanceField: texture_2d<f32>;
 @group(1) @binding(2) var uDistanceSampler: sampler;
+@group(1) @binding(3) var uOcclusion: texture_2d<f32>;
+@group(1) @binding(4) var uOcclusionSampler: sampler;
 struct VSOutput { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f32> }
 @vertex fn mainVertex(@location(0) aPosition: vec2<f32>) -> VSOutput {
  var position = aPosition * gfu.uOutputFrame.zw + gfu.uOutputFrame.xy;
@@ -243,7 +248,14 @@ fn perimeterShimmer(point: vec2<f32>) -> f32
     // saturated on bright boards; lowering the tail's alpha while keeping its
     // colour turns that share of the tail into added light.
     var outAlpha: f32 = baseAlpha + glowAlpha * (1.0 - baseAlpha) * (1.0 - auraUniforms.uAdditive);
-    return vec4<f32>(premultiplied, outAlpha) * edgeMask * bottomFade * (1.0 - smoothstep(0.02, 0.78, fieldSample.b)) * auraUniforms.uAlpha;
+    var foregroundAlpha: f32 = 0.0;
+    if (auraUniforms.uOcclusionEnabled > 0.5) {
+        let occlusionUv = (cardUv - auraUniforms.uOcclusionBounds.xy) / auraUniforms.uOcclusionBounds.zw;
+        if (all(occlusionUv >= vec2<f32>(0.0)) && all(occlusionUv <= vec2<f32>(1.0))) {
+            foregroundAlpha = textureSampleLevel(uOcclusion, uOcclusionSampler, auraUniforms.uOcclusionUvs.xy + occlusionUv * auraUniforms.uOcclusionUvs.zw, 0.0).a;
+        }
+    }
+    return vec4<f32>(premultiplied, outAlpha) * edgeMask * bottomFade * (1.0 - smoothstep(0.02, 0.78, fieldSample.b)) * auraUniforms.uAlpha * (1.0 - foregroundAlpha);
 }
 
 `

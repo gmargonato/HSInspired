@@ -2,7 +2,6 @@ import { effectiveBoardMinionKeywords } from './minion-attack-state'
 import {
   cardHasTribe,
   CARD_CATALOG,
-  isCardEffectObject,
   type CardDefinition,
   type CardEffectBlock,
   type CardId,
@@ -50,18 +49,6 @@ function isPoisonEffect(effect: CardEffectBlock): boolean {
   )
 }
 
-/** The board Aura badge represents persistent effects that affect the board state. */
-function isBoardMinionAuraEffect(effect: CardEffectBlock): boolean {
-  if (effect.trigger !== 'aura') return false
-
-  return (effect.actions ?? []).some((action) => {
-    if (action.action === 'modify-hero-power-uses') return true
-
-    const target = isCardEffectObject(action.target) ? action.target : undefined
-    return target?.type === 'minion' && target.selection !== 'source'
-  })
-}
-
 /**
  * Frost Lich Jaina grants her Elementals Lifesteal for the rest of the game.
  * This is a hero-driven aura rather than a card keyword, so it is derived from
@@ -80,14 +67,15 @@ export function hasJainaElementalLifesteal(
 
 /** Maps authored gameplay metadata to the static indicators shown while in play. */
 export function boardAbilityMarkers(
-  definition: Pick<CardDefinition, 'keywords' | 'effects'>
+  definition: Pick<CardDefinition, 'keywords' | 'effects' | 'auraVisual'>
 ): BoardAbilityMarkers {
   const keywords = new Set(definition.keywords)
   const deathrattle = definition.effects.some(
     (effect) => effect.trigger === 'deathrattle'
   )
   const poisonous = keywords.has('poisonous') || definition.effects.some(isPoisonEffect)
-  const aura = definition.effects.some(isBoardMinionAuraEffect)
+  // Hearthstone's AURA tag is independent of the gameplay trigger/action shape.
+  const aura = definition.auraVisual === true
   const inspire = definition.effects.some((effect) => effect.trigger === 'inspire')
   const trigger =
     definition.effects.some(
@@ -166,7 +154,7 @@ export function boardMinionRuntimeMarkers(
  */
 export function boardMinionAbilityMarkers(
   minion: BoardMinion,
-  definition: Pick<CardDefinition, 'keywords' | 'effects'>,
+  definition: Pick<CardDefinition, 'keywords' | 'effects' | 'auraVisual'>,
   turnNumber: number,
   heroId?: string | null
 ): BoardAbilityMarkers {

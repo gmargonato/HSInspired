@@ -1032,6 +1032,7 @@
   },
   {
     "id": "league_of_explorers_naga_sea_witch",
+    "auraVisual": true,
     "name": "Naga Sea Witch",
     "rarity": "Epic",
     "cardClass": "Neutral",
@@ -1194,6 +1195,7 @@
   },
   {
     "id": "league_of_explorers_brann_bronzebeard",
+    "auraVisual": true,
     "name": "Brann Bronzebeard",
     "rarity": "Legendary",
     "cardClass": "Neutral",

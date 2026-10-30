@@ -10,6 +10,8 @@ import type {
 import { describe, expect, it } from 'vitest'
 import { markHearthstoneKeywords } from '../../../visual-components/cards/card-text-markup'
 import { CARD_CATALOG, type CardTrigger } from '../../../game-rules/content/cards'
+import { validateCardRecord } from '../../../game-rules/content/cards/card-validator'
+import { zombeastId } from '../../../game-rules/content/cards/zombeast'
 import {
   isBoardMinionSleeping,
   type BoardMinion,
@@ -330,7 +332,7 @@ describe('board ability markers', () => {
     ).toBe(false)
   })
 
-  it('maps board-targeting Auras independently from the Trigger badge', () => {
+  it('maps the native aura visual independently from gameplay triggers', () => {
     expect(markers('basic_grimscale_oracle')).toMatchObject({
       aura: true,
       trigger: false
@@ -360,9 +362,86 @@ describe('board ability markers', () => {
       trigger: false
     })
     expect(markers('classic_sorcerers_apprentice')).toMatchObject({
-      aura: false,
+      aura: true,
       trigger: false
     })
+  })
+
+  it('matches the recovered AURA tags across the entire minion catalog', () => {
+    // CARD_TAG / GAME_TAG.AURA (362), recovered from Hearthstone dbf.unity3d.
+    // Comparing the complete set also rejects false positives on every other minion.
+    const expected = [
+      'basic_flametongue_totem',
+      'basic_grimscale_oracle',
+      'basic_raid_leader',
+      'basic_stormwind_champion',
+      'basic_timber_wolf',
+      'classic_dire_wolf_alpha',
+      'classic_leokk',
+      'classic_mana_wraith',
+      'classic_murloc_warleader',
+      'classic_pint_sized_summoner',
+      'classic_sorcerers_apprentice',
+      'classic_southsea_captain',
+      'classic_summoning_portal',
+      'classic_tundra_rhino',
+      'classic_venture_co_mercenary',
+      'goblins_vs_gnomes_wee_spellstopper',
+      'goblins_vs_gnomes_malganis',
+      'goblins_vs_gnomes_mechwarper',
+      'naxxramas_nerubar_weblord',
+      'naxxramas_baron_rivendare',
+      'league_of_explorers_naga_sea_witch',
+      'league_of_explorers_brann_bronzebeard',
+      'the_grand_tournament_aviana',
+      'the_grand_tournament_warhorse_trainer',
+      'the_grand_tournament_maiden_of_the_lake',
+      'one_night_in_karazhan_violet_illusionist',
+      'whispers_of_the_old_gods_fandral_staghelm',
+      'journey_to_ungoro_radiant_elemental',
+      'journey_to_ungoro_emerald_hive_queen',
+      'knights_of_the_frozen_throne_doomed_apprentice',
+      'knights_of_the_frozen_throne_runeforge_haunter',
+      'knights_of_the_frozen_throne_corpse_widow',
+      'knights_of_the_frozen_throne_nerubian_unraveler',
+      'knights_of_the_frozen_throne_drakkari_enchanter',
+      'future_past_sing_along_buddy'
+    ]
+    expect(
+      CARD_CATALOG.all
+        .filter((card) => card.type === 'Minion' && boardAbilityMarkers(card).aura)
+        .map((card) => card.id)
+        .sort()
+    ).toEqual(expected.sort())
+  })
+
+  it('preserves inherited aura visuals on stitched Beasts without tagging plain Beasts', () => {
+    expect(markers(zombeastId('basic_timber_wolf', 'basic_stonetusk_boar')).aura).toBe(
+      true
+    )
+    expect(
+      markers(zombeastId('classic_dire_wolf_alpha', 'basic_stonetusk_boar')).aura
+    ).toBe(true)
+    expect(
+      markers(zombeastId('classic_scavenging_hyena', 'basic_stonetusk_boar')).aura
+    ).toBe(false)
+  })
+
+  it('validates the optional visual tag without changing gameplay effects', () => {
+    const minion = CARD_CATALOG.require('basic_chillwind_yeti')
+    expect(validateCardRecord({ ...minion, auraVisual: true }, 'basic')).toMatchObject({
+      auraVisual: true,
+      effects: minion.effects
+    })
+    expect(() =>
+      validateCardRecord({ ...minion, auraVisual: 'true' }, 'basic')
+    ).toThrow('auraVisual')
+    expect(() =>
+      validateCardRecord(
+        { ...CARD_CATALOG.require('basic_fireball'), auraVisual: true },
+        'basic'
+      )
+    ).toThrow('auraVisual')
   })
 
   it('hides a board Aura when its minion is silenced', () => {
@@ -389,6 +468,7 @@ describe('board ability markers', () => {
   it('keeps Aura and Trigger independent when a definition contains both', () => {
     expect(
       boardAbilityMarkers({
+        auraVisual: true,
         keywords: [],
         effects: [
           {
@@ -480,6 +560,21 @@ it('uses modern bold keywords across matching card descriptions', () => {
       '<keyword>' + keyword + '</keyword>'
     )
   }
+})
+
+it('bolds Dormant consistently in printed and granted-effect descriptions', () => {
+  for (const id of [
+    'future_past_ancient_of_yore',
+    'future_past_maiev_shadowsong',
+    'future_past_cursed_campaign'
+  ]) {
+    expect(markHearthstoneKeywords(CARD_CATALOG.require(id).rulesText)).toContain(
+      '<keyword>Dormant</keyword>'
+    )
+  }
+  expect(markHearthstoneKeywords('While dormant, gain Armor.')).toBe(
+    'While <keyword>dormant</keyword>, gain Armor.'
+  )
 })
 
 describe('hero Windfury presentation', () => {

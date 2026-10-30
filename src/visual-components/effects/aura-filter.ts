@@ -33,6 +33,12 @@ interface SharedShape {
   /** Permanent lease so the field survives while no outline is using it. */
   readonly lease: AuraFieldLease
 }
+
+export interface AuraOcclusion {
+  readonly texture: Texture
+  /** Foreground texture frame rectangle in normalized silhouette coordinates. */
+  readonly bounds: Rectangle
+}
 const sharedShapes = new WeakMap<Renderer, Map<string, SharedShape>>()
 
 function snapshotComposition(
@@ -69,14 +75,15 @@ function acquireSharedShape(
   renderer: Renderer,
   key: string,
   target: Container,
-  bounds: Rectangle
+  bounds: Rectangle,
+  fillHolesForSmoothing = false
 ): SharedShape {
   let shapes = sharedShapes.get(renderer)
   if (!shapes) {
     shapes = new Map()
     sharedShapes.set(renderer, shapes)
   }
-  const cacheKey = sharedShapeKey(key, bounds)
+  const cacheKey = sharedShapeKey(`${key}:${fillHolesForSmoothing}`, bounds)
   const existing = shapes.get(cacheKey)
   if (existing?.lease.valid && !existing.texture.destroyed) return existing
   if (existing) {
@@ -85,7 +92,10 @@ function acquireSharedShape(
     existing.texture.destroy(true)
   }
   const texture = snapshotComposition(renderer, target, bounds)
-  const shared = { texture, lease: acquireAuraField(renderer, texture) }
+  const shared = {
+    texture,
+    lease: acquireAuraField(renderer, texture, fillHolesForSmoothing)
+  }
   shapes.set(cacheKey, shared)
   return shared
 }
@@ -136,14 +146,18 @@ export class AuraFilter extends Filter {
       readonly bounds: Rectangle
     },
     /** Identical composed targets with the same key share one snapshot and field. */
-    private readonly sharedShape?: string
+    private readonly sharedShape?: string,
+    private readonly occlusion?: () => AuraOcclusion | undefined,
+    private readonly fillHolesForSmoothing = false
   ) {
     super({
       glProgram: createAuraGlProgram(),
       gpuProgram: createAuraGpuProgram(),
       resources: {
         uDistanceField: Texture.EMPTY.source,
-        uDistanceSampler: Texture.EMPTY.source.style
+        uDistanceSampler: Texture.EMPTY.source.style,
+        uOcclusion: Texture.EMPTY.source,
+        uOcclusionSampler: Texture.EMPTY.source.style
       },
       // The aura shader never samples its input, so multisampling it is wasted work.
       antialias: 'off',
@@ -223,7 +237,10 @@ export class AuraFilter extends Filter {
       (texture !== this.source && texture !== null)
     ) {
       this.auraUniforms.uniforms.uReady = 0
-      if (texture && hasAuraField(system.renderer, texture)) {
+      if (
+        texture &&
+        hasAuraField(system.renderer, texture, this.fillHolesForSmoothing)
+      ) {
         this.prepare(system.renderer, texture, revision)
       } else if (!this.pending && this.failedRevision !== revision) {
         this.pending = true
@@ -297,6 +314,28 @@ export class AuraFilter extends Filter {
     this.auraUniforms.uniforms.uProjection1.set([...projection.slice(3, 6), 0])
     this.auraUniforms.uniforms.uProjection2.set([...projection.slice(6, 9), 0])
     this.auraUniforms.uniforms.uAlpha = target.getGlobalAlpha()
+    const occlusion = this.occlusion?.()
+    this.auraUniforms.uniforms.uOcclusionEnabled = occlusion ? 1 : 0
+    if (occlusion) {
+      const { texture, bounds } = occlusion
+      this.resources.uOcclusion = texture.source
+      this.resources.uOcclusionSampler = texture.source.style
+      this.auraUniforms.uniforms.uOcclusionBounds.set([
+        bounds.x,
+        bounds.y,
+        bounds.width,
+        bounds.height
+      ])
+      this.auraUniforms.uniforms.uOcclusionUvs.set([
+        texture.uvs.x0,
+        texture.uvs.y0,
+        texture.uvs.x2 - texture.uvs.x0,
+        texture.uvs.y2 - texture.uvs.y0
+      ])
+    } else {
+      this.resources.uOcclusion = Texture.EMPTY.source
+      this.resources.uOcclusionSampler = Texture.EMPTY.source.style
+    }
     super.apply(system, input, output, clear)
   }
 
@@ -313,14 +352,15 @@ export class AuraFilter extends Filter {
           renderer,
           this.sharedShape,
           target,
-          this.snapshotBounds
+          this.snapshotBounds,
+          this.fillHolesForSmoothing
         ).texture
       } else {
         this.snapshot = snapshotComposition(renderer, target, this.snapshotBounds)
         texture = this.snapshot
       }
     }
-    this.field = acquireAuraField(renderer, texture)
+    this.field = acquireAuraField(renderer, texture, this.fillHolesForSmoothing)
     this.source = texture
     this.revision = revision
     const { field } = this.field

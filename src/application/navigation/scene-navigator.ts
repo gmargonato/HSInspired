@@ -343,13 +343,13 @@ export class SceneNavigator implements SceneRouter {
       operation = () =>
         this.sceneManager.push(
           new GameSettingsScene({
+            boardCorners: {
+              ...gameScene.boardCorners,
+              onSelect: (id) => gameScene.setBoardCorner(id)
+            },
             onConcede: async () => {
               await this.sceneManager.pop()
               gameScene.concede()
-            },
-            onRestart: async () => {
-              await this.sceneManager.pop()
-              await this.navigate(gameScene.createRestartRoute())
             },
             onQuit: async () => {
               await this.sceneManager.pop()

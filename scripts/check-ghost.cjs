@@ -59,7 +59,7 @@ async function main() {
     mulliganCoinAnnouncement: 'match/mulligan-coin-announcement.png',
     toggleViewButton: 'match/toggle-view-button.png',
     confirmReward: 'ui/arena/arena-confirm-reward.png',
-    board: 'match/BOARD.png'
+    board: 'table/board.png'
   }))
     urls[key] =
       'data:image/' +

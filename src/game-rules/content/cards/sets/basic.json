@@ -1116,6 +1116,7 @@
   },
   {
     "id": "basic_flametongue_totem",
+    "auraVisual": true,
     "name": "Flametongue Totem",
     "rarity": "Free",
     "cardClass": "Shaman",
@@ -1352,6 +1353,7 @@
   },
   {
     "id": "basic_grimscale_oracle",
+    "auraVisual": true,
     "name": "Grimscale Oracle",
     "rarity": "Free",
     "cardClass": "Neutral",
@@ -2447,6 +2449,7 @@
   },
   {
     "id": "basic_raid_leader",
+    "auraVisual": true,
     "name": "Raid Leader",
     "rarity": "Free",
     "cardClass": "Neutral",
@@ -3084,6 +3087,7 @@
   },
   {
     "id": "basic_stormwind_champion",
+    "auraVisual": true,
     "name": "Stormwind Champion",
     "rarity": "Free",
     "cardClass": "Neutral",
@@ -3219,6 +3223,7 @@
   },
   {
     "id": "basic_timber_wolf",
+    "auraVisual": true,
     "name": "Timber Wolf",
     "rarity": "Free",
     "cardClass": "Hunter",

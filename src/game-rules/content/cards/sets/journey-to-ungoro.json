@@ -2086,6 +2086,7 @@
   },
   {
     "id": "journey_to_ungoro_radiant_elemental",
+    "auraVisual": true,
     "name": "Radiant Elemental",
     "rarity": "Common",
     "cardClass": "Priest",
@@ -2738,6 +2739,7 @@
   },
   {
     "id": "journey_to_ungoro_emerald_hive_queen",
+    "auraVisual": true,
     "name": "Emerald Hive Queen",
     "rarity": "Epic",
     "cardClass": "Neutral",

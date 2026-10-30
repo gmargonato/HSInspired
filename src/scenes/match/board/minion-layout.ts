@@ -37,6 +37,21 @@ export const MINION_LAYOUT = {
       note: 'Dormant veil at native size, above artwork and below the frame and bottom ability markers.'
     }
   ),
+  dormantProgress: placement(
+    { x: 80, y: 160 },
+    { width: 100, height: 44 },
+    {
+      anchor: CENTER,
+      note: 'Brief completed/total Dormant turn counter centered over the Trigger badge.'
+    }
+  ),
+  dormantProgressTextStyle: {
+    fontFamily: 'Belwe',
+    fontSize: 32,
+    fill: 0xffffff,
+    stroke: { color: 0x000000, width: 4 },
+    align: 'center' as const
+  },
   legendaryFrame: placement(
     { x: 95, y: 45 },
     { width: 136, height: 99 },
@@ -153,11 +168,13 @@ export const MINION_LAYOUT = {
     }
   ),
   aura: placement(
-    { x: 80, y: 20 },
-    { width: 38, height: 38 },
+    // Center on the visible frame; the native 3D offset looked high/right in 2D.
+    // Preserve source size relative to Card_InPlay_Ally_mesh's X/Z bounds.
+    { x: 80, y: 90 },
+    { width: (6 * 119) / 1.5057759284973145, height: (6 * 161) / 1.99072265625 },
     {
       anchor: CENTER,
-      note: 'Top-center Aura badge, layered above every other minion mark.'
+      note: 'Source aura particle at maximum expansion, beneath the minion surfaces.'
     }
   ),
   elusive: placement(

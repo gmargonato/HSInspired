@@ -41,6 +41,19 @@ src/
 
 ## Match layers and inspection
 
+Match tables use `assets/images/table/board.png`, native-size local/remote golden
+frames, and transparent 1920 x 1080 `corner-*.png` overlays. The asset registry
+discovers corners at development startup/build and sorts their filename suffixes
+numerically; there is no fixed theme count. Restart development or rebuild a
+release after adding/removing files. The `game-table` bundle loads and uploads all
+themes during match warm-up so the Pause menu can switch them immediately.
+Each match starts with a random theme; Pause selections last for that match only.
+With no corner files, the base still renders and the selector is hidden.
+`scenes/match/board/table-view.ts` shares the composition between loading and play;
+`table-layout.ts` owns cropped gold-frame placement. Gold follows the existing
+500 class-win local unlock, including refresh when the match crosses the threshold.
+Remote gold has a separate layer but remains disabled without opponent eligibility.
+
 Match-wide stacking is declared in `scenes/match/match-layers.ts` and assigned by
 `GameBoardView.mountMatchLayers`. Board/HUD/history thumbnails sit below transit
 and combat, followed by indicators, passive previews and reveals, hands, pending
@@ -98,6 +111,10 @@ Tradeable banners use `CARD_TRADEABLE_LAYOUT` at native size. In a match, the
 banner's green outline indicates a legal trade independently of the card's play
 outline, including during dragging. App startup and match loading retain the
 banner's outline field and warm its shader before interaction.
+`cards/tradeable-aura.ts` shares a card-width silhouette so the banner glow matches
+the frame aura's thickness. The aura samples the current cost icon's alpha to
+stay behind mana/health symbols without splitting the cached card face; the same
+mask follows the card's perspective during dragging.
 
 ## Startup
 

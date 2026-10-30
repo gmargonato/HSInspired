@@ -20,12 +20,13 @@ export const HERO_DESTRUCTION_LAYOUT = {
   travelDistance: 1800,
   fadeStart: 0.8,
   shake: { amplitude: 28, pulses: 16, duration: 3, damped: true },
-  // Align the crater centers, rather than the centers of the asymmetric debris.
+  // The crater rims center near x=344; the asymmetric debris canvas centers at 359.
+  // Anchor the damaged sockets to the heroes without scaling their artwork.
   local: placement(
     { x: 0, y: 0 },
     { width: 718, height: 438 },
     {
-      anchor: { x: 0.5, y: 0.63 },
+      anchor: { x: 344 / 718, y: 0.63 },
       scale: 1
     }
   ),
@@ -33,7 +34,7 @@ export const HERO_DESTRUCTION_LAYOUT = {
     { x: 0, y: 0 },
     { width: 718, height: 379 },
     {
-      anchor: { x: 0.5, y: 0.36 },
+      anchor: { x: 344 / 718, y: 0.36 },
       scale: 1
     }
   ),

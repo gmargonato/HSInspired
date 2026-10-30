@@ -652,6 +652,146 @@ function createYoreScenario(o: Partial<AiFixtureOptions> = {}) {
     m.dispatch({ type: 'dev-set-mana', participantId: id, available: 10, maximum: 10 })
   return { m, id, enemy, me, foe, target, play, end, mana }
 }
+describe('Dormant minions and board clears', () => {
+  function setup(cardId: string) {
+    const fixture = createAiFixture({
+      seed: 20642,
+      aiHeroId: 'guldan',
+      opponentHeroId: 'jaina',
+      aiMana: 10,
+      aiMaximumMana: 10,
+      aiHand: [cardId],
+      aiDeck: Array(8).fill('classic_wisp'),
+      opponentDeck: Array(8).fill('classic_wisp'),
+      aiBoard: [
+        { cardId: yoreCard('ancient_of_yore'), attack: 20 },
+        { cardId: 'classic_abomination', attack: 20 },
+        { cardId: 'basic_chillwind_yeti' },
+        { cardId: 'classic_wisp' }
+      ],
+      opponentBoard: [
+        { cardId: yoreCard('ancient_of_yore'), attack: 20 },
+        { cardId: 'classic_abomination', attack: 20 },
+        { cardId: 'basic_boulderfist_ogre' },
+        { cardId: 'classic_wisp' }
+      ]
+    })
+    const makeDormant = (p: (typeof fixture.checkpoint.state.players)[number]) => ({
+      ...p,
+      board: p.board.map((minion, index) =>
+        index < 2 ? { ...minion, dormant: true, dormantTurnsRemaining: 2 } : minion
+      )
+    })
+    const checkpoint = {
+      ...fixture.checkpoint,
+      state: {
+        ...fixture.checkpoint.state,
+        players: [
+          makeDormant(fixture.checkpoint.state.players[0]),
+          makeDormant(fixture.checkpoint.state.players[1])
+        ] as const
+      }
+    }
+    const match = createOpeningMatchFromCheckpoint(checkpoint)
+    const cast = (m = match) =>
+      m.dispatch({
+        type: 'play-card',
+        participantId: fixture.aiParticipantId,
+        cardInstanceId: checkpoint.state.players.find(
+          (p) => p.participantId === fixture.aiParticipantId
+        )!.hand[0]!.instanceId
+      })
+    return { match, checkpoint, cast }
+  }
+
+  it.each([
+    ['classic_twisting_nether', 0, 4],
+    ['classic_brawl', 1, 3],
+    ['the_grand_tournament_enter_the_coliseum', 2, 2]
+  ] as const)(
+    '%s leaves Dormant minions and their awakening state untouched',
+    (cardId, awakeSurvivors, deaths) => {
+      const { match, checkpoint, cast } = setup(cardId)
+      const dormant = checkpoint.state.players.flatMap((p) =>
+        p.board.filter((m) => m.dormant)
+      )
+      const result = cast()
+      expect(result.accepted).toBe(true)
+      const board = match.getState().players.flatMap((p) => p.board)
+      expect(board.filter((m) => !m.dormant)).toHaveLength(awakeSurvivors)
+      for (const minion of dormant) {
+        expect(board.find((m) => m.instanceId === minion.instanceId)).toMatchObject(
+          minion
+        )
+      }
+      if (result.accepted) {
+        for (const event of result.events) {
+          if (event.type !== 'effect-vfx-started') continue
+          for (const minion of dormant) {
+            expect(event.targetInstanceIds).not.toContain(minion.instanceId)
+          }
+        }
+      }
+      expect(match.getState().history!.minionsDiedThisTurn).toHaveLength(deaths)
+      // Dormant Abominations must neither die nor run their damage Deathrattles.
+      expect(match.getState().players.map((p) => p.hero.health)).toEqual([30, 30])
+      if (cardId === 'the_grand_tournament_enter_the_coliseum') {
+        expect(
+          board
+            .filter((m) => !m.dormant)
+            .map((m) => m.cardId)
+            .sort()
+        ).toEqual(['basic_boulderfist_ogre', 'basic_chillwind_yeti'])
+      }
+      for (let turn = 0; turn < 4; turn++) {
+        expect(
+          match.dispatch({
+            type: 'end-turn',
+            participantId: match.getState().activePlayerId!
+          }).accepted
+        ).toBe(true)
+      }
+      const awakened = match.getState().players.flatMap((p) => p.board)
+      for (const minion of dormant) {
+        expect(awakened.find((m) => m.instanceId === minion.instanceId)).toMatchObject({
+          dormant: false
+        })
+      }
+      // The active side has two Dormant end steps; the opponent awakens before
+      // its second end step. Their explicitly enabled income still occurs.
+      for (const p of match.getState().players) {
+        expect(p.hero.armor).toBe(
+          p.participantId === checkpoint.state.activePlayerId ? 6 : 3
+        )
+      }
+    }
+  )
+
+  it('Brawl chooses the same active survivor and RNG state with or without Dormant bystanders', () => {
+    const { match, checkpoint, cast } = setup('classic_brawl')
+    const withoutDormant = (p: (typeof checkpoint.state.players)[number]) => ({
+      ...p,
+      board: p.board.filter((m) => !m.dormant)
+    })
+    const control = createOpeningMatchFromCheckpoint({
+      ...checkpoint,
+      state: {
+        ...checkpoint.state,
+        players: [
+          withoutDormant(checkpoint.state.players[0]),
+          withoutDormant(checkpoint.state.players[1])
+        ]
+      }
+    })
+    expect(cast().accepted).toBe(true)
+    expect(cast(control).accepted).toBe(true)
+    expect(
+      match.getState().players.flatMap((p) => p.board.filter((m) => !m.dormant))
+    ).toEqual(control.getState().players.flatMap((p) => p.board))
+    expect(match.getCheckpoint().rngState).toEqual(control.getCheckpoint().rngState)
+  })
+})
+
 describe('Yore: Warlock removal and recovery', () => {
   it('Dark Pact destroys and heals eight', () => {
     const s = createYoreScenario({
@@ -908,7 +1048,9 @@ describe('Yore: Fresh copies and deathrattles', () => {
         cardId: 'basic_chillwind_yeti',
         attack: 4,
         health: 5,
-        dormant: true
+        dormant: true,
+        dormantTurnsRemaining: 2,
+        dormantTurnsTotal: 2
       })
   })
   it('Campaign copies do not recursively inherit the granted deathrattle', () => {
@@ -1602,6 +1744,102 @@ describe('Shaladrassil fun-first recovery', () => {
 })
 
 describe('Yore: timed Dormancy and Ancient income', () => {
+  function advance(match: ReturnType<typeof createYoreScenario>['m']) {
+    const result = match.dispatch({
+      type: 'end-turn',
+      participantId: match.getState().activePlayerId!
+    })
+    if (!result.accepted) throw new Error(result.message)
+    return result.events.find((event) => event.type === 'turn-started')!
+  }
+
+  it('emits simultaneous 1/2 then 2/2 snapshots, preserving the total across restoration', () => {
+    const s = createYoreScenario({
+      aiHand: [yoreCard('ancient_of_yore'), yoreCard('ancient_of_yore')],
+      aiDeck: Array(12).fill('classic_wisp'),
+      opponentDeck: Array(12).fill('classic_wisp')
+    })
+    s.play(yoreCard('ancient_of_yore'))
+    s.play(yoreCard('ancient_of_yore'))
+    const ids = s.me().board.map((minion) => minion.instanceId)
+    expect(s.me().board.every((minion) => minion.dormantTurnsTotal === 2)).toBe(true)
+    expect(advance(s.m).dormantProgress).toBeUndefined()
+    expect(advance(s.m).dormantProgress).toEqual(
+      ids.map((instanceId) => ({ instanceId, current: 1, total: 2 }))
+    )
+    const restored = createOpeningMatchFromCheckpoint(s.m.getCheckpoint())
+    expect(advance(restored).dormantProgress).toBeUndefined()
+    expect(advance(restored).dormantProgress).toEqual(
+      ids.map((instanceId) => ({ instanceId, current: 2, total: 2 }))
+    )
+    const awakened = restored
+      .getState()
+      .players.find((p) => p.participantId === s.id)!.board
+    expect(
+      awakened.every(
+        (minion) => !minion.dormant && minion.dormantTurnsTotal === undefined
+      )
+    ).toBe(true)
+  })
+
+  it('tracks Maiev dormancy without a printed duration and resets it when reapplied', () => {
+    const s = createYoreScenario({
+      aiHand: [yoreCard('maiev_shadowsong'), yoreCard('maiev_shadowsong')],
+      opponentBoard: [{ cardId: 'basic_chillwind_yeti' }]
+    })
+    s.play(yoreCard('maiev_shadowsong'), s.target('enemy'))
+    const instanceId = s.foe().board[0]!.instanceId
+    expect(s.foe().board[0]!.dormantTurnsTotal).toBe(2)
+    expect(advance(s.m).dormantProgress).toEqual([{ instanceId, current: 1, total: 2 }])
+    advance(s.m)
+    expect(advance(s.m).dormantProgress).toEqual([{ instanceId, current: 2, total: 2 }])
+    advance(s.m)
+    s.mana()
+    s.play(yoreCard('maiev_shadowsong'), s.target('enemy'))
+    expect(advance(s.m).dormantProgress).toEqual([{ instanceId, current: 1, total: 2 }])
+  })
+
+  it.each([true, false])(
+    'restores legacy timed dormancy with printed duration: %s',
+    (printed) => {
+      const s = createYoreScenario({
+        aiHand: [printed ? yoreCard('ancient_of_yore') : yoreCard('maiev_shadowsong')],
+        opponentBoard: [{ cardId: 'basic_chillwind_yeti' }]
+      })
+      if (printed) s.play(yoreCard('ancient_of_yore'))
+      else s.play(yoreCard('maiev_shadowsong'), s.target('enemy'))
+      const checkpoint = s.m.getCheckpoint()
+      const owner = printed ? s.id : s.enemy
+      const minion = checkpoint.state.players.find((p) => p.participantId === owner)!
+        .board[0]!
+      Object.assign(minion, { dormantTurnsTotal: undefined, dormantTurnsRemaining: 1 })
+      const restored = createOpeningMatchFromCheckpoint(checkpoint)
+      let event = advance(restored)
+      if (printed) event = advance(restored)
+      expect(event.dormantProgress).toEqual([
+        {
+          instanceId: minion.instanceId,
+          current: printed ? 2 : 1,
+          total: printed ? 2 : 1
+        }
+      ])
+    }
+  )
+
+  it('advances the counter on an extra controller turn', () => {
+    const s = createYoreScenario({ aiHand: [yoreCard('ancient_of_yore')] })
+    s.play(yoreCard('ancient_of_yore'))
+    const checkpoint = s.m.getCheckpoint()
+    Object.assign(checkpoint.state, { extraTurnQueue: [s.id] })
+    const restored = createOpeningMatchFromCheckpoint(checkpoint)
+    const event = advance(restored)
+    expect(event.participantId).toBe(s.id)
+    expect(event.isExtraTurn).toBe(true)
+    expect(event.dormantProgress).toEqual([
+      { instanceId: s.me().board[0]!.instanceId, current: 1, total: 2 }
+    ])
+  })
+
   it('Ancient earns two dormant end turns, then wakes on its second owner start', () => {
     const s = createYoreScenario({
       aiHand: [yoreCard('ancient_of_yore')],

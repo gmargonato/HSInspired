@@ -280,6 +280,7 @@
   },
   {
     "id": "the_grand_tournament_aviana",
+    "auraVisual": true,
     "name": "Aviana",
     "rarity": "Legendary",
     "cardClass": "Druid",
@@ -922,6 +923,7 @@
   },
   {
     "id": "the_grand_tournament_warhorse_trainer",
+    "auraVisual": true,
     "name": "Warhorse Trainer",
     "rarity": "Common",
     "cardClass": "Paladin",
@@ -3004,6 +3006,7 @@
   },
   {
     "id": "the_grand_tournament_maiden_of_the_lake",
+    "auraVisual": true,
     "name": "Maiden of the Lake",
     "rarity": "Common",
     "cardClass": "Neutral",

@@ -3061,6 +3061,264 @@
       "sha256": "d52caea8e29d65415deefb6c5d8c0b87f5ae8ba659bae3f3e418fa9d17601c7a",
       "runtimeSha256": "8bfd1b38b2d4ab47c6cab8b815c55d5dd23a8145fc19999ef0e9a2b6461c0e2a"
     },
+    "future_past_agamaggan": {
+      "hearthstoneIds": ["EDR_489"],
+      "source": "assets/original/card_art_and_layers/57d4c87d5f98/HS34-085_M__27ac7805bcc2.png",
+      "sha256": "01167755a249b4b7fbca2c69739290a2cebe265b3984d4de8f9a4273e91439ea",
+      "runtimeSha256": "3471610ece2f71a3482aaf416c225f132dd49035415f9dd80712d5c2ea9f367a"
+    },
+    "future_past_ancient_of_yore": {
+      "hearthstoneIds": ["EDR_979"],
+      "source": "assets/original/card_art_and_layers/f7cf9c9635b9/HS34-114_M__0a934d27787f.png",
+      "sha256": "de05b8a2d54b02c2f6856db084de1f4820d0c820b470a331de6da11c049609ea",
+      "runtimeSha256": "ced7dc5a7eca72446b872fa2d3397e9ec1ce3894c593025ebf6ad66848ac5de7"
+    },
+    "future_past_animated_broomstick": {
+      "hearthstoneIds": ["SCH_311"],
+      "source": "assets/original/card_art_and_layers/aa8692810edd/HS20-084__2c96cca92c62.png",
+      "sha256": "dab34b6b01922d3bc801de6a0800899437bff1f69eb0873aa2b90792725310cb",
+      "runtimeSha256": "4711d870d76b7c6b513231074e09559ec90bae166bc9fcc0964528de86610f57"
+    },
+    "future_past_armor_vendor": {
+      "hearthstoneIds": ["YOP_032"],
+      "source": "assets/original/card_art_and_layers/8e4456bd07bd/HS21-250__383ea86961df.png",
+      "sha256": "0c5a4d3b7ffc71ed7f0389b66b0993af3de72e4621e8e5982cf1cde3434e970b",
+      "runtimeSha256": "36b2e1ee21f2ff111fe52666a4652803b2d4e3f0b0d886a1d87056a9d63a925e"
+    },
+    "future_past_bob_the_bartender": {
+      "hearthstoneIds": ["BG31_BOB"],
+      "source": "assets/original/card_art_and_layers/c628bc54a3c9/BG31-001_M__25a47e887fba.png",
+      "sha256": "9a9c126569cc563a1fbfbd708be4b8441260b56a235fb8564558be0ad26660d9",
+      "runtimeSha256": "95b4354739b034eb0cb1e77811ee6f78796f6027ae0e1631c7b59f842cf2327a"
+    },
+    "future_past_carnivorous_cube": {
+      "hearthstoneIds": ["LOOT_161"],
+      "source": "assets/original/card_art_and_layers/4e4231fecc79/HS12-216_M__3f5d08840231.png",
+      "sha256": "f55e75869bb28aac2816cdff851d9ae751ed2c5fd719ee7864b6d7338a9a8a74",
+      "runtimeSha256": "e727d4191f40a309aef7e0db99fb32af79552eaa1ab51eafcbf94d6a41d85568"
+    },
+    "future_past_corrupted_awakening": {
+      "hearthstoneIds": ["EDR_846t4"],
+      "source": "assets/original/card_art_and_layers/57d4c87d5f98/HS34-124_S__e91701d011f8.png",
+      "sha256": "a0723ab9ad2481165b6b4e2c35a93619ae03d144eb5556076598df7f0df79888",
+      "runtimeSha256": "810351f9dc28c32383c7d407e2ce5771eb295b29f840e614cdeb66e68272b818"
+    },
+    "future_past_corrupted_drake": {
+      "hearthstoneIds": ["EDR_846t5"],
+      "source": "assets/original/card_art_and_layers/57d4c87d5f98/HS34-125_M__fd47c7c079a1.png",
+      "sha256": "776232048bf5e97b74dd3bab74cb777da191fa9bd40b9dbe452c37ee6e18b962",
+      "runtimeSha256": "42ad68296367e38787347ab8ccc37e8b29a14021d60ed09142067f091bb7057d"
+    },
+    "future_past_corrupted_dream": {
+      "hearthstoneIds": ["EDR_846t2"],
+      "source": "assets/original/card_art_and_layers/57d4c87d5f98/HS34-122_S__664f3b4539db.png",
+      "sha256": "df5e54cfd1a23a84706928578d9eb04c17b1c2a47745fc1a17b3b14abf89adf6",
+      "runtimeSha256": "cd9e4cb69a43507c806759b5da987824b8d96c8ca648fbea8b04f47dc97513ef"
+    },
+    "future_past_corrupted_laughing_sister": {
+      "hearthstoneIds": ["EDR_846t3"],
+      "source": "assets/original/card_art_and_layers/57d4c87d5f98/HS34-123_M__8aa03b0b0605.png",
+      "sha256": "f2af7cf5e59b3aecc19b2f2a35512fef35cbea2b31ee685be8debc76f1798fee",
+      "runtimeSha256": "ca515828e36453293dcc1341dcc7d83e2baa51f3d6c34e971e0a0844644f2e54"
+    },
+    "future_past_corrupted_nightmare": {
+      "hearthstoneIds": ["EDR_846t1"],
+      "source": "assets/original/card_art_and_layers/57d4c87d5f98/HS34-121_S__90dcfe72afab.png",
+      "sha256": "98e2eed907f3a993fe86bcf2b816893507ccf63a1e181d2525bbc5f68283b9cd",
+      "runtimeSha256": "cf6a0ec182b51d8e81c5da2a7a3b994e3aec1240f584e38f1a3bff8c6e407b9b"
+    },
+    "future_past_critter_caretaker": {
+      "hearthstoneIds": ["EDR_971"],
+      "source": "assets/original/card_art_and_layers/f7cf9c9635b9/HS34-208_M__463d4caacdca.png",
+      "sha256": "dc3b696294b26b4bdd739f1344690ba58da9afe4f5c12c9af88d5dc172556ff7",
+      "runtimeSha256": "1b8d8ce5079be9694466787a4894f83f679f7e36f82629d414104ed468b976fd"
+    },
+    "future_past_cursed_campaign": {
+      "hearthstoneIds": ["TOY_527"],
+      "source": "assets/original/card_art_and_layers/797d7949578f/HS31-192_S__855dd0274d06.png",
+      "sha256": "d5fd71b5505d39686a892671964bcddd0722e730f1a1c40d175b6cfdc8ffe531",
+      "runtimeSha256": "07e1cf6519de831a31cb90ff6562a82c1dfb115ffffd0f0944b56e8dbc3acc3c"
+    },
+    "future_past_cursed_catacombs": {
+      "hearthstoneIds": ["TLC_451"],
+      "source": "assets/original/card_art_and_layers/8b8196fe0d11/HS35-065_S__9b38d4bd26ab.png",
+      "sha256": "1e9e52c494c5875025c6128c174f2bd55d4c51304167561ba9c064f996ce3f5a",
+      "runtimeSha256": "349a348dac428e9fe39f1fd4c6ca432f2d98ae97cc45c7edfa810590feaee10a"
+    },
+    "future_past_dark_pact": {
+      "hearthstoneIds": ["LOOT_017"],
+      "source": "assets/original/card_art_and_layers/4e4231fecc79/HS12-193_S__64c95dba20e4.png",
+      "sha256": "5a5492c282a35602e7eb9f52805eb8258b67f39b7db3e7f38f74afe6fb546ff6",
+      "runtimeSha256": "19441cc0d42b5a2ca1f240f75d4250195c77f0ccf3f8a204c997b145e3165d20"
+    },
+    "future_past_depth_charge": {
+      "hearthstoneIds": ["DRG_078"],
+      "source": "assets/original/card_art_and_layers/6cf9dff9a6ef/HS18-167__420fb6bcf805.png",
+      "sha256": "09429a43294bf0dc697924ae1b0df3e0b97b7954572ef8d631782ed31e2235c4",
+      "runtimeSha256": "aed4dcb57e01491c8613ab32d2044e2fc43c640c0c84b139e79d7e6f7586f951"
+    },
+    "future_past_domino_effect": {
+      "hearthstoneIds": ["MIS_027"],
+      "source": "assets/original/card_art_and_layers/72b158db940f/HS31-065_S__88fb24aa8880.png",
+      "sha256": "f2a61ab9018a87a8fc43e116f4e84fcba628d0ffa3a3cad7dc05c3b942d522f9",
+      "runtimeSha256": "c1a231b464a5a0601258f0ef7d1d758a16744f085d8e7f88a1b47d60883558e2"
+    },
+    "future_past_dragonscale_armaments": {
+      "hearthstoneIds": ["EDR_251"],
+      "source": "assets/original/card_art_and_layers/3aaa9cfdb20f/HS34-168_S__6172ad9980ae.png",
+      "sha256": "2f373514b3bb2f296d50266b6b08ba8a6588aae00a0c8fb88011ec4ddc37d141",
+      "runtimeSha256": "bad153adc8eba3285dd3b205f7f4667e6c3d2e839949077c64ec4889708b2ba6"
+    },
+    "future_past_dream": {
+      "hearthstoneIds": ["DREAM_04"],
+      "source": "assets/original/card_art_and_layers/23ecf938fefa/W17_a204_D__0064d0582b6b.png",
+      "sha256": "e1b1ece3bb4c8df61d3b0b00183dc6654c09ded56ee0338817d7216c97796b49",
+      "runtimeSha256": "626b6be5f7d712afa996caef9a29117ad6954c06b492afd666e1e816106699ac"
+    },
+    "future_past_emerald_drake": {
+      "hearthstoneIds": ["DREAM_03"],
+      "source": "assets/original/card_art_and_layers/23ecf938fefa/w13_143_D__cf5200866c62.png",
+      "sha256": "a2e1e7975ec42529b29a492c36867ff491652f8f26de9a2967ef979480e62175",
+      "runtimeSha256": "7d8295689b39a570623f7883f9357984c0e217fe960561db8fc04395cfa6e15e"
+    },
+    "future_past_find_a_triple": {
+      "hearthstoneIds": ["BG31_BOBt4"],
+      "source": "assets/original/card_art_and_layers/be4a53e76a00/HS16-344__0840cbc61575.png",
+      "sha256": "acb21dec09cb8762d32f98ae11d39ed872997460094cb1b50acdd3f7166a6d53",
+      "runtimeSha256": "56c758d092ddb1cb32e8a2c63e7d7d9081f6f4d9fe9ad752c8daa1b9221c5d1d"
+    },
+    "future_past_freeze_the_shop": {
+      "hearthstoneIds": ["BG31_BOBt"],
+      "source": "assets/original/card_art_and_layers/c628bc54a3c9/BG31-109_S__83de360a3b3b.png",
+      "sha256": "eca38b0713127bdadd1d43221b1bfe3bd065f29646845c1a54e4419379e31d3f",
+      "runtimeSha256": "23463ec5ac0eb7ab5f05667540eab858f5204576c3a34018d1cc1fbbd7841447"
+    },
+    "future_past_fyrakk_the_blazing": {
+      "hearthstoneIds": ["FIR_959"],
+      "source": "assets/original/card_art_and_layers/f7cf9c9635b9/HS34-126_M__f1806178d255.png",
+      "sha256": "7128db5b87dca74438e2bc57e71debc6c51ad94b40ad1e17fcb33023923eea85",
+      "runtimeSha256": "e42037e000bb0be40c7986f357d036400d100612181b6b9325db1d6e96b5fe28"
+    },
+    "future_past_knight_of_anointment": {
+      "hearthstoneIds": ["BAR_873"],
+      "source": "assets/original/card_art_and_layers/84fc776ec4a2/HS22-039_M__f3df9c3b3479.png",
+      "sha256": "09cf29456c9e0264f40ca80fcd6d80ac81dd42a2306b7c630dbc46e1fb734b9a",
+      "runtimeSha256": "d8231035bafeca83c433d74f82fbb2020bd3eceb731ca7e3f1e597720042ddd8"
+    },
+    "future_past_laughing_sister": {
+      "hearthstoneIds": ["DREAM_01"],
+      "source": "assets/original/card_art_and_layers/23ecf938fefa/W17_a035_D__96a9c7df8793.png",
+      "sha256": "9f7177b2acb3932b31cc22e1517f8dd8196b5687613f450a95547f2448c17f14",
+      "runtimeSha256": "e34b6cf60eb6c04713e4d79ae2fb000dcb7dbe963eab1492fd583079f8e2924e"
+    },
+    "future_past_maiev_shadowsong": {
+      "hearthstoneIds": ["BT_737"],
+      "source": "assets/original/card_art_and_layers/5e78f703022c/HS19-129__b7dd9503898e.png",
+      "sha256": "444696bfd423458d289c8e31136b8f1380df935f28bb7a4538eb3553b123da7b",
+      "runtimeSha256": "1d6be5af41cfd1d8b0c4b47b56ef9b51bf3c78f5762c3bddc48838fdcfb5a2b9"
+    },
+    "future_past_miracle_salesman": {
+      "hearthstoneIds": ["WW_331"],
+      "source": "assets/original/card_art_and_layers/28ae53f800a4/HS30-079_M__257021700a58.png",
+      "sha256": "33991a45ed634c2a14732d2be276eb8ff414eb6893ca9cb1a3631c4134e3b1e5",
+      "runtimeSha256": "e56902f13d896512130c4bb9db5bb36d4930562371d89e28c026461a2637e787"
+    },
+    "future_past_nightmare": {
+      "hearthstoneIds": ["DREAM_05"],
+      "source": "assets/original/card_art_and_layers/23ecf938fefa/W16_a062_D__1eb6c1a6e28c.png",
+      "sha256": "4ab3d89f3b064def5760c53995f0d25f5ae49c7fdc66a0f5d546e2842dda4695",
+      "runtimeSha256": "5d3693b1daf35b8824724ad57a53bca04d8d396f4e5076c2d3fca07ea621af15"
+    },
+    "future_past_nozdormu_the_timeless": {
+      "hearthstoneIds": ["DRG_309"],
+      "source": "assets/original/card_art_and_layers/d4497cd0031a/HS18-023__4be6a5aa0205.png",
+      "sha256": "ae7173e2e8aeb37dbe115799b9e1204fcd92c32d9fc645172ead1666c42d343d",
+      "runtimeSha256": "288458fc2efe8addba1b0c2a455e12c7d9834c885ec1b2d5e9dc0b2cf6e1b39f"
+    },
+    "future_past_order_in_the_court": {
+      "hearthstoneIds": ["MAW_016"],
+      "source": "assets/original/card_art_and_layers/5ce3c7405451/HS26-218_S__5191f15d889a.png",
+      "sha256": "33efc2e0fa004136a5e34333a2c4ff6b8879770e443d5e44e3045e9d298d1afe",
+      "runtimeSha256": "69a0e53f26995b046c04cf43ed680c5ee27ed26da1a8bdd38a1c8a841a9f8896"
+    },
+    "future_past_peasant": {
+      "hearthstoneIds": ["SW_319"],
+      "source": "assets/original/card_art_and_layers/fb1ad5d22114/HS23-073_M__2eddd7a05dc5.png",
+      "sha256": "3a93a8d8cbcb0ceb4cec79e46d67d12051f7c80310b18818afe45f62e45cc8cd",
+      "runtimeSha256": "8a80781eb8705dccf928b4693cec9677731c7887ec4a199fc2901b711d9caf91"
+    },
+    "future_past_puppetmaster_dorian": {
+      "hearthstoneIds": ["MIS_026"],
+      "source": "assets/original/card_art_and_layers/72b158db940f/HS31-106_M__07e7e72a75ae.png",
+      "sha256": "cc634647b9a6e117a1e510dfdd3c26ccd41032851118bb3d008cfd76f271d8db",
+      "runtimeSha256": "8d0ca91e52e43f691e09fba67bd7293070f8cc78efeef67587389e9bbe577f6f"
+    },
+    "future_past_raise_dead": {
+      "hearthstoneIds": ["SCH_514"],
+      "source": "assets/original/card_art_and_layers/3fe0ad32500d/HS20-015__ebe60ba21224.png",
+      "sha256": "ed2f60603512e62f79901cc548373f596c38a47bef05b181146239a41195c012",
+      "runtimeSha256": "45dd58c5763205181d627fc81b2e1cd53d054f3310e9a75ed6cc6f26c24fc691"
+    },
+    "future_past_recruit_a_minion": {
+      "hearthstoneIds": ["BG31_BOBt2"],
+      "source": "assets/original/card_art_and_layers/c628bc54a3c9/BG31-100_S__e4baf269b07a.png",
+      "sha256": "95b4225738080c41c014a462e43330a4294be37e204520bfe8adb6edf3ec7f82",
+      "runtimeSha256": "ea086bc1a60b453b4ed9ea59f5767dad379847fc5d6fd93cc8caaa5e1444080a"
+    },
+    "future_past_refresh_the_tavern": {
+      "hearthstoneIds": ["BG31_BOBt3"],
+      "source": "assets/original/card_art_and_layers/be4a53e76a00/HS16-336__22d19e4e39dd.png",
+      "sha256": "f490b9532da744505dc88d705f667f96d2844d337ac51e1397f7e29f94670d0d",
+      "runtimeSha256": "a8cee077b6e24b74ea894a5ac37a229afd8a2df6cc62caf336d0d45c1182069a"
+    },
+    "future_past_shaladrassil": {
+      "hearthstoneIds": ["EDR_846"],
+      "source": "assets/original/card_art_and_layers/57d4c87d5f98/HS34-120_S__4d9241954415.png",
+      "sha256": "70717f9bf2791c13d23d9b1d5915557f15d0e3b40a73282ce34b11938898ffce",
+      "runtimeSha256": "9f310c778d12533cdc8cc1ff811fc9264f4d3e455dbacc335b8f6f074c4dae7c"
+    },
+    "future_past_shaladrassil_corrupted": {
+      "hearthstoneIds": ["EDR_846"],
+      "source": "assets/original/card_art_and_layers/57d4c87d5f98/HS34-120_S__4d9241954415.png",
+      "sha256": "70717f9bf2791c13d23d9b1d5915557f15d0e3b40a73282ce34b11938898ffce",
+      "runtimeSha256": "9f310c778d12533cdc8cc1ff811fc9264f4d3e455dbacc335b8f6f074c4dae7c"
+    },
+    "future_past_shallow_grave": {
+      "hearthstoneIds": ["RLK_536"],
+      "source": "assets/original/card_art_and_layers/5dfdc692a72d/HS27-063_S__844fb07f7816.png",
+      "sha256": "28f2433158a20166ad966b11ef5ea078780021de248958a411be23c1fc0f5764",
+      "runtimeSha256": "efe6a57ba0a7190e6fc1dd4a848c333e24f3d65942a196ca312d792ee7da1ae4"
+    },
+    "future_past_sing_along_buddy": {
+      "hearthstoneIds": ["TOY_528"],
+      "source": "assets/original/card_art_and_layers/797d7949578f/HS31-104_M__1863fadb7f36.png",
+      "sha256": "1e08a531203ff0b6d172719bc8db1c78d664940e0522a2fbb524919f8e2ede24",
+      "runtimeSha256": "aa3c75dbcfef1876b37e243c79f3fbfa10fb4792dd7aeac3217c75242f15f23e"
+    },
+    "future_past_snake_oil": {
+      "hearthstoneIds": ["WW_331t"],
+      "source": "assets/original/card_art_and_layers/28ae53f800a4/HS30-080_S__3efe0e3dc6e8.png",
+      "sha256": "60d4ec4e893348d8facde688633d65c30a01f9f86abcf2f18793af7c5a013b93",
+      "runtimeSha256": "10eaf3ca07e007865f9b63a79199781665ff3719b9643aa79eea2fe5340fd1ba"
+    },
+    "future_past_table_flip": {
+      "hearthstoneIds": ["TOY_883"],
+      "source": "assets/original/card_art_and_layers/72b158db940f/HS31-064_S__3a9d1bf950c9.png",
+      "sha256": "695d8bc5b75864986897574df367c83eb8eddce2af9830516c58193736d3328a",
+      "runtimeSha256": "a00419285f179563e00480377622005c67bfb8797b58c03459ad6fc3dba4730f"
+    },
+    "future_past_touch_of_the_nathrezim": {
+      "hearthstoneIds": ["SW_090"],
+      "source": "assets/original/card_art_and_layers/fb1ad5d22114/HS23-014_S__ccf278d5e593.png",
+      "sha256": "d5ebf9186b5124e998e1874e184830ef74a7b039bed22d6cc7851e8a3a8669f9",
+      "runtimeSha256": "c9a980f5ad97a826aea549e65226adb7298460e2e67aeb6097b32fc3db599c65"
+    },
+    "future_past_ysera_awakens": {
+      "hearthstoneIds": ["DREAM_02"],
+      "source": "assets/original/card_art_and_layers/23ecf938fefa/W13_201_D__ebece4b3ae37.png",
+      "sha256": "d52caea8e29d65415deefb6c5d8c0b87f5ae8ba659bae3f3e418fa9d17601c7a",
+      "runtimeSha256": "8bfd1b38b2d4ab47c6cab8b815c55d5dd23a8145fc19999ef0e9a2b6461c0e2a"
+    },
     "goblins_vs_gnomes_ancestors_call": {
       "hearthstoneIds": ["GVG_029"],
       "source": "assets/original/card_art_and_layers/4f26a4ebb4b6/W3_149_D__dfbaa48378f4.png",

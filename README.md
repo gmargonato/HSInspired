@@ -77,8 +77,9 @@ overrides and generated Kazakus ingredients carry their own explicit keys.
 An omitted key produces no shader. `config/vfx-templates.json` owns the reusable
 fire missile and fire AoE tuning, including explicit friendly/enemy coverage.
 Repeated hits play individual missiles; simultaneous hits share an impact boundary.
-Power missiles start at the power center, minion effects at the visible source,
-and spells or missing sources at the controller's hero.
+Power missiles start at the power center and minion effects at the visible source.
+After a minion dies, its missiles start at its last displayed board center until
+the death batch finishes. Spells or other missing sources use the controller's hero.
 
 Fireball uses the extracted medium missile, idle and impact prefabs' textures,
 particle curves and material equations through one renderer shared by matches and

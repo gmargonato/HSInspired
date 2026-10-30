@@ -795,6 +795,7 @@
   },
   {
     "id": "goblins_vs_gnomes_wee_spellstopper",
+    "auraVisual": true,
     "name": "Wee Spellstopper",
     "rarity": "Epic",
     "cardClass": "Mage",
@@ -2167,6 +2168,7 @@
   },
   {
     "id": "goblins_vs_gnomes_malganis",
+    "auraVisual": true,
     "name": "Mal'Ganis",
     "rarity": "Legendary",
     "cardClass": "Warlock",
@@ -2598,6 +2600,7 @@
   },
   {
     "id": "goblins_vs_gnomes_mechwarper",
+    "auraVisual": true,
     "name": "Mechwarper",
     "rarity": "Common",
     "cardClass": "Neutral",

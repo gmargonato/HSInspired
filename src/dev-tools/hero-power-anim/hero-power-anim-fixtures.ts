@@ -29,7 +29,7 @@ export class HeroPowerAnimFixtures extends Container {
   ) {
     super()
     this.label = 'hero-power-anim.fixtures'
-    const background = new Sprite(assets.board1)
+    const background = new Sprite(assets.boardBase)
     background.label = 'hero-power-anim.board'
     background.eventMode = 'none'
     applyAnchoredPlacement(background, LAYOUT.board)

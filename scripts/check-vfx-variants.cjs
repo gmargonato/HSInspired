@@ -116,7 +116,7 @@ async function main() {
       fs.readFileSync(path.join(root, 'assets/images/effects', name)).toString('base64')
   urls.boardBase =
     'data:image/png;base64,' +
-    fs.readFileSync(path.join(root, 'assets/images/match/BOARD.png')).toString('base64')
+    fs.readFileSync(path.join(root, 'assets/images/table/board.png')).toString('base64')
   const source = `
     import { Application, Assets, Sprite } from 'pixi.js';
     import { gsap } from 'gsap';

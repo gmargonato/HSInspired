@@ -2490,6 +2490,7 @@
   },
   {
     "id": "classic_dire_wolf_alpha",
+    "auraVisual": true,
     "name": "Dire Wolf Alpha",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -5105,6 +5106,7 @@
   },
   {
     "id": "classic_leokk",
+    "auraVisual": true,
     "collectible": false,
     "name": "Leokk",
     "rarity": "Common",
@@ -5598,6 +5600,7 @@
   },
   {
     "id": "classic_mana_wraith",
+    "auraVisual": true,
     "name": "Mana Wraith",
     "rarity": "Rare",
     "cardClass": "Neutral",
@@ -6178,6 +6181,7 @@
   },
   {
     "id": "classic_murloc_warleader",
+    "auraVisual": true,
     "name": "Murloc Warleader",
     "rarity": "Epic",
     "cardClass": "Neutral",
@@ -6558,6 +6562,7 @@
   },
   {
     "id": "classic_pint_sized_summoner",
+    "auraVisual": true,
     "name": "Pint-Sized Summoner",
     "rarity": "Rare",
     "cardClass": "Neutral",
@@ -7894,6 +7899,7 @@
   },
   {
     "id": "classic_sorcerers_apprentice",
+    "auraVisual": true,
     "name": "Sorcerer's Apprentice",
     "rarity": "Common",
     "cardClass": "Mage",
@@ -7963,6 +7969,7 @@
   },
   {
     "id": "classic_southsea_captain",
+    "auraVisual": true,
     "name": "Southsea Captain",
     "rarity": "Epic",
     "cardClass": "Neutral",
@@ -8374,6 +8381,7 @@
   },
   {
     "id": "classic_summoning_portal",
+    "auraVisual": true,
     "name": "Summoning Portal",
     "rarity": "Common",
     "cardClass": "Warlock",
@@ -8806,6 +8814,7 @@
   },
   {
     "id": "classic_tundra_rhino",
+    "auraVisual": true,
     "name": "Tundra Rhino",
     "rarity": "Common",
     "cardClass": "Hunter",
@@ -9082,6 +9091,7 @@
   },
   {
     "id": "classic_venture_co_mercenary",
+    "auraVisual": true,
     "name": "Venture Co. Mercenary",
     "rarity": "Common",
     "cardClass": "Neutral",

@@ -157,16 +157,10 @@ import settingsBaseFrameLargeImage from '@assets/images/ui/settings/settings-bas
 import settingsConcedeImage from '@assets/images/ui/settings/settings-concede.png'
 import settingsRestartImage from '@assets/images/ui/settings/settings-restart.png'
 import settingsQuitImage from '@assets/images/ui/settings/settings-quit.png'
-import gameBoardBaseImage from '@assets/images/match/BOARD.png'
-import gameBoard1Image from '@assets/images/match/BOARD-1.png'
-import gameBoard2Image from '@assets/images/match/BOARD-2.png'
-import gameBoard3Image from '@assets/images/match/BOARD-3.png'
-import gameBoard4Image from '@assets/images/match/BOARD-4.png'
-import gameBoard5Image from '@assets/images/match/BOARD-5.png'
-import gameBoard6Image from '@assets/images/match/BOARD-6.png'
-import gameBoard7Image from '@assets/images/match/BOARD-7.png'
-import gameBoard8Image from '@assets/images/match/BOARD-8.png'
-import gameBoard9Image from '@assets/images/match/BOARD-9.png'
+import gameBoardBaseImage from '@assets/images/table/board.png'
+import localGoldenFrameImage from '@assets/images/table/local-golden-frame.png'
+import remoteGoldenFrameImage from '@assets/images/table/remote-golden-frame.png'
+import { TABLE_CORNERS } from './table-corners'
 import gameDeckImage from '@assets/images/match/deck.png'
 import gameDeckSlicedImage from '@assets/images/match/deck-sliced.png'
 import gameTradeableGlowImage from '@assets/images/match/tradeable-glow.png'
@@ -242,7 +236,7 @@ import minionFrozenImage from '@assets/images/board/minion-frozen.png'
 import minionImmuneImage from '@assets/images/board/minion-immune.png'
 import minionElusiveImage from '@assets/images/board/minion-elusive.png'
 import minionLifestealImage from '@assets/images/board/minion-lifesteal.png'
-import minionAuraImage from '@assets/images/board/minion-aura.png'
+import minionAuraImage from '@assets/images/effects/minion-aura-glow.png'
 import minionStealthImage from '@assets/images/board/minion-stealth.png'
 import minionTriggerImage from '@assets/images/board/minion-trigger.png'
 import minionInspireImage from '@assets/images/board/minion-inspire.png'
@@ -318,10 +312,10 @@ export { CardAssetResolver } from './card-asset-resolver'
 export * from './card-assets'
 export type { HeroPowerAssetKey } from './hero-power-assets'
 
-export { ASSET_BUNDLE_IDS, GAME_BOARD_BUNDLE_IDS } from './asset-bundle-ids'
+export { ASSET_BUNDLE_IDS } from './asset-bundle-ids'
 export { asset, type AssetDefinition } from './asset-definition'
 export type { StandaloneAssetSource, AtlasFrameAssetSource } from './asset-definition'
-import { ASSET_BUNDLE_IDS, GAME_BOARD_BUNDLE_IDS } from './asset-bundle-ids'
+import { ASSET_BUNDLE_IDS } from './asset-bundle-ids'
 import { asset, type AssetDefinition } from './asset-definition'
 
 const bespokeAssetDefinitions: readonly AssetDefinition[] = [
@@ -1154,6 +1148,24 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'menu-settings'
   ),
   asset(
+    'scene.game-settings.resolution-field',
+    ASSET_BUNDLE_IDS.gameSettings,
+    'resolutionField',
+    settingsDropDownListImage,
+    344,
+    76,
+    'game-settings'
+  ),
+  asset(
+    'scene.game-settings.resolution-button',
+    ASSET_BUNDLE_IDS.gameSettings,
+    'resolutionButton',
+    settingsDropDownButtonImage,
+    62,
+    42,
+    'game-settings'
+  ),
+  asset(
     'scene.game-settings.background',
     ASSET_BUNDLE_IDS.gameSettings,
     'background',
@@ -1203,87 +1215,6 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.game,
     'boardBase',
     gameBoardBaseImage,
-    1920,
-    1080,
-    'game-scene'
-  ),
-  asset(
-    'scene.game.board-1',
-    ASSET_BUNDLE_IDS.game,
-    'board1',
-    gameBoard1Image,
-    1920,
-    1080,
-    'game-scene'
-  ),
-  asset(
-    'scene.game.board-2',
-    ASSET_BUNDLE_IDS.game,
-    'board2',
-    gameBoard2Image,
-    1920,
-    1080,
-    'game-scene'
-  ),
-  asset(
-    'scene.game.board-3',
-    ASSET_BUNDLE_IDS.game,
-    'board3',
-    gameBoard3Image,
-    1920,
-    1080,
-    'game-scene'
-  ),
-  asset(
-    'scene.game.board-4',
-    ASSET_BUNDLE_IDS.game,
-    'board4',
-    gameBoard4Image,
-    1920,
-    1080,
-    'game-scene'
-  ),
-  asset(
-    'scene.game.board-5',
-    ASSET_BUNDLE_IDS.game,
-    'board5',
-    gameBoard5Image,
-    1920,
-    1080,
-    'game-scene'
-  ),
-  asset(
-    'scene.game.board-6',
-    ASSET_BUNDLE_IDS.game,
-    'board6',
-    gameBoard6Image,
-    1920,
-    1080,
-    'game-scene'
-  ),
-  asset(
-    'scene.game.board-7',
-    ASSET_BUNDLE_IDS.game,
-    'board7',
-    gameBoard7Image,
-    1920,
-    1080,
-    'game-scene'
-  ),
-  asset(
-    'scene.game.board-8',
-    ASSET_BUNDLE_IDS.game,
-    'board8',
-    gameBoard8Image,
-    1920,
-    1080,
-    'game-scene'
-  ),
-  asset(
-    'scene.game.board-9',
-    ASSET_BUNDLE_IDS.game,
-    'board9',
-    gameBoard9Image,
     1920,
     1080,
     'game-scene'
@@ -1626,8 +1557,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.game,
     'minionAura',
     minionAuraImage,
-    38,
-    38,
+    256,
+    256,
     'game-scene'
   ),
   asset(
@@ -3072,25 +3003,42 @@ export const ASSET_DEFINITIONS: readonly AssetDefinition[] = [
     256,
     'game-loading'
   ),
-  ...[
-    gameBoard1Image,
-    gameBoard2Image,
-    gameBoard3Image,
-    gameBoard4Image,
-    gameBoard5Image,
-    gameBoard6Image,
-    gameBoard7Image,
-    gameBoard8Image,
-    gameBoard9Image
-  ].map((source, index) =>
+  asset(
+    'scene.table.board',
+    ASSET_BUNDLE_IDS.gameTable,
+    'board',
+    gameBoardBaseImage,
+    1920,
+    1080,
+    'game-scene'
+  ),
+  asset(
+    'scene.table.local-golden-frame',
+    ASSET_BUNDLE_IDS.gameTable,
+    'localGoldenFrame',
+    localGoldenFrameImage,
+    629,
+    273,
+    'game-scene'
+  ),
+  asset(
+    'scene.table.remote-golden-frame',
+    ASSET_BUNDLE_IDS.gameTable,
+    'remoteGoldenFrame',
+    remoteGoldenFrameImage,
+    637,
+    234,
+    'game-scene'
+  ),
+  ...TABLE_CORNERS.map(({ id, source }) =>
     asset(
-      'scene.game-loading.board-' + (index + 1),
-      GAME_BOARD_BUNDLE_IDS[index]!,
-      'board',
+      'scene.table.' + id,
+      ASSET_BUNDLE_IDS.gameTable,
+      id,
       source,
       1920,
       1080,
-      'game-loading'
+      'game-scene'
     )
   ),
   ...cardDefinitions
@@ -3298,15 +3246,6 @@ export interface GameAssets extends Record<
   warlockTapMoteBright: Texture
   warlockTapColorRamp: Texture
   boardBase: Texture
-  board1: Texture
-  board2: Texture
-  board3: Texture
-  board4: Texture
-  board5: Texture
-  board6: Texture
-  board7: Texture
-  board8: Texture
-  board9: Texture
   fatigue: Texture
   damageIndicator: Texture
   healIndicator: Texture
@@ -3445,6 +3384,8 @@ export interface MenuSettingsAssets {
 }
 
 export interface GameSettingsAssets {
+  resolutionField: Texture
+  resolutionButton: Texture
   background: Texture
   baseFrameLarge: Texture
   concedeButton: Texture
@@ -3495,4 +3436,7 @@ export interface GameLoadingAssets {
 }
 export interface GameBoardAssets {
   board: Texture
+  localGoldenFrame: Texture
+  remoteGoldenFrame: Texture
+  [key: string]: Texture
 }

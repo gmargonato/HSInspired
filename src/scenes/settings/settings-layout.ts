@@ -8,6 +8,38 @@ import { GAME_HEIGHT, GAME_WIDTH } from '../../visual-components/layout'
 
 export const SETTINGS_LAYOUT = {
   name: 'Settings overlay',
+  boardCorners: {
+    title: placement(
+      { x: 970, y: 515 },
+      { width: 344, height: 54 },
+      { anchor: CENTER }
+    ),
+    field: placement(
+      { x: 970, y: 590 },
+      { width: 344, height: 76 },
+      { anchor: CENTER }
+    ),
+    value: placement(
+      { x: 928, y: 590 },
+      { width: 208, height: 42 },
+      { anchor: CENTER }
+    ),
+    button: placement(
+      { x: 1068, y: 590 },
+      { width: 62, height: 42 },
+      { anchor: CENTER }
+    ),
+    options: placement(
+      { x: 850, y: 636 },
+      { width: 240, height: 0 },
+      {
+        anchor: TOP_LEFT,
+        note: 'One vertical list below Board; its height follows the available themes.'
+      }
+    ),
+    screenMargin: 24,
+    rowHeight: 40
+  },
 
   /** Fullscreen background panel covering the viewport. */
   background: placement(
@@ -122,7 +154,7 @@ export const SETTINGS_LAYOUT = {
   /** Match-only action frames and buttons, centered inside the game settings panel. */
   gameActions: {
     concedeFrame: placement(
-      { x: 970, y: 400 },
+      { x: 970, y: 395 },
       { width: 398, height: 109 },
       {
         anchor: CENTER,
@@ -130,31 +162,15 @@ export const SETTINGS_LAYOUT = {
       }
     ),
     concedeButton: placement(
-      { x: 970, y: 400 },
+      { x: 970, y: 395 },
       { width: 294, height: 97 },
       {
         anchor: CENTER,
         note: 'Match settings Concede button centered over its base frame.'
       }
     ),
-    restartFrame: placement(
-      { x: 970, y: 540 },
-      { width: 398, height: 109 },
-      {
-        anchor: CENTER,
-        note: 'Large base frame behind the Restart action.'
-      }
-    ),
-    restartButton: placement(
-      { x: 970, y: 540 },
-      { width: 294, height: 97 },
-      {
-        anchor: CENTER,
-        note: 'Match settings Restart button centered over its base frame.'
-      }
-    ),
     quitFrame: placement(
-      { x: 970, y: 680 },
+      { x: 970, y: 730 },
       { width: 398, height: 109 },
       {
         anchor: CENTER,
@@ -162,7 +178,7 @@ export const SETTINGS_LAYOUT = {
       }
     ),
     quitButton: placement(
-      { x: 970, y: 680 },
+      { x: 970, y: 730 },
       { width: 294, height: 97 },
       {
         anchor: CENTER,

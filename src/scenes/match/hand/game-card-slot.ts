@@ -1,7 +1,12 @@
 import {
   cardFrameTransform,
-  CARD_TRADEABLE_LAYOUT
+  CARD_TRADEABLE_AURA_LAYOUT
 } from '../../../visual-components/cards/card-layout'
+import {
+  acquireTradeableAura,
+  tradeableAuraOcclusion,
+  type TradeableAuraLease
+} from '../../../visual-components/cards/tradeable-aura'
 import { applyAnchoredPlacement } from '../../../visual-components/layout'
 import { Container, Rectangle, Sprite, Texture, type Renderer } from 'pixi.js'
 import { CardView } from '../../../visual-components/cards/card-view'
@@ -46,6 +51,7 @@ export class GameCardSlot extends Actor {
   private tradeableOutline: AnimatedOutline | null = null
   private tradeableTarget: Sprite | null = null
   private tradeableOutlineRequested = false
+  private tradeableAura: TradeableAuraLease | null = null
 
   constructor(
     card: CardView,
@@ -53,7 +59,7 @@ export class GameCardSlot extends Actor {
     replaceCrossTexture: Texture,
     replacedLabelTexture: Texture,
     outlineTexture: Texture,
-    _renderer: Renderer
+    private readonly renderer: Renderer
   ) {
     super()
     this.activeCard = card
@@ -100,6 +106,7 @@ export class GameCardSlot extends Actor {
     this.playableOutline = new AnimatedOutline(this.outlineTarget, {
       palette: 'green',
       preset: 'card',
+      fillHolesForSmoothing: this.activeCard.plan.template === 'minion',
       cacheDistance: true
     })
     this.setPlayableOutlineEnabled(false)
@@ -204,21 +211,25 @@ export class GameCardSlot extends Actor {
   private replaceTradeableOutline(): void {
     this.tradeableOutline?.dispose()
     this.tradeableTarget?.destroy()
+    this.tradeableAura?.release()
+    this.tradeableAura = null
     this.tradeableOutline = null
     this.tradeableTarget = null
     const texture = this.card.tradeableTexture
     if (!texture || this.playableOutlineDisposed) return
-    const target = new Sprite(texture)
+    this.tradeableAura = acquireTradeableAura(this.renderer, texture)
+    const target = new Sprite(this.tradeableAura.texture)
     target.label = 'card.tradeable-outline'
     target.eventMode = 'none'
-    applyAnchoredPlacement(target, CARD_TRADEABLE_LAYOUT)
+    applyAnchoredPlacement(target, CARD_TRADEABLE_AURA_LAYOUT)
     target.x += this.card.x
     target.y += this.card.y
     this.addChildAt(target, this.getChildIndex(this.card) + 1)
     this.tradeableTarget = target
     this.tradeableOutline = new AnimatedOutline(target, {
       palette: 'green',
-      preset: 'card'
+      preset: 'card',
+      occlusion: () => tradeableAuraOcclusion(this.card.costIconTexture)
     })
     this.syncPlayableOutline()
   }
@@ -285,6 +296,8 @@ export class GameCardSlot extends Actor {
     this.tradeableOutline?.dispose()
     this.tradeableOutline = null
     if (this.tradeableTarget) this.tradeableTarget.visible = false
+    this.tradeableAura?.release()
+    this.tradeableAura = null
   }
 
   override destroy(options?: Parameters<Container['destroy']>[0]): void {
@@ -341,6 +354,7 @@ export class GameCardSlot extends Actor {
     this.playableOutline = new AnimatedOutline(this.outlineTarget, {
       palette: this.playableOutlinePalette,
       preset: this.playableOutlinePreset,
+      fillHolesForSmoothing: this.activeCard.plan.template === 'minion',
       cacheDistance: true
     })
     this.applyOutlineAppearance(this.playableOutline)

@@ -1,4 +1,6 @@
 import { MinionStatusCurtainEffect } from './minion-status-curtain-effect'
+import { MinionAuraEffect } from './minion-aura-effect'
+import { QUEST_BADGE_TIMING } from '../presentation/game-presentation-timing'
 import { createHealthPulse } from './health-pulse'
 import type { WindfuryTuning } from '../../../desktop/contracts/ipc/windfury-tuning'
 import { Container, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js'
@@ -163,7 +165,8 @@ export class MinionView extends Container {
   private spellDamageEnabled = false
   private pendingDestruction = false
   private readonly lifesteal: Sprite
-  private readonly aura: Sprite
+  private readonly aura: MinionAuraEffect
+  private auraEnabled = false
   private readonly elusive: Sprite
   private readonly immune: Sprite
   private readonly frozen: Sprite
@@ -176,6 +179,7 @@ export class MinionView extends Container {
   private readonly healthLabel: Text
   private readonly attackStats: Container
   private readonly healthStats: Container
+  private statsVisible: boolean
   readonly pulseHealth: () => void
   private readonly artworkImage: Sprite
   private readonly artworkPlaceholder: Graphics
@@ -199,6 +203,9 @@ export class MinionView extends Container {
   private maxHealth: number
   private dormant: boolean
   private readonly dormantOverlay: Sprite | undefined
+  private readonly dormantProgress: Text
+  private dormantProgressTimer: ReturnType<AnimationScope['timeline']> | null = null
+  private dormantProgressTurn: number | null = null
   private canAttackEnabled = false
   private activatableEnabled = false
   private targetingOutlineEnabled = false
@@ -225,8 +232,15 @@ export class MinionView extends Container {
     this.baseHealth = model.baseHealth ?? model.maxHealth
     this.maxHealth = model.maxHealth
     this.dormant = model.dormant ?? false
+    this.statsVisible = model.statsVisible ?? true
     this.eventMode = 'none'
     this.pivot.set(MINION_CANVAS.width / 2, MINION_CANVAS.height / 2)
+
+    this.pendingDestruction = model.pendingDestruction ?? false
+    this.auraEnabled = model.aura
+    this.aura = new MinionAuraEffect(textures.aura)
+    this.updateAura()
+    this.addChild(this.aura.layer)
 
     this.windfury = new WindfuryEffect(MINION_LAYOUT.windfury, 'minion.windfury')
     this.windfury.setEnabled(model.windfury)
@@ -337,7 +351,6 @@ export class MinionView extends Container {
       textures.curtainMote
     )
     this.spellDamageEnabled = model.spellDamage
-    this.pendingDestruction = model.pendingDestruction ?? false
     this.addChild(this.statusCurtains.layer)
     this.updateStatusCurtains()
 
@@ -417,7 +430,7 @@ export class MinionView extends Container {
     )
     this.attackLabel = attack.value
     this.attackStats = attack.group
-    this.attackStats.visible = model.statsVisible ?? true
+    this.attackStats.visible = this.statsVisible && !this.dormant
     this.addChild(attack.group)
 
     const health = createStatGroup(
@@ -429,17 +442,9 @@ export class MinionView extends Container {
     )
     this.healthLabel = health.value
     this.healthStats = health.group
-    this.healthStats.visible = model.statsVisible ?? true
+    this.healthStats.visible = this.statsVisible && !this.dormant
     this.pulseHealth = createHealthPulse(health.group, this.animationScope)
     this.addChild(health.group)
-
-    // Keep Aura as the final persistent marker layer so it remains above every
-    // other board mark, including the stat badge groups.
-    this.aura = new Sprite(textures.aura)
-    applyAnchoredPlacement(this.aura, MINION_LAYOUT.aura)
-    this.aura.visible = model.aura
-    this.aura.label = 'minion.aura'
-    this.addChild(this.aura)
 
     this.setAttackColor(model.attack)
     this.setHealthColor(model.health)
@@ -527,6 +532,16 @@ export class MinionView extends Container {
     this.sleepingZs.label = 'minion.sleeping-zs-root'
     this.addChild(this.sleepingZs)
 
+    this.dormantProgress = new Text({
+      text: '',
+      style: MINION_LAYOUT.dormantProgressTextStyle
+    })
+    applyAnchoredPlacement(this.dormantProgress, MINION_LAYOUT.dormantProgress)
+    this.dormantProgress.label = 'minion.dormant-progress'
+    this.dormantProgress.visible = false
+    this.dormantProgress.eventMode = 'none'
+    this.addChild(this.dormantProgress)
+
     this.hitArea = new Rectangle(
       MINION_HIT_AREA.x,
       MINION_HIT_AREA.y,
@@ -560,6 +575,12 @@ export class MinionView extends Container {
 
   /** Board objects can retain their ability marker without displaying combat stats. */
   setStatsVisible(visible: boolean): void {
+    this.statsVisible = visible
+    this.updateStatsVisibility()
+  }
+
+  private updateStatsVisibility(): void {
+    const visible = this.statsVisible && !this.dormant
     if (this.attackStats.visible === visible && this.healthStats.visible === visible)
       return
     this.attackStats.visible = visible
@@ -569,12 +590,49 @@ export class MinionView extends Container {
 
   setDormant(dormant: boolean): void {
     this.dormant = dormant
+    this.updateStatsVisibility()
+    this.updateAura()
     if (this.dormantOverlay) this.dormantOverlay.visible = dormant
     if (!dormant) return
     this.setCanAttack(false)
     this.setTargetable(false)
     this.setTargetingOutline(false)
     this.setSleeping(false)
+  }
+
+  showDormantProgress(current: number, total: number, turnNumber: number): void {
+    if (this.destroyed || this.dormantProgressTurn === turnNumber) return
+    this.dormantProgressTurn = turnNumber
+    if (this.dormantProgressTimer) this.animationScope.cancel(this.dormantProgressTimer)
+    this.dormantProgress.text = `${current}/${total}`
+    this.dormantProgress.visible = true
+    this.dormantProgressTimer = this.animationScope.timeline().call(
+      () => {
+        this.dormantProgress.visible = false
+        this.dormantProgressTimer = null
+      },
+      [],
+      QUEST_BADGE_TIMING.progressHold
+    )
+  }
+
+  /** Physical target bounds, independent of expanding particles and other glows. */
+  getInteractionBounds(): Rectangle {
+    const { x, y, width, height } = MINION_HIT_AREA
+    const corners = [
+      this.toGlobal({ x, y }),
+      this.toGlobal({ x: x + width, y }),
+      this.toGlobal({ x, y: y + height }),
+      this.toGlobal({ x: x + width, y: y + height })
+    ]
+    const left = Math.min(...corners.map((point) => point.x))
+    const top = Math.min(...corners.map((point) => point.y))
+    return new Rectangle(
+      left,
+      top,
+      Math.max(...corners.map((point) => point.x)) - left,
+      Math.max(...corners.map((point) => point.y)) - top
+    )
   }
 
   setBaseStats(attack: number, health: number): void {
@@ -644,14 +702,20 @@ export class MinionView extends Container {
     this.spellDamageEnabled = markers.spellDamage
     this.updateStatusCurtains()
     this.lifesteal.visible = markers.lifesteal
-    this.aura.visible = markers.aura
+    this.auraEnabled = markers.aura
+    this.updateAura()
     this.elusive.visible = markers.elusive
     this.immune.visible = markers.immune
   }
 
   setPendingDestruction(enabled: boolean): void {
     this.pendingDestruction = enabled
+    this.updateAura()
     this.updateStatusCurtains()
+  }
+
+  private updateAura(): void {
+    this.aura.setEnabled(this.auraEnabled && !this.dormant && !this.pendingDestruction)
   }
 
   private updateStatusCurtains(): void {
@@ -1040,9 +1104,11 @@ export class MinionView extends Container {
     this.artworkBreath.destroy()
     this.windfury.destroy()
     this.statusCurtains.destroy()
+    this.aura.destroy()
     // Release any pending banner waiter so presentation sequences cannot stall.
     this.settleBattlecryBanner?.()
     this.animationScope.kill()
+    this.dormantProgressTimer = null
     for (const pulse of this.activeAbilityPulses) {
       if (!pulse.destroyed) pulse.destroy({ children: true })
     }

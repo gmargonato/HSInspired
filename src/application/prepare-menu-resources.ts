@@ -1,6 +1,11 @@
 import type { Renderer, Texture, TextureSource } from 'pixi.js'
 import { ASSET_BUNDLE_IDS } from '../visual-components/assets'
 import { AssetScope } from '../visual-components/assets/asset-scope'
+import {
+  acquireTradeableAura,
+  tradeableAuraOcclusion,
+  type TradeableAuraLease
+} from '../visual-components/cards/tradeable-aura'
 import { configureCardTexture } from '../visual-components/assets/card-asset-resolver'
 import { DECK_HERO_ASSET_SOURCES } from '../visual-components/assets/hero-assets'
 import { premiumHeroPortrait } from '../visual-components/assets/hero-portrait-textures'
@@ -10,7 +15,10 @@ import {
   prepareRewardGhostAura
 } from '../visual-components/effects/prepare-menu-effects'
 import type { AuraFieldLease } from '../visual-components/effects/aura-field-cache'
-import type { OutlinePresetName } from '../visual-components/effects/animated-outline'
+import type {
+  OutlinePresetName,
+  AnimatedOutlineOptions
+} from '../visual-components/effects/animated-outline'
 import { warmMainMenuEffects } from './prepare-main-menu-effects'
 import {
   acquireCardShadowTexture,
@@ -38,6 +46,7 @@ export class MenuStartupResources {
   private readonly sources = new Map<TextureSource, boolean>()
   private readonly outlineFields: AuraFieldLease[] = []
   private cardShadowTexture: CardShadowTextureLease | null = null
+  private tradeableAura: TradeableAuraLease | null = null
 
   async prepare(renderer: Renderer): Promise<void> {
     // Settle all work before failure cleanup can release its resources.
@@ -79,7 +88,13 @@ export class MenuStartupResources {
         // Pixi spreads uploads over frames; only one upload queue runs at a time.
         await renderer.prepare.upload(textures)
         if (bundle === ASSET_BUNDLE_IDS.cardRendering) {
-          this.prepareOutline(renderer, assets['card.keyword.tradeable'], 'card')
+          this.tradeableAura = acquireTradeableAura(
+            renderer,
+            assets['card.keyword.tradeable']
+          )
+          this.prepareOutline(renderer, this.tradeableAura.texture, 'card', () =>
+            tradeableAuraOcclusion(assets['card.stat.mana'])
+          )
         }
         if (bundle === ASSET_BUNDLE_IDS.mainMenu) {
           warmMainMenuEffects(renderer, {
@@ -120,9 +135,10 @@ export class MenuStartupResources {
   private prepareOutline(
     renderer: Renderer,
     texture: Texture,
-    preset: OutlinePresetName
+    preset: OutlinePresetName,
+    occlusion?: AnimatedOutlineOptions['occlusion']
   ): void {
-    const field = prepareMenuOutline(renderer, texture, preset)
+    const field = prepareMenuOutline(renderer, texture, preset, occlusion)
     this.outlineFields.push(field)
     const source = field.field.texture.source
     this.sources.set(source, source.autoGarbageCollect)
@@ -136,6 +152,8 @@ export class MenuStartupResources {
     this.sources.clear()
     for (const field of this.outlineFields) field.release()
     this.outlineFields.length = 0
+    this.tradeableAura?.release()
+    this.tradeableAura = null
     this.cardShadowTexture?.release()
     this.cardShadowTexture = null
     await this.scope.releaseAll()

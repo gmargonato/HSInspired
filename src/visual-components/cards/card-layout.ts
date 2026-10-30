@@ -180,6 +180,16 @@ export const CARD_TRADEABLE_LAYOUT = placement(
   }
 )
 
+/** Match the frame aura's pixel scale without stretching the banner silhouette. */
+export const CARD_TRADEABLE_AURA_LAYOUT = placement(
+  {
+    x: CARD_TRADEABLE_LAYOUT.position.x - CARD_TRADEABLE_LAYOUT.size.width / 2,
+    y: 0
+  },
+  { width: CARD_BODY_BOUNDS.width, height: CARD_CANVAS.height },
+  { anchor: TOP_LEFT, note: 'Transparent card-width canvas for the banner aura.' }
+)
+
 /** Stat label positions are local to their icon's center. */
 export const CARD_STATS = {
   mana: statLayout('card.stat.mana', { x: 60, y: 100 }, { x: 0, y: -10 }, STAT_STYLE),

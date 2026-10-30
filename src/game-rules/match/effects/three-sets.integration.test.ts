@@ -16,6 +16,58 @@ import { getDerivedState } from './effect-runtime'
 
 type Scenario = ReturnType<typeof createMatchScenario>
 
+describe('Defile', () => {
+  const defile = 'knights_of_the_frozen_throne_defile'
+
+  it('leaves a lone Undertaker at one health without repeating', () => {
+    const scenario = ready()
+    const [own, enemy] = activePlayers(scenario)
+    summon(scenario, enemy, 'naxxramas_undertaker')
+    setMana(scenario, own)
+    addCard(scenario, own, defile)
+    play(scenario, own, defile)
+    expect(player(scenario, enemy).board).toMatchObject([
+      { cardId: 'naxxramas_undertaker', health: 1 }
+    ])
+  })
+
+  it('repeats through successive deaths and stops on the first wave without a death', () => {
+    const scenario = ready()
+    const [own, enemy] = activePlayers(scenario)
+    summon(scenario, own, 'classic_wisp')
+    summon(scenario, enemy, 'naxxramas_undertaker')
+    summon(scenario, enemy, 'basic_chillwind_yeti')
+    setMana(scenario, own)
+    addCard(scenario, own, defile)
+    play(scenario, own, defile)
+    expect(player(scenario, own).board).toHaveLength(0)
+    expect(player(scenario, enemy).board).toMatchObject([
+      { cardId: 'basic_chillwind_yeti', health: 2 }
+    ])
+  })
+
+  it('resolves deathrattle summons before the next wave', () => {
+    const scenario = ready()
+    const [own, enemy] = activePlayers(scenario)
+    summon(scenario, enemy, 'naxxramas_haunted_creeper')
+    summon(scenario, enemy, 'basic_chillwind_yeti')
+    setMana(scenario, own)
+    addCard(scenario, own, defile)
+    play(scenario, own, defile)
+    expect(player(scenario, enemy).board).toMatchObject([
+      { cardId: 'naxxramas_haunted_creeper', health: 1 },
+      { cardId: 'basic_chillwind_yeti', health: 4 }
+    ])
+    // A second cast kills the Creeper, then its spiders, before stopping.
+    setMana(scenario, own)
+    addCard(scenario, own, defile)
+    play(scenario, own, defile)
+    expect(player(scenario, enemy).board).toMatchObject([
+      { cardId: 'basic_chillwind_yeti', health: 1 }
+    ])
+  })
+})
+
 describe('Build-a-Beast', () => {
   it('offers Hunter and Neutral Beasts with equal class odds and without repeats', () => {
     const firstPool = zombeastPoolCards(CARD_CATALOG.all, 'first')

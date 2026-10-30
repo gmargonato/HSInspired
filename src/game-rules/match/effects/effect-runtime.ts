@@ -3200,8 +3200,11 @@ export class EffectRuntime {
                 this.processDeaths(true)
                 frame.storedValues.set(
                   'repeat.minions-died',
-                  (this.draft.history?.minionsDiedThisTurn.length ?? 0) -
-                    deathsBeforeInitialActions
+                  Math.max(
+                    0,
+                    (this.draft.history?.minionsDiedThisTurn.length ?? 0) -
+                      deathsBeforeInitialActions
+                  )
                 )
               }
               const repeatLimit =
@@ -5006,7 +5009,11 @@ export class EffectRuntime {
     const dormantTurns = dormantTurnsOverride ?? definition.dormantTurns
     const minion: DraftMinion = {
       ...(dormantTurns && dormantTurns > 0
-        ? { dormant: true, dormantTurnsRemaining: dormantTurns }
+        ? {
+            dormant: true,
+            dormantTurnsRemaining: dormantTurns,
+            dormantTurnsTotal: dormantTurns
+          }
         : {}),
       instanceId,
       cardId,
@@ -7650,6 +7657,7 @@ export class EffectRuntime {
             this.updateMinion(target, (current) => {
               current.dormant = true
               current.dormantTurnsRemaining = action.turns as number
+              current.dormantTurnsTotal = action.turns as number
             })
             this.emit(frame, name, path, {
               participantId: target.participantId,
@@ -7805,7 +7813,8 @@ export class EffectRuntime {
             {
               action: 'damage',
               target: { type: 'minion', selection: 'event-target' },
-              amount: 2 + i
+              amount: 2 + i,
+              ...(typeof action.vfx === 'string' ? { vfx: action.vfx } : {})
             },
             {
               ...frame,
@@ -8413,18 +8422,20 @@ export class EffectRuntime {
         // Coverage is known now; preserve survivor selection/destruction order.
         // withActionVfx records the actual victims after the action resolves.
         const targets: EntityRef[] = this.draft.players.flatMap((player) =>
-          player.board.map((minion) => ({
-            instanceId: minion.instanceId,
-            kind: 'minion' as const,
-            participantId: player.participantId,
-            zone: 'board' as const,
-            cardId: minion.cardId
-          }))
+          player.board
+            .filter((minion) => !minion.dormant && !isPermanentBoardObject(minion))
+            .map((minion) => ({
+              instanceId: minion.instanceId,
+              kind: 'minion' as const,
+              participantId: player.participantId,
+              zone: 'board' as const,
+              cardId: minion.cardId
+            }))
         )
         this.withActionVfx(frame, [{ action, path, targets }], () => {
           for (const player of this.draft.players) {
             const minions = player.board.filter(
-              (minion) => !isPermanentBoardObject(minion)
+              (minion) => !minion.dormant && !isPermanentBoardObject(minion)
             )
             if (minions.length === 0) continue
             const highest = Math.max(
@@ -8434,7 +8445,7 @@ export class EffectRuntime {
             const contenders = minions.filter((minion) => minion.attack === highest)
             const survivor =
               contenders[Math.floor(this.rng.next() * contenders.length)] ?? null
-            for (const minion of [...player.board]) {
+            for (const minion of minions) {
               if (minion.instanceId === survivor?.instanceId) continue
               this.directDestroy(
                 {
@@ -15093,12 +15104,34 @@ export class EffectRuntime {
       this.prepareNextTurn(nextPlayer)
       this.resetTurnHistory()
       this.draft.turnStartedAtRevision = this.draft.revision + 1
+      const dormantProgress = nextPlayer.board.flatMap((minion) => {
+        const remaining = minion.dormantTurnsRemaining
+        if (!minion.dormant || remaining === undefined) return []
+        const definition = cardDefinition(minion.cardId)
+        const printedTurns =
+          definition?.type === 'Minion' ? definition.dormantTurns : undefined
+        // Old checkpoints can lack the original duration. Printed timed
+        // dormancy is known; otherwise retain only the remaining known span.
+        const total = Math.max(
+          remaining,
+          minion.dormantTurnsTotal ?? printedTurns ?? remaining
+        )
+        minion.dormantTurnsTotal = total
+        return [
+          {
+            instanceId: minion.instanceId,
+            current: total - Math.max(0, remaining - 1),
+            total
+          }
+        ]
+      })
       this.events.push({
         type: 'turn-started',
         ...(this.draft.isExtraTurn ? { isExtraTurn: true } : {}),
         participantId: nextPlayer.participantId,
         turnNumber: nextTurnNumber,
-        mana: { ...nextPlayer.mana }
+        mana: { ...nextPlayer.mana },
+        ...(dormantProgress.length ? { dormantProgress } : {})
       })
       if (
         nextPlayer.quest?.goal === 'fill-board-turns' &&
@@ -15116,6 +15149,7 @@ export class EffectRuntime {
         if (minion.dormantTurnsRemaining === 0) {
           minion.dormant = false
           delete minion.dormantTurnsRemaining
+          delete minion.dormantTurnsTotal
         }
       }
       this.recomputeContinuousEffects()

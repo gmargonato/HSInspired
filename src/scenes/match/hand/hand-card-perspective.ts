@@ -1,7 +1,12 @@
 import {
   cardFrameTransform,
-  CARD_TRADEABLE_LAYOUT
+  CARD_TRADEABLE_AURA_LAYOUT
 } from '../../../visual-components/cards/card-layout'
+import {
+  acquireTradeableAura,
+  tradeableAuraOcclusion,
+  type TradeableAuraLease
+} from '../../../visual-components/cards/tradeable-aura'
 import { Container, PerspectiveMesh, Rectangle, Sprite, type Renderer } from 'pixi.js'
 import type { CardView } from '../../../visual-components/cards/card-view'
 import { MAX_TILT_X_DEG, MAX_TILT_Y_DEG } from './drag-rotator'
@@ -100,6 +105,7 @@ export class HandCardPerspective {
   private outlineEffect: AnimatedOutline | null = null
   private tradeableMesh: PerspectiveMesh | null = null
   private tradeableEffect: AnimatedOutline | null = null
+  private tradeableAura: TradeableAuraLease | null = null
   private readonly current = { x: 0, y: 0 }
   private readonly applied = { x: Number.NaN, y: Number.NaN }
   private wasVisible = true
@@ -218,6 +224,7 @@ export class HandCardPerspective {
       this.outlineEffect = new AnimatedOutline(this.outlineMesh, {
         palette: options.outlinePalette ?? 'green',
         preset: options.outlinePreset ?? 'card',
+        fillHolesForSmoothing: cardView.plan.template === 'minion',
         silhouette: {
           texture: options.outlineTexture,
           // Map the aura onto the same transformed frame as the mask above.
@@ -237,8 +244,9 @@ export class HandCardPerspective {
     }
 
     if (options.tradeableTexture) {
+      this.tradeableAura = acquireTradeableAura(renderer, options.tradeableTexture)
       this.tradeableMesh = new PerspectiveMesh({
-        texture: options.tradeableTexture,
+        texture: this.tradeableAura.texture,
         verticesX: 2,
         verticesY: 2
       })
@@ -248,7 +256,8 @@ export class HandCardPerspective {
       this.tradeableMesh.once('destroyed', () => geometry.destroy(true))
       this.tradeableEffect = new AnimatedOutline(this.tradeableMesh, {
         palette: 'green',
-        preset: 'card'
+        preset: 'card',
+        occlusion: () => tradeableAuraOcclusion(this.cardView.costIconTexture)
       })
       this.tradeableEffect.setEnabled(false)
     }
@@ -503,6 +512,8 @@ export class HandCardPerspective {
     this.tradeableEffect = null
     this.tradeableMesh?.destroy()
     this.tradeableMesh = null
+    this.tradeableAura?.release()
+    this.tradeableAura = null
     this.outlineEffect?.dispose()
     this.outlineEffect = null
     this.outlineMesh?.removeFromParent()
@@ -527,7 +538,7 @@ export class HandCardPerspective {
     bottomLeftY: number
   ): void {
     if (this.tradeableMesh) {
-      const layout = CARD_TRADEABLE_LAYOUT
+      const layout = CARD_TRADEABLE_AURA_LAYOUT
       const corners = resolvePerspectiveCorners(
         this.current,
         this.texture.width,

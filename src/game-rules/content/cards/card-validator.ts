@@ -63,6 +63,7 @@ export interface RawCardRecord {
   readonly replacementHeroId?: unknown
   readonly rulesText?: unknown
   readonly keywords?: unknown
+  readonly auraVisual?: unknown
   readonly effects?: unknown
   readonly playCondition?: unknown
   readonly quest?: unknown
@@ -954,6 +955,7 @@ function actionsValue(value: unknown, path: string): void {
         ![
           'damage',
           'freeze',
+          'domino-effect',
           'destroy',
           'redirect-damage',
           'sacrifice-and-damage',
@@ -1188,6 +1190,9 @@ export function validateCardRecord(
   const rulesText = textValue(raw.rulesText, `${indexOrPath}.rulesText`)
   const keywords = keywordsValue(raw.keywords, `${indexOrPath}.keywords`)
   const effects = effectsValue(raw.effects, `${indexOrPath}.effects`)
+  const auraVisual = booleanValue(raw.auraVisual, `${indexOrPath}.auraVisual`, false)
+  if (auraVisual && type !== 'Minion')
+    return fail(`${indexOrPath}.auraVisual`, 'is only valid for minions')
   if (raw.playCondition !== undefined)
     conditionValue(raw.playCondition, `${indexOrPath}.playCondition`)
   const playCondition = raw.playCondition as CardDefinition['playCondition'] | undefined
@@ -1231,6 +1236,7 @@ export function validateCardRecord(
     rulesText,
     keywords,
     effects,
+    ...(raw.auraVisual === undefined ? {} : { auraVisual }),
     ...(playCondition ? { playCondition } : {}),
     collectible,
     deckLegal

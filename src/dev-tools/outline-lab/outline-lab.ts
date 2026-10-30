@@ -29,7 +29,6 @@ import {
 } from 'pixi.js'
 import {
   ASSET_BUNDLE_IDS,
-  GAME_BOARD_BUNDLE_IDS,
   type CollectionAssets,
   type GameBoardAssets,
   type DeckPresentationAssets,
@@ -247,7 +246,7 @@ export class OutlineLab extends Container {
       this.assetScope.acquire<DeckSelectionAssets>(ASSET_BUNDLE_IDS.deckSelection),
       this.assetScope.acquire<GameAssets>(ASSET_BUNDLE_IDS.game),
       this.assetScope.acquire<CollectionAssets>(ASSET_BUNDLE_IDS.collection),
-      this.assetScope.acquire<GameBoardAssets>(GAME_BOARD_BUNDLE_IDS[0]),
+      this.assetScope.acquire<GameBoardAssets>(ASSET_BUNDLE_IDS.gameTable),
       this.assetScope.acquire<MainMenuAssets>(ASSET_BUNDLE_IDS.mainMenu)
     ])
     const [

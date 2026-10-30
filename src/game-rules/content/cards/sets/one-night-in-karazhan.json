@@ -1093,6 +1093,7 @@
   },
   {
     "id": "one_night_in_karazhan_violet_illusionist",
+    "auraVisual": true,
     "name": "Violet Illusionist",
     "rarity": "Common",
     "cardClass": "Neutral",

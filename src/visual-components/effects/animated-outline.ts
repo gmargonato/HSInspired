@@ -1,6 +1,6 @@
 import type { Container, Rectangle, Renderer, Texture } from 'pixi.js'
 import { Actor } from '../lifecycle/actor'
-import { AuraFilter } from './aura-filter'
+import { AuraFilter, type AuraOcclusion } from './aura-filter'
 import {
   getOutlineTuning,
   OUTLINE_PALETTES,
@@ -18,6 +18,10 @@ export type {
 } from './outline-tuning'
 export type OutlinePaletteInput = OutlinePaletteName | OutlinePalette
 export interface AnimatedOutlineOptions {
+  /** Preserve hollow frame contours when smoothing the silhouette. */
+  readonly fillHolesForSmoothing?: boolean
+  /** Live foreground silhouette, in normalized aura coordinates. */
+  readonly occlusion?: () => AuraOcclusion | undefined
   readonly palette?: OutlinePaletteInput
   readonly preset: OutlinePresetName
   /** Silhouette distance fields are always cached for Aura. */
@@ -51,7 +55,13 @@ export class AnimatedOutline extends Actor {
   ) {
     super()
     this.label = 'aura-shader'
-    this.filter = new AuraFilter(target, options.silhouette, options.sharedShapeKey)
+    this.filter = new AuraFilter(
+      target,
+      options.silhouette,
+      options.sharedShapeKey,
+      options.occlusion,
+      options.fillHolesForSmoothing
+    )
     this.setTuning(getOutlineTuning(options.preset))
     this.setPalette(options.palette ?? 'blue')
     target.filters = [...(target.filters ?? []), this.filter]

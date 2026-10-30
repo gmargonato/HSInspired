@@ -1,3 +1,5 @@
+import { TableView } from './table-view'
+import type { GameBoardAssets } from '../../../visual-components/assets'
 import { isPermanentBoardObject } from '../../../game-rules/match/rules/board-objects'
 import {
   MinionLandingDust,
@@ -76,7 +78,6 @@ import {
   returnPresentationBatch
 } from '../presentation/return-presentation'
 import { randomSpellPresentationStates } from '../presentation/random-spell-presentation'
-import { selectRandomBoardTexture } from './board-selection'
 import { isLegalHeroPowerTarget } from '../targeting/hero-power-targeting'
 import type { RendererLogger } from '../../../application/contracts/logger'
 import { gsap } from '../../../visual-components/animation/animations'
@@ -141,6 +142,10 @@ import { presentCardReveal } from '../presentation/card-reveal-presenter'
 import { CARD_REVEAL_LAYOUT } from '../presentation/card-reveal-layout'
 import { CARD_DRAW_LAYOUT } from '../presentation/card-draw-layout'
 import { DeckStackView } from '../hud/deck-stack-view'
+import {
+  acquireTradeableAura,
+  type TradeableAuraLease
+} from '../../../visual-components/cards/tradeable-aura'
 import {
   CardPlayAnimation,
   type CardPlayPose
@@ -256,6 +261,8 @@ function isFrozen(
 
 export interface GameBoardViewOptions {
   readonly windowAttention?: WindowAttentionApi
+  readonly tableAssets?: GameBoardAssets
+  readonly cornerId?: string | null
   readonly boardTexture?: Texture
   readonly onLoadProgress?: (progress: number) => Promise<void>
   readonly route: GameRoute
@@ -374,6 +381,7 @@ export class GameBoardView extends Actor {
   }
   private readonly resolver = new CardAssetResolver()
   private readonly sceneAuraFields = new Map<Texture, AuraFieldLease>()
+  private tradeableAura: TradeableAuraLease | null = null
   private artworkWarmup: MatchArtworkWarmup | null = null
   private readonly secretPreviewView: SecretPreviewView
   private readonly questPreviewView: QuestPreviewView
@@ -883,6 +891,9 @@ export class GameBoardView extends Actor {
           this.match.getState().phase !== 'turns' ||
           isInDropZone(pointer, GAME_BOARD_LAYOUT.cardPlay.localDropZone),
         beginTargetGesture: (entry, pointer, pointerId) => {
+          // Tradeable cards choose play or trade on drop. Registering a pressed
+          // target gesture here would turn their release into click targeting.
+          if (cardDefinition(entry.card).keywords.includes('tradeable')) return
           const input = this.match.getPlayInput?.(
             this.localParticipantId,
             entry.card.instanceId
@@ -1849,20 +1860,27 @@ export class GameBoardView extends Actor {
     await this.wait(OPENING_TIMING.hover + 0.15)
   }
 
+  private tableView?: TableView
+
+  setBoardCorner(id: string): void {
+    this.tableView?.setCorner(id)
+  }
+
   private createBoard(): void {
+    if (this.options.tableAssets) {
+      this.tableView = new TableView(
+        this.options.tableAssets,
+        this.options.cornerId ?? null
+      )
+      this.tableView.setGoldenFrames(
+        this.classHeroPremium(this.localParticipantId),
+        this.classHeroPremium(this.remoteParticipantId)
+      )
+      this.boardLayer.addChild(this.tableView)
+      return
+    }
     const board = new Sprite(
-      this.options.boardTexture ??
-        selectRandomBoardTexture([
-          this.options.gameAssets.board1,
-          this.options.gameAssets.board2,
-          this.options.gameAssets.board3,
-          this.options.gameAssets.board4,
-          this.options.gameAssets.board5,
-          this.options.gameAssets.board6,
-          this.options.gameAssets.board7,
-          this.options.gameAssets.board8,
-          this.options.gameAssets.board9
-        ])
+      this.options.boardTexture ?? this.options.gameAssets.boardBase
     )
     applyAnchoredPlacement(board, GAME_BOARD_LAYOUT.board)
     board.eventMode = 'none'
@@ -2499,7 +2517,8 @@ export class GameBoardView extends Actor {
     return (
       candidates.find((view) => {
         if (!view.isTargetable()) return false
-        const bounds = view.getBounds()
+        const bounds =
+          view instanceof MinionView ? view.getInteractionBounds() : view.getBounds()
         return (
           x >= bounds.x &&
           x <= bounds.x + bounds.width &&
@@ -3147,7 +3166,8 @@ export class GameBoardView extends Actor {
     return (
       remoteViews.find((view) => {
         if (!view.isTargetable()) return false
-        const bounds = view.getBounds()
+        const bounds =
+          view instanceof MinionView ? view.getInteractionBounds() : view.getBounds()
         return (
           x >= bounds.x &&
           x <= bounds.x + bounds.width &&
@@ -3797,16 +3817,20 @@ export class GameBoardView extends Actor {
     const started = performance.now()
     // Configure every base frame before acquiring any field: resolver mipmap
     // configuration can unload a source and invalidate an existing field.
+    const frameKeys = [
+      ...Object.values(CARD_PROFILES).map((profile) => profile.frame),
+      'card.keyword.tradeable'
+    ]
     const frames = await Promise.allSettled(
-      [
-        ...Object.values(CARD_PROFILES).map((profile) => profile.frame),
-        'card.keyword.tradeable'
-      ].map((key) => this.resolver.load(key))
+      frameKeys.map((key) => this.resolver.load(key))
     )
     if (this.destroyed) return
-    const tasks: (() => void)[] = frames.map((result) => () => {
-      if (result.status === 'fulfilled') this.prebuildAuraTexture(result.value)
-      else this.logger.warn('[GameBoardView] card frame warmup failed', result.reason)
+    const tasks: (() => void)[] = frames.map((result, index) => () => {
+      if (result.status === 'fulfilled') {
+        if (frameKeys[index] === 'card.keyword.tradeable') {
+          this.tradeableAura = acquireTradeableAura(this.options.renderer, result.value)
+        } else this.prebuildAuraTexture(result.value)
+      } else this.logger.warn('[GameBoardView] card frame warmup failed', result.reason)
     })
     tasks.push(
       ...Object.values(this.options.heroAssets)
@@ -4562,6 +4586,12 @@ export class GameBoardView extends Actor {
         this.setWindowHighlighted(event.participantId === this.localParticipantId)
         this.syncTurnHud(this.match.getState())
         this.handleTurnStarted(event.participantId)
+        for (const progress of event.dormantProgress ?? []) {
+          this.findMinionView(
+            event.participantId,
+            progress.instanceId
+          )?.showDormantProgress(progress.current, progress.total, event.turnNumber)
+        }
         return
       case 'hero-power-used':
         this.syncTurnHud(this.match.getState())
@@ -5115,13 +5145,21 @@ export class GameBoardView extends Actor {
         : undefined
     }
     const casterHero = this.heroViews.get(event.controllerId)
+    const sourcePointFor = (
+      instanceId: string
+    ): { x: number; y: number } | undefined => {
+      const livePoint = pointFor(instanceId)
+      if (livePoint) return livePoint
+      const deathPosition = this.combat.deathSourcePosition(instanceId)
+      return deathPosition ? this.vfxPresenter.layer.toLocal(deathPosition) : undefined
+    }
     const power =
       event.origin === 'hero-power'
         ? this.heroPowerViews.get(event.controllerId)
         : undefined
     const source = power
       ? this.vfxPresenter.layer.toLocal(power.card.getGlobalPosition())
-      : (pointFor(event.sourceInstanceId) ??
+      : (sourcePointFor(event.sourceInstanceId) ??
         (casterHero
           ? this.vfxPresenter.layer.toLocal(casterHero.getGlobalPosition())
           : undefined))
@@ -5167,7 +5205,7 @@ export class GameBoardView extends Actor {
         }
         const sources = event.sourceInstanceIds
           ? [...new Set(event.sourceInstanceIds)].flatMap((id) => {
-              const point = pointFor(id)
+              const point = sourcePointFor(id)
               return point ? [point] : []
             })
           : source
@@ -5960,6 +5998,10 @@ export class GameBoardView extends Actor {
 
   /** The winning match can itself cross the class unlock threshold. */
   refreshHeroPremiumAppearance(): void {
+    this.tableView?.setGoldenFrames(
+      this.classHeroPremium(this.localParticipantId),
+      this.classHeroPremium(this.remoteParticipantId)
+    )
     for (const player of this.presentationState().players) {
       this.heroViews
         .get(player.participantId)
@@ -7644,7 +7686,10 @@ export class GameBoardView extends Actor {
   }
 
   private boardPreviewSourceBounds(sourceView: Container) {
-    const globalBounds = sourceView.getBounds()
+    const globalBounds =
+      sourceView instanceof MinionView
+        ? sourceView.getInteractionBounds()
+        : sourceView.getBounds()
     const topLeft = this.boardCardPreviewLayer.toLocal({
       x: globalBounds.x,
       y: globalBounds.y
@@ -9324,6 +9369,8 @@ export class GameBoardView extends Actor {
     this.mulligan.dispose()
     for (const field of this.sceneAuraFields.values()) field.release()
     this.sceneAuraFields.clear()
+    this.tradeableAura?.release()
+    this.tradeableAura = null
     for (const slot of this.activeSummonSlots) {
       slot.disposePlayableOutline()
     }

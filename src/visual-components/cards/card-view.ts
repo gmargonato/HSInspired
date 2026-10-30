@@ -523,6 +523,12 @@ export class CardView extends Container {
     return banner instanceof Sprite ? banner.texture : undefined
   }
 
+  /** Current cost symbol, including health-cost replacements, for aura occlusion. */
+  get costIconTexture(): Texture | undefined {
+    const icon = this.treeObjects.get('card.stats.mana.icon')?.object
+    return icon instanceof Sprite ? icon.texture : undefined
+  }
+
   get appearanceRevision(): number {
     return this.snapshotRevision
   }

@@ -1240,6 +1240,12 @@ describe('turn taskbar attention', () => {
       syncTurnHud(): void
       syncTurnControls(): void
       handleTurnStarted(): void
+      findMinionView(
+        ownerId: string,
+        instanceId: string
+      ):
+        | { showDormantProgress(current: number, total: number, turn: number): void }
+        | undefined
       startInitialTurn(): void
       presentMatchResult(): Promise<void>
       heroPowerEffects: { reveal(): Promise<void> }
@@ -1271,6 +1277,37 @@ describe('turn taskbar attention', () => {
       expect(setHighlighted.mock.calls).toEqual([[false], [true]])
     }
   )
+
+  it('presents simultaneous Dormant progress for both sides without waiting', async () => {
+    const { internal } = setup()
+    const showDormantProgress = vi.fn()
+    const find = vi
+      .spyOn(internal, 'findMinionView')
+      .mockReturnValue({ showDormantProgress })
+    for (const participantId of [
+      internal.session.localParticipantId,
+      internal.session.remoteParticipantId
+    ]) {
+      await internal.presentEvent({
+        type: 'turn-started',
+        participantId,
+        turnNumber: 6,
+        mana: internal.session.getState().players[0].mana,
+        dormantProgress: [
+          { instanceId: 'first', current: 1, total: 2 },
+          { instanceId: 'second', current: 2, total: 2 }
+        ]
+      })
+      expect(find).toHaveBeenCalledWith(participantId, 'first')
+      expect(find).toHaveBeenCalledWith(participantId, 'second')
+    }
+    expect(showDormantProgress.mock.calls).toEqual([
+      [1, 2, 6],
+      [2, 2, 6],
+      [1, 2, 6],
+      [2, 2, 6]
+    ])
+  })
 
   it('does not notify when synchronizing the existing initial turn', () => {
     const { internal, setHighlighted } = setup()
@@ -1609,6 +1646,149 @@ describe('deck addition animation', () => {
 })
 
 describe('fire VFX match integration', () => {
+  it.each([true, false])(
+    'retains dead minion missile origins through nested death batches, local=%s',
+    async (localCaster) => {
+      const value = board()
+      const internal = value as unknown as {
+        session: GameBoardSession
+        combat: GameCombatPresentation
+        heroViews: Map<PlayerId, HeroView>
+        createHeroes(state: OpeningMatchState): void
+        insertLocalMinionView(position: number, view: MinionView): void
+        insertRemoteMinionView(position: number, view: MinionView): void
+        presentEffectVfx(
+          event: Extract<OpeningMatchEvent, { type: 'effect-vfx-started' }>
+        ): Promise<void>
+        vfxPresenter: { layer: Container; play(...args: unknown[]): Promise<void> }
+      }
+      internal.createHeroes(internal.session.getState())
+      value.position.set(170, 90)
+      value.scale.set(0.8)
+      const owner = localCaster
+        ? internal.session.localParticipantId
+        : internal.session.remoteParticipantId
+      const enemy = localCaster
+        ? internal.session.remoteParticipantId
+        : internal.session.localParticipantId
+      const combat = internal.combat as unknown as {
+        animateMinionDeath(...args: unknown[]): Promise<void>
+      }
+      // Retain the real capture/removal lifecycle without running collapse shaders.
+      vi.spyOn(combat, 'animateMinionDeath').mockResolvedValue()
+      const play = vi.spyOn(internal.vfxPresenter, 'play').mockResolvedValue()
+      const views: MinionView[] = []
+      for (let index = 0; index < 3; index++) {
+        const view = await MinionView.create(
+          {
+            label: `death-origin.${index}`,
+            attack: 2,
+            health: 0,
+            maxHealth: 1,
+            legendary: false,
+            taunt: false,
+            enraged: false,
+            divineShield: false,
+            frozen: false,
+            stealth: false,
+            deathrattle: true,
+            poisonous: false,
+            aura: false,
+            trigger: false,
+            inspire: false,
+            windfury: false,
+            spellDamage: false,
+            lifesteal: false,
+            elusive: false,
+            immune: false
+          },
+          new Proxy({} as MinionViewTextures, { get: () => Texture.WHITE }),
+          Texture.WHITE
+        )
+        view.instanceId = `dead-missile-source-${index}`
+        view.ownerId = owner
+        if (localCaster) internal.insertLocalMinionView(index, view)
+        else internal.insertRemoteMinionView(index, view)
+        views.push(view)
+      }
+      views.forEach((view, index) =>
+        view.position.set(550 + index * 250, localCaster ? 610 : 410)
+      )
+      const origins = views.map((view) => view.getGlobalPosition())
+      const die = (batchId: string, dying: MinionView[]) =>
+        internal.combat.presentDeathBatchStarted({
+          type: 'death-batch-started',
+          batchId,
+          deaths: dying.map((view) => ({
+            instanceId: view.instanceId!,
+            participantId: owner,
+            kind: 'minion' as const,
+            cardId: asCardId('classic_leper_gnome'),
+            hasDeathrattle: true
+          }))
+        })
+      const launch = (
+        sourceInstanceId: string,
+        origin: 'source' | 'hero-power' = 'source'
+      ) =>
+        internal.presentEffectVfx({
+          type: 'effect-vfx-started',
+          vfxId: 'frost-missile-small',
+          sourceInstanceId,
+          controllerId: owner,
+          origin,
+          actionPath: 'deathrattle.damage',
+          targetInstanceIds: [`${enemy}:hero`]
+        })
+      const expectSource = (global: { x: number; y: number }) =>
+        expect(play.mock.calls.at(-1)![2]).toEqual(
+          internal.vfxPresenter.layer.toLocal(global)
+        )
+
+      // Living sources still use their visible centers.
+      await launch(views[0].instanceId!)
+      expectSource(origins[0])
+      await die('outer', views.slice(0, 2))
+      expect(views.slice(0, 2).every((view) => view.destroyed)).toBe(true)
+      // Board movement must not change positions already captured for dead sources.
+      views[2].position.set(1200, 500)
+      const nestedOrigin = views[2].getGlobalPosition()
+      await die('nested', [views[2]])
+      for (let index = 0; index < 2; index++) {
+        await launch(views[index].instanceId!)
+        expectSource(origins[index])
+      }
+      await launch(views[2].instanceId!)
+      expectSource(nestedOrigin)
+      internal.combat.completeDeathBatch('nested')
+      expect(internal.combat.deathSourcePosition(views[2].instanceId!)).toBeUndefined()
+      await launch(views[0].instanceId!)
+      expectSource(origins[0])
+      if (localCaster) {
+        internal.combat.completeDeathBatch('outer')
+        for (const view of views)
+          expect(internal.combat.deathSourcePosition(view.instanceId!)).toBeUndefined()
+      }
+      await launch('missing-spell')
+      expectSource(internal.heroViews.get(owner)!.getGlobalPosition())
+      // A missing target must not resolve from a retained death position.
+      await internal.presentEffectVfx({
+        type: 'effect-vfx-started',
+        vfxId: 'frost-missile-small',
+        sourceInstanceId: 'missing-spell',
+        controllerId: owner,
+        actionPath: 'cast.damage',
+        targetInstanceIds: [views[0].instanceId!]
+      })
+      expect(play).toHaveBeenCalledTimes(6)
+      if (!localCaster) {
+        value.dispose()
+        for (const view of views)
+          expect(internal.combat.deathSourcePosition(view.instanceId!)).toBeUndefined()
+      }
+    }
+  )
+
   it.each([true, false])(
     'launches all four Horsemen missiles concurrently from their board positions, local=%s',
     async (localCaster) => {

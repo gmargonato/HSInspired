@@ -29,6 +29,10 @@ out vec4 finalColor;
 
 uniform sampler2D uTexture;
 uniform sampler2D uDistanceField;
+uniform sampler2D uOcclusion;
+uniform float uOcclusionEnabled;
+uniform vec4 uOcclusionBounds;
+uniform vec4 uOcclusionUvs;
 uniform vec4 uMapX;
 uniform vec4 uMapY;
 uniform vec4 uProjection0;
@@ -264,7 +268,14 @@ void main(void)
     // saturated on bright boards; lowering the tail's alpha while keeping its
     // colour turns that share of the tail into added light.
     float outAlpha = baseAlpha + glowAlpha * (1.0 - baseAlpha) * (1.0 - uAdditive);
-    finalColor = vec4(premultiplied, outAlpha) * edgeMask * bottomFade * (1.0 - smoothstep(0.02, 0.78, fieldSample.b)) * uAlpha;
+    float foregroundAlpha = 0.0;
+    if (uOcclusionEnabled > 0.5) {
+        vec2 occlusionUv = (cardUv - uOcclusionBounds.xy) / uOcclusionBounds.zw;
+        if (all(greaterThanEqual(occlusionUv, vec2(0.0))) && all(lessThanEqual(occlusionUv, vec2(1.0)))) {
+            foregroundAlpha = texture(uOcclusion, uOcclusionUvs.xy + occlusionUv * uOcclusionUvs.zw).a;
+        }
+    }
+    finalColor = vec4(premultiplied, outAlpha) * edgeMask * bottomFade * (1.0 - smoothstep(0.02, 0.78, fieldSample.b)) * uAlpha * (1.0 - foregroundAlpha);
 }
 `
 export function createAuraGlProgram(): GlProgram {
@@ -284,6 +295,9 @@ export function createAuraGpuProgram(): GpuProgram {
 
 export function createAuraUniforms() {
   return new UniformGroup({
+    uOcclusionEnabled: { value: 0, type: 'f32' },
+    uOcclusionBounds: { value: new Float32Array([0, 0, 1, 1]), type: 'vec4<f32>' },
+    uOcclusionUvs: { value: new Float32Array([0, 0, 1, 1]), type: 'vec4<f32>' },
     uMapX: { value: new Float32Array(4), type: 'vec4<f32>' },
     uMapY: { value: new Float32Array(4), type: 'vec4<f32>' },
     uProjection0: { value: new Float32Array(4), type: 'vec4<f32>' },

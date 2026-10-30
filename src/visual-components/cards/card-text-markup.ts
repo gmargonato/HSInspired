@@ -4,6 +4,7 @@ const HEARTHSTONE_KEYWORDS = [
   'Choose One',
   'Battlecry',
   'Tradeable',
+  'Dormant',
   'Deathrattle',
   'Windfury',
   'Poisonous',
