@@ -2,8 +2,8 @@ import { TOP_LEFT, placement } from '../../../visual-components/layout'
 
 export const TABLE_LAYOUT = {
   localGoldenFrame: placement(
-    { x: 670, y: 707 },
-    { width: 629, height: 273 },
+    { x: 691, y: 706 },
+    { width: 592, height: 274 },
     {
       anchor: TOP_LEFT,
       scale: 1,
@@ -11,8 +11,8 @@ export const TABLE_LAYOUT = {
     }
   ),
   remoteGoldenFrame: placement(
-    { x: 662, y: 58 },
-    { width: 637, height: 234 },
+    { x: 675, y: 58 },
+    { width: 620, height: 234 },
     {
       anchor: TOP_LEFT,
       scale: 1,
