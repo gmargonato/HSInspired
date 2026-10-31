@@ -41,6 +41,42 @@ src/
 
 ## Match layers and inspection
 
+The match's end-turn control and two hero powers use original Unity meshes and
+animation curves through `scenes/match/board/match-controls-3d.ts`. One match-owned
+Three renderer draws a small transparent atlas, which ordinary Pixi sprites place
+inside the existing layers. Pixi still owns input, outlines, occlusion and fixed
+hero-power shadows; the Three renderer has no shadows. Cameras are orthographic;
+hero powers remain directly overhead and end turn tilts 10 degrees toward the
+bottom edge. `match-controls-3d-layout.ts` owns this angle and the lighting/material
+tuning. The atlas preserves sRGB colors without tone mapping; known-color probes
+verify the Three-to-Pixi transfer. Ambient/fill illumination and restrained frame
+highlights brighten the original textures without a global brightness filter.
+Material animation updates at most 30 times per second while visible. Standard
+exhausted powers stop updating; golden backs retain their slow reflection motion.
+
+The `game-controls` asset bundle contains `assets/models/match/match-controls.json`
+and the named diffuse textures under the existing match/heroes image domains.
+`scripts/export-match-controls.py` reproduces these assets from the local original
+installation; runtime and packaged builds require only the exported files. The
+standalone experiment has separate exports and is not a production dependency.
+Model metadata records original bundle/path IDs, texture hashes and curve tangents.
+Golden powers switch to `HeroPowerV2_Golden`, including its leaf geometry, while
+retaining the same animation hierarchy. `match-controls-3d-materials.ts` adapts
+Unity's `DiffuseReflection` and `DiffuseAlphaMaskScroller` effects to Three using
+the exported reflection/specular maps, gem alpha mask, scrolling clouds and active
+shader parameters. Serialized legacy gloss fields are not used by these Unity
+shaders and must not be treated as extra Phong highlights. These are Three shader
+adaptations, not Unity shader binaries or an exact recreation of its scene lighting.
+Artwork retains the existing three-second saturation animation. Full-card power previews keep their
+existing composition. The optional renderer argument on board views preserves
+their use in isolated CPU tests and existing inspectors.
+
+`node scripts/check-match-controls.cjs` exercises the production renderer in an
+isolated Electron window and captures standard/golden faces, backs, extra turns,
+replacement and dynamic costs under `.tmp/match-controls-check`. It loads every
+catalog artwork mapping in both finishes and checks press cancellation, idle atlas
+updates and disposal. It does not modify player saves or run the standalone demo.
+
 Match tables use `assets/images/table/board.png`, native-size local/remote golden
 frames, and transparent 1920 x 1080 `corner-*.png` overlays. The asset registry
 discovers corners at development startup/build and sorts their filename suffixes

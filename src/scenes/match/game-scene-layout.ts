@@ -213,11 +213,11 @@ export const GAME_BOARD_LAYOUT = {
    * the remote player's turn.
    */
   endTurnButton: placement(
-    { x: 1595, y: 490 },
+    { x: 1595, y: 487 },
     { width: 157, height: 86 },
     {
       anchor: CENTER,
-      scale: 1
+      scale: 1.05
     }
   ),
 

@@ -7,6 +7,7 @@ export const ASSET_BUNDLE_IDS = {
   deckSelection: 'deck-selection',
   deckPresentation: 'deck-presentation',
   game: 'game',
+  gameControls: 'game-controls',
   gameTable: 'game-table',
   gameLoading: 'game-loading',
   menuSettings: 'menu-settings',

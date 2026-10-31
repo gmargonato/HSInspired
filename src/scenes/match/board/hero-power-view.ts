@@ -1,3 +1,4 @@
+import type { MatchControls3D, ControlMeshView } from './match-controls-3d'
 import {
   Container,
   Rectangle,
@@ -76,6 +77,7 @@ export interface HeroPowerLayout {
 }
 
 export interface HeroPowerViewOptions {
+  readonly controls3d?: MatchControls3D
   readonly layout: HeroPowerLayout
   readonly backTexture: Texture
   readonly premiumBackTexture: Texture
@@ -103,6 +105,9 @@ export interface HeroPowerViewOptions {
  * remote card is never clickable and never wears the outline.
  */
 export class HeroPowerView extends Actor {
+  private meshView?: ControlMeshView
+  private replacementRevision = 0
+  private replacementActive = false
   readonly card: Container
   private readonly frontFace: HeroPowerIconView
   private readonly backFace: Sprite
@@ -241,6 +246,14 @@ export class HeroPowerView extends Actor {
     this.costLabel.label = 'hero-power-cost'
     this.addChild(this.costLabel)
 
+    if (options.controls3d) {
+      this.meshView = options.controls3d.create('heroPower', options.artworkTexture)
+      this.card.addChild(this.meshView)
+      this.frontFace.visible = false
+      this.backFace.visible = false
+      this.manaCrystal.visible = false
+      this.costLabel.visible = false
+    }
     this.setCost(options.cost)
     this.setCostColor('normal')
     this.setPremium(options.premium === true)
@@ -252,17 +265,20 @@ export class HeroPowerView extends Actor {
   /** Refreshes the displayed cost; the future home of cost-changing effects. */
   setCost(cost: number): void {
     this.costLabel.text = String(cost)
+    this.meshView?.setCost(cost)
   }
 
   /** Replaces the visible hero-power face without changing its used/up state. */
   setArtwork(texture: Texture): void {
     this.frontFace.setArtwork(texture)
+    this.meshView?.setArtwork(texture)
   }
 
   /** Swaps every face between the standard and premium plates + breathing. */
   setPremium(enabled: boolean): void {
     this.premium = enabled
-    this.frontFace.setPremium(enabled)
+    this.meshView?.setPremium(enabled)
+    this.frontFace.setPremium(this.meshView ? false : enabled)
     this.playableOutline.setEnabled(false)
     this.hoverOutline.setEnabled(false)
     const outlines = this.outlines.get(enabled)!
@@ -312,6 +328,7 @@ export class HeroPowerView extends Actor {
 
   /** Replaces this power through a horizontal flip and refreshes it face-up. */
   replaceArtwork(texture: Texture, premium: boolean = this.premium): Promise<void> {
+    if (this.meshView) return this.replaceMeshArtwork(texture, premium)
     const restoreEnabled = this.interactivityEnabled
     this.setEnabled(false)
     this.killTweensOf(this.card.scale)
@@ -347,13 +364,33 @@ export class HeroPowerView extends Actor {
     })
   }
 
-  /**
-   * Tints the cost label. Today the cost is always the class default, so the
-   * label stays `normal` (white); future cost-changing effects should call
-   * `reduced` (green) or `increased` (red).
-   */
+  /** Keep an exhausted power turned away while its identity changes. */
+  private async replaceMeshArtwork(texture: Texture, premium: boolean): Promise<void> {
+    const revision = ++this.replacementRevision
+    const mesh = this.meshView!
+    this.replacementActive = true
+    this.setEnabled(this.interactivityEnabled)
+    if (this.facingUp) {
+      this.facingUp = false
+      await mesh.play('HeroPower_Used')
+    } else mesh.settle('HeroPower_Used')
+    if (this.destroyed || revision !== this.replacementRevision) return
+    this.setArtwork(texture)
+    this.setPremium(premium)
+    this.facingUp = true
+    await mesh.play('HeroPower_Restore')
+    if (this.destroyed || revision !== this.replacementRevision) return
+    this.replacementActive = false
+    this.setEnabled(this.interactivityEnabled)
+    this.syncPlayableOutline()
+  }
+
   setCostColor(color: HeroPowerCostColor): void {
     this.costLabel.style.fill = COST_COLOR_VALUES[color]
+    this.meshView?.setCost(
+      Number(this.costLabel.text),
+      '#' + COST_COLOR_VALUES[color].toString(16).padStart(6, '0')
+    )
   }
 
   /**
@@ -363,9 +400,8 @@ export class HeroPowerView extends Actor {
    * same condition and additionally requires the card to be facing up and not targeting.
    */
   setEnabled(enabled: boolean): void {
-    if (this.interactivityEnabled === enabled) return
     this.interactivityEnabled = enabled
-    this.eventMode = enabled ? 'static' : 'none'
+    this.eventMode = enabled && !this.replacementActive ? 'static' : 'none'
     this.cursor = enabled ? 'pointer' : 'default'
     this.syncPlayableOutline()
   }
@@ -425,6 +461,17 @@ export class HeroPowerView extends Actor {
    */
   private flipTo(showMana: boolean): Promise<void> {
     this.facingUp = showMana
+    if (this.meshView) {
+      ++this.replacementRevision
+      this.replacementActive = false
+      this.setEnabled(this.interactivityEnabled)
+      this.syncPlayableOutline()
+      return this.meshView
+        .play(showMana ? 'HeroPower_Restore' : 'HeroPower_Used')
+        .then(() => {
+          if (!this.destroyed) this.syncPlayableOutline()
+        })
+    }
     this.killTweensOf(this.card.scale)
     const timeline = this.timeline()
     timeline.to(this.card.scale, {
@@ -448,7 +495,10 @@ export class HeroPowerView extends Actor {
 
   private syncPlayableOutline(): void {
     this.playableOutline.setEnabled(
-      this.interactivityEnabled && this.facingUp && !this.targeting
+      this.interactivityEnabled &&
+        this.facingUp &&
+        !this.targeting &&
+        !this.replacementActive
     )
   }
 
@@ -487,7 +537,18 @@ export class HeroPowerView extends Actor {
     }
   }
 
+  override pauseAnimations(): void {
+    super.pauseAnimations()
+    this.meshView?.pauseAnimations()
+  }
+  override resumeAnimations(): void {
+    super.resumeAnimations()
+    this.meshView?.resumeAnimations()
+  }
+
   override dispose(): void {
+    ++this.replacementRevision
+    this.meshView?.dispose()
     for (const { playable, hover } of this.outlines.values()) {
       playable.dispose()
       hover.dispose()

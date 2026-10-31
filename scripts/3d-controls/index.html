@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' data:; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'"
+    />
+    <title>Hearthstone · 3D controls experiment</title>
+    <link rel="stylesheet" href="style.css" />
+    <script type="module" src="viewer.mjs"></script>
+  </head>
+  <body>
+    <header>
+      <div>
+        <p class="eyebrow">HS INSPIRED / EXPERIMENT 01</p>
+        <h1>3D controls on your table.</h1>
+        <p class="intro">
+          Hold end turn to press it; release to flip, or move away to cancel. Click the
+          hero power to use or restore it.
+        </p>
+      </div>
+      <span class="badge">Standalone sandbox</span>
+    </header>
+    <main>
+      <section class="stage" aria-label="Interactive 3D controls">
+        <div id="viewport"></div>
+        <div class="actions">
+          <div>
+            <p id="end-status">Your turn</p>
+            <button id="end-flip">End turn</button
+            ><button id="end-replay" class="secondary">Replay flip</button>
+          </div>
+          <div>
+            <p id="hero-status">Ready · Fireblast</p>
+            <button id="hero-flip">Use hero power</button
+            ><button id="hero-replay" class="secondary">Replay flip</button>
+          </div>
+        </div>
+      </section>
+      <section class="toolbar" aria-label="Playback and inspection">
+        <label
+          >Playback<select id="speed">
+            <option value="0.25">¼ speed</option>
+            <option value="0.5">½ speed</option>
+            <option value="1" selected>Normal speed</option>
+          </select></label
+        >
+        <span class="camera-mode">Top-down · orthographic</span>
+        <label class="check"><input id="wireframe" type="checkbox" /> Wireframe</label>
+        <button id="reset" class="secondary">Reset both</button>
+        <span class="metric" id="metric">Loading models…</span>
+      </section>
+      <section class="timeline">
+        <label for="scrub"
+          >Inspect last flip <span id="clip-name">Click a control to begin</span></label
+        ><button id="play" class="secondary">Pause</button
+        ><input id="scrub" type="range" min="0" max="1000" value="0" /><output id="time"
+          >0.00 s</output
+        >
+      </section>
+      <footer>
+        <p>
+          The models, textures, and flip curves come from your local Hearthstone
+          installation. Lighting, portrait composition, and text are adapted for this
+          viewer. Audio, glow, and the original Unity shaders are not reproduced.
+        </p>
+        <p id="message" role="status">
+          No match is running. This app does not read or write your decks or saves.
+        </p>
+      </footer>
+    </main>
+  </body>
+</html>

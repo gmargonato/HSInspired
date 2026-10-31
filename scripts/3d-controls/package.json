@@ -1,0 +1,12 @@
+{
+  "name": "hearthstone-3d-controls-experiment",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "node launch.cjs",
+    "capture": "node launch.cjs --capture"
+  },
+  "dependencies": {
+    "three": "0.187.0"
+  }
+}
