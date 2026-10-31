@@ -1,3 +1,4 @@
+import type { MatchControlAssets } from '../../visual-components/assets/match-control-assets'
 import { prewarmMinionStatus } from './loading/minion-status-warmup'
 import { prewarmWindfury } from './loading/windfury-warmup'
 import { prewarmCardPlay } from './loading/card-play-warmup'
@@ -304,6 +305,9 @@ export class GameScene extends Scene {
 
     await this.reportLoading(0.08, 'Loading game assets')
     const gameAssets = await this.assetScope.acquire<GameAssets>(ASSET_BUNDLE_IDS.game)
+    const controlAssets = await this.assetScope.acquire<MatchControlAssets>(
+      ASSET_BUNDLE_IDS.gameControls
+    )
     this.logger?.info('[GameScene] game assets acquired')
     await this.reportLoading(0.2, 'Loading hero assets')
     const deckPresentationAssets =
@@ -392,6 +396,7 @@ export class GameScene extends Scene {
 
     await this.reportLoading(0.46, 'Building game board')
     this.view = new GameBoardView({
+      controlAssets,
       tableAssets: this.tableAssets,
       cornerId: this.selectedCorner,
       onLoadProgress: (progress) =>

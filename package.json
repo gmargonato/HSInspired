@@ -44,12 +44,14 @@
     "@electron-toolkit/preload": "^3.0.1",
     "@electron-toolkit/utils": "^3.0.0",
     "gsap": "^3.15.0",
-    "pixi.js": "^8.6.6"
+    "pixi.js": "^8.6.6",
+    "three": "0.187.0"
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^1.0.1",
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.10.2",
+    "@types/three": "^0.187.0",
     "dependency-cruiser": "^18.2.0",
     "electron": "^44.0.0",
     "electron-builder": "^26.15.3",

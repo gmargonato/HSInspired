@@ -1,3 +1,5 @@
+import { EndTurnControl, type TurnControlFace } from './end-turn-control'
+import type { MatchControls3D } from '../board/match-controls-3d'
 import type { AnimationScope } from '../../../visual-components/animation/animations'
 import { Container, Sprite, Text, type Texture } from 'pixi.js'
 import type {
@@ -36,7 +38,7 @@ export class GameHudView {
   deckInfo: DeckInfoView | null = null
   readonly turnButtonLayer = new Container()
   readonly deckTracker: DeckTrackerView
-  endTurnButton: Button | null = null
+  endTurnButton: Button | EndTurnControl | null = null
   private endTurnOutlineTarget: Sprite | null = null
   private endTurnOutline: AnimatedOutline | null = null
   private endTurnHoverOutlineTarget: Sprite | null = null
@@ -81,7 +83,9 @@ export class GameHudView {
       | 'deckInfo'
     >,
     onEndTurn: () => void,
-    initialTurnTexture: Texture = assets.endTurn
+    initialTurnTexture: Texture = assets.endTurn,
+    controls3d?: MatchControls3D,
+    initialFace: TurnControlFace = 'endTurn'
   ): void {
     this.deckInfo = new DeckInfoView(assets.deckInfo)
     this.deckInfoLayer.addChild(this.deckInfo)
@@ -110,15 +114,18 @@ export class GameHudView {
     this.endTurnHoverOutline.setEnabled(false)
     this.turnButtonLayer.addChild(this.endTurnHoverOutlineTarget)
 
-    this.endTurnButton = new Button(initialTurnTexture, {
-      highlightOnHover: false,
-      pressedScale: 0.9,
-      pressedBrightness: 1,
-      onClick: onEndTurn
-    })
+    this.endTurnButton = controls3d
+      ? new EndTurnControl(controls3d, initialTurnTexture, initialFace, onEndTurn)
+      : new Button(initialTurnTexture, {
+          highlightOnHover: false,
+          pressedScale: 0.9,
+          pressedBrightness: 1,
+          onClick: onEndTurn
+        })
     applyPlacement(this.endTurnButton, GAME_BOARD_LAYOUT.endTurnButton)
     this.endTurnButton.label = 'game.end-turn'
-    this.endTurnButton.setBaseY(GAME_BOARD_LAYOUT.endTurnButton.position.y)
+    if (this.endTurnButton instanceof Button)
+      this.endTurnButton.setBaseY(GAME_BOARD_LAYOUT.endTurnButton.position.y)
     this.endTurnButton.setEnabled(false)
     this.endTurnButton.on('pointerover', () => {
       this.endTurnHovered = true
@@ -159,13 +166,26 @@ export class GameHudView {
     this.syncEndTurnVisualState()
   }
 
-  syncEndTurnButton(texture: Texture, enabled: boolean, exhausted: boolean): void {
+  syncEndTurnButton(
+    texture: Texture,
+    enabled: boolean,
+    exhausted: boolean,
+    face: TurnControlFace = 'endTurn'
+  ): void {
     this.endTurnTexture = texture
     this.endTurnEnabled = enabled
     this.endTurnExhausted = exhausted
     const button = this.endTurnButton
     if (!button) return
 
+    if (button instanceof EndTurnControl) {
+      const transition = button.setFace(face, texture)
+      this.syncEndTurnVisualState()
+      void transition.then(() => {
+        if (!button.destroyed) this.syncEndTurnVisualState()
+      })
+      return
+    }
     if (button.sprite.texture === texture && !button.isTextureFlipping()) {
       this.syncEndTurnVisualState()
       return
@@ -300,6 +320,8 @@ export class GameHudView {
   }
 
   dispose(): void {
+    this.endTurnButton?.dispose()
+    this.endTurnButton = null
     this.deckInfoLayer.destroy({ children: true })
     this.deckInfo = null
     this.endTurnOutline?.dispose()

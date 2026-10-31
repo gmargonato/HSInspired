@@ -1,3 +1,5 @@
+import { MatchControls3D } from './match-controls-3d'
+import type { MatchControlAssets } from '../../../visual-components/assets/match-control-assets'
 import { TableView } from './table-view'
 import type { GameBoardAssets } from '../../../visual-components/assets'
 import { isPermanentBoardObject } from '../../../game-rules/match/rules/board-objects'
@@ -260,6 +262,7 @@ function isFrozen(
 }
 
 export interface GameBoardViewOptions {
+  readonly controlAssets?: MatchControlAssets
   readonly windowAttention?: WindowAttentionApi
   readonly tableAssets?: GameBoardAssets
   readonly cornerId?: string | null
@@ -373,6 +376,7 @@ interface GoldenMonkeyHandReplacement {
 
 /** Feature-owned board, opening choreography, mulligan, and local hand interaction. */
 export class GameBoardView extends Actor {
+  private controls3d?: MatchControls3D
   private pendingBoardPointer: BoardPointerSample | null = null
   private canvasBounds: DOMRect | null = null
   private canvasResizeObserver: ResizeObserver | null = null
@@ -831,6 +835,8 @@ export class GameBoardView extends Actor {
 
   constructor(private readonly options: GameBoardViewOptions) {
     super()
+    if (options.controlAssets)
+      this.controls3d = new MatchControls3D(options.controlAssets)
     this.vfxPresenter = new MatchVfxPresenter(
       options.gameAssets,
       () => this.timeline(),
@@ -1656,6 +1662,7 @@ export class GameBoardView extends Actor {
 
     this.mulligan.createControls()
     if (initialState.phase === 'turns') await this.prepareStartedMatch()
+    this.controls3d?.render()
     await this.options.onLoadProgress?.(1)
   }
 
@@ -1947,6 +1954,7 @@ export class GameBoardView extends Actor {
         costOffset: GAME_BOARD_LAYOUT.heroPowers.manaOverlay.costOffset
       }
       const view = new HeroPowerView({
+        controls3d: this.controls3d,
         layout,
         backTexture: this.options.gameAssets.heroPowerBack,
         premiumBackTexture: this.options.gameAssets.premiumHeroPowerBack,
@@ -2005,7 +2013,9 @@ export class GameBoardView extends Actor {
       () => void this.endTurn(),
       initialPlayerId === this.localParticipantId
         ? this.options.gameAssets.endTurn
-        : this.options.gameAssets.enemyTurn
+        : this.options.gameAssets.enemyTurn,
+      this.controls3d,
+      initialPlayerId === this.localParticipantId ? 'endTurn' : 'enemyTurn'
     )
     this.hud.deckTracker.zIndex = MATCH_LAYERS.deckTracker
     this.gameplayLayer.addChild(this.hud.deckTracker)
@@ -2670,7 +2680,8 @@ export class GameBoardView extends Actor {
     this.hud.syncEndTurnButton(
       localTurnTexture,
       inputEnabled,
-      inputEnabled && !this.localPlayerHasAvailableAction()
+      inputEnabled && !this.localPlayerHasAvailableAction(),
+      turnFace
     )
   }
 
@@ -9241,6 +9252,7 @@ export class GameBoardView extends Actor {
     this.inspectionPaused = true
     this.syncPassiveInspection()
     super.pauseAnimations()
+    for (const control of this.controls3d?.controls ?? []) control.pauseAnimations()
     for (const hero of this.heroViews.values()) hero.pauseAnimations()
     this.landingCracks.pauseAnimations()
     this.landingDust.pauseAnimations()
@@ -9262,6 +9274,7 @@ export class GameBoardView extends Actor {
       this.questPreviewView.hide()
     }
     this.updateBadgeBoardDesaturation()
+    this.controls3d?.render(this.inspectionPaused ? 0 : deltaMS)
     this.shadowLayer.update(deltaMS)
     this.cardSelectionOverlay.updateShadows(deltaMS)
   }
@@ -9299,6 +9312,7 @@ export class GameBoardView extends Actor {
   override resumeAnimations(): void {
     this.inspectionPaused = false
     super.resumeAnimations()
+    for (const control of this.controls3d?.controls ?? []) control.resumeAnimations()
     for (const hero of this.heroViews.values()) hero.resumeAnimations()
     this.landingCracks.resumeAnimations()
     this.landingDust.resumeAnimations()
@@ -9398,6 +9412,8 @@ export class GameBoardView extends Actor {
     this.cardPlayAnimation.dispose()
     this.choicePlayAnimation.dispose()
     this.hud.dispose()
+    this.controls3d?.dispose()
+    this.controls3d = undefined
     for (const view of this.localMinionViews) {
       view.removeFromParent()
       view.destroy({ children: true })
