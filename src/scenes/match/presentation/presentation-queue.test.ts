@@ -1645,10 +1645,15 @@ describe('deck addition animation', () => {
   })
 })
 
-describe('fire VFX match integration', () => {
-  it.each([true, false])(
-    'retains dead minion missile origins through nested death batches, local=%s',
-    async (localCaster) => {
+describe('VFX match integration', () => {
+  it.each([
+    [true, 'frost-missile-small'],
+    [false, 'frost-missile-small'],
+    [true, 'heal-target'],
+    [false, 'heal-target']
+  ] as const)(
+    'retains dead minion missile origins through nested death batches, local=%s, template=%s',
+    async (localCaster, vfxId) => {
       const value = board()
       const internal = value as unknown as {
         session: GameBoardSession
@@ -1733,7 +1738,7 @@ describe('fire VFX match integration', () => {
       ) =>
         internal.presentEffectVfx({
           type: 'effect-vfx-started',
-          vfxId: 'frost-missile-small',
+          vfxId,
           sourceInstanceId,
           controllerId: owner,
           origin,
@@ -1870,9 +1875,14 @@ describe('fire VFX match integration', () => {
     }
   )
 
-  it.each([true, false])(
-    'passes typed targets in effect-layer coordinates, local caster=%s',
-    async (localCaster) => {
+  it.each([
+    [true, 'fire-blast-all-characters'],
+    [false, 'fire-blast-all-characters'],
+    [true, 'heal-mass-all-characters'],
+    [false, 'heal-mass-all-characters']
+  ] as const)(
+    'passes typed targets in effect-layer coordinates, local caster=%s, template=%s',
+    async (localCaster, vfxId) => {
       const value = board()
       const internal = value as unknown as {
         session: GameBoardSession
@@ -1903,7 +1913,7 @@ describe('fire VFX match integration', () => {
       const play = vi.spyOn(internal.vfxPresenter, 'play').mockResolvedValue()
       await internal.presentEffectVfx({
         type: 'effect-vfx-started',
-        vfxId: 'fire-blast-all-characters',
+        vfxId,
         sourceInstanceId: 'played-spell',
         controllerId: localCaster ? owner : remote,
         actionPath: 'cast.damage',
@@ -1915,7 +1925,7 @@ describe('fire VFX match integration', () => {
         ]
       })
       expect(play).toHaveBeenCalledExactlyOnceWith(
-        expect.objectContaining({ id: 'fire-blast-all-characters' }),
+        expect.objectContaining({ id: vfxId }),
         localCaster,
         undefined,
         undefined,

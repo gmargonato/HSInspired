@@ -14,6 +14,8 @@ import type { VfxTemplate } from '../../../visual-components/effects/vfx-templat
 import type { VfxAoeZone } from '../../../desktop/contracts/ipc/vfx-templates'
 import { DEFAULT_VFX_IMPACT_SHAKE } from '../../../desktop/contracts/ipc/vfx-templates'
 import { MATCH_VFX_LAYOUT } from './match-vfx-layout'
+import { HealingEffect } from '../../../visual-components/effects/healing-effect'
+import type { HealingAssets } from '../../../visual-components/assets/healing-assets'
 
 type AreaId = keyof typeof MATCH_VFX_LAYOUT.areas
 
@@ -60,7 +62,8 @@ export class MatchVfxPresenter {
       Partial<FireAoeAssets & FireballAssets>,
     private readonly timeline: () => gsap.core.Timeline,
     private readonly renderer?: Renderer,
-    private readonly shake?: (intensity: number) => void
+    private readonly shake?: (intensity: number) => void,
+    private readonly healingAssets?: HealingAssets
   ) {
     if (renderer && assets.fireAoeWispAtlas)
       this.fireResources = new FireAoeResources(renderer, assets as FireAoeAssets)
@@ -77,11 +80,13 @@ export class MatchVfxPresenter {
     affectedTargets: readonly FireAoeTarget[] = []
   ): Promise<void> {
     const visual: VfxVisual | null =
-      template.family === 'missile'
-        ? source && target
-          ? this.makeMissile(template, source, target)
-          : null
-        : this.makeAoe(template, controllerIsLocal, affectedTargets)
+      template.family === 'heal-aoe' || template.family === 'heal-target'
+        ? this.makeHealing(template, controllerIsLocal, source, target, affectedTargets)
+        : template.family === 'missile'
+          ? source && target
+            ? this.makeMissile(template, source, target)
+            : null
+          : this.makeAoe(template, controllerIsLocal, affectedTargets)
     if (!visual) return Promise.resolve()
     const seconds =
       visual.duration ??
@@ -125,6 +130,8 @@ export class MatchVfxPresenter {
         () => {
           if (finished || impactResolved) return
           resolveImpact()
+          if (template.family === 'heal-aoe' || template.family === 'heal-target')
+            return
           const shake = template.tuning.impactShake ?? DEFAULT_VFX_IMPACT_SHAKE
           if (shake.enabled && shake.intensity > 0) this.shake?.(shake.intensity)
         },
@@ -140,6 +147,42 @@ export class MatchVfxPresenter {
       effect.finish()
     }
     this.fireResources?.destroy()
+  }
+
+  private makeHealing(
+    template: Extract<VfxTemplate, { family: 'heal-aoe' | 'heal-target' }>,
+    controllerIsLocal: boolean,
+    source: PointData | undefined,
+    target: PointData | undefined,
+    recipients: readonly FireAoeTarget[]
+  ): VfxVisual | null {
+    if (template.family === 'heal-target' && !target) return null
+    if (!this.healingAssets) throw new Error('Healing requires registered assets')
+    const areas =
+      template.family === 'heal-aoe'
+        ? matchVfxAreas(template.zones, controllerIsLocal)
+            .filter((id) => id.endsWith('Board') || id === 'bothBoards')
+            .map((id) => ({
+              ...MATCH_VFX_LAYOUT.areas[id].position,
+              ...MATCH_VFX_LAYOUT.areas[id].size
+            }))
+        : []
+    const effect = new HealingEffect(this.healingAssets, {
+      family: template.family,
+      tuning: template.tuning,
+      areas,
+      recipients,
+      source: source ?? target,
+      target
+    })
+    this.layer.addChild(effect.container)
+    effect.update(0)
+    return {
+      duration: effect.duration,
+      impactSeconds: effect.impactSeconds,
+      update: (progress, seconds) => effect.update(progress * seconds),
+      dispose: () => effect.dispose()
+    }
   }
 
   private makeMissile(

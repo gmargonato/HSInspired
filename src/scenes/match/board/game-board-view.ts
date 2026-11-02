@@ -1,3 +1,4 @@
+import type { HealingAssets } from '../../../visual-components/assets/healing-assets'
 import { MatchControls3D } from './match-controls-3d'
 import type { MatchControlAssets } from '../../../visual-components/assets/match-control-assets'
 import { TableView } from './table-view'
@@ -271,6 +272,7 @@ export interface GameBoardViewOptions {
   readonly route: GameRoute
   readonly decks: readonly Deck[]
   readonly gameAssets: GameAssets
+  readonly healingAssets?: HealingAssets
   readonly heroAssets: HeroAssets
   readonly playerStats?: PlayerStatsStore
   readonly renderer: Renderer
@@ -841,7 +843,8 @@ export class GameBoardView extends Actor {
       options.gameAssets,
       () => this.timeline(),
       options.renderer,
-      (intensity) => this.vfxImpactShake.trigger(intensity)
+      (intensity) => this.vfxImpactShake.trigger(intensity),
+      options.healingAssets
     )
     this.boardPositions = new BoardPositionController(
       { layer: this.localMinionLayer, config: this.localBoardRowConfig() },
@@ -5090,7 +5093,8 @@ export class GameBoardView extends Actor {
     if (event.action === 'restore') {
       const amount = effectHealIndicatorAmount(data)
       const indicatorDeferredToCharacterEvent =
-        event.actionPath.startsWith('hero-power.restore')
+        event.actionPath.startsWith('hero-power.restore') ||
+        event.actionPath.startsWith('hero-power.lifesteal')
       const healthAfter = numberData('healthAfter')
       if (target?.view instanceof MinionView && healthAfter !== undefined)
         target.view.setHealth(healthAfter)
@@ -5107,7 +5111,11 @@ export class GameBoardView extends Actor {
       ) {
         this.combat.showHealIndicator(target.view, amount)
       }
-      if (target?.view) await this.wait(RESOLUTION_TIMING.outcomePause)
+      if (
+        target?.view &&
+        !(event.vfxGroupId && this.presentedVfxGroups.has(event.vfxGroupId))
+      )
+        await this.wait(RESOLUTION_TIMING.outcomePause)
       return
     }
 
@@ -5190,7 +5198,7 @@ export class GameBoardView extends Actor {
           this.logger.warn('Unknown VFX effect: ' + visual.vfxId)
           return []
         }
-        if (template.family === 'aoe') {
+        if (template.family === 'aoe' || template.family === 'heal-aoe') {
           played = true
           return [
             this.vfxPresenter.play(
@@ -5222,7 +5230,7 @@ export class GameBoardView extends Actor {
           : source
             ? [source]
             : []
-        return visual.targetInstanceIds.flatMap((id) => {
+        return [...new Set(visual.targetInstanceIds)].flatMap((id) => {
           const target = pointFor(id)
           if (!target) return []
           return sources.map((missileSource) => {

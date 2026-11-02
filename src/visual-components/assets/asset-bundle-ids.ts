@@ -8,6 +8,7 @@ export const ASSET_BUNDLE_IDS = {
   deckPresentation: 'deck-presentation',
   game: 'game',
   gameControls: 'game-controls',
+  healingVfx: 'healing-vfx',
   gameTable: 'game-table',
   gameLoading: 'game-loading',
   menuSettings: 'menu-settings',

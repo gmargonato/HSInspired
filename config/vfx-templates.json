@@ -35,9 +35,7 @@
       "id": "fire-blast-enemy-board",
       "name": "Fire blast: enemy board",
       "family": "aoe",
-      "zones": [
-        "enemyBoard"
-      ],
+      "zones": ["enemyBoard"],
       "tuning": {
         "intensity": 2,
         "fire": {
@@ -55,10 +53,7 @@
       "id": "fire-blast-both-boards",
       "name": "Fire blast: both boards",
       "family": "aoe",
-      "zones": [
-        "enemyBoard",
-        "friendlyBoard"
-      ],
+      "zones": ["enemyBoard", "friendlyBoard"],
       "tuning": {
         "intensity": 2,
         "fire": {
@@ -76,12 +71,7 @@
       "id": "fire-blast-all-characters",
       "name": "Fire blast: all characters",
       "family": "aoe",
-      "zones": [
-        "enemyBoard",
-        "friendlyBoard",
-        "enemyHero",
-        "friendlyHero"
-      ],
+      "zones": ["enemyBoard", "friendlyBoard", "enemyHero", "friendlyHero"],
       "tuning": {
         "intensity": 2,
         "fire": {
@@ -99,10 +89,7 @@
       "id": "fire-blast-enemy-side",
       "name": "Fire blast: enemy side",
       "family": "aoe",
-      "zones": [
-        "enemyBoard",
-        "enemyHero"
-      ],
+      "zones": ["enemyBoard", "enemyHero"],
       "tuning": {
         "intensity": 2,
         "fire": {
@@ -120,10 +107,7 @@
       "id": "fire-blast-both-heroes",
       "name": "Fire blast: both heroes",
       "family": "aoe",
-      "zones": [
-        "enemyHero",
-        "friendlyHero"
-      ],
+      "zones": ["enemyHero", "friendlyHero"],
       "tuning": {
         "intensity": 2,
         "fire": {
@@ -141,9 +125,7 @@
       "id": "fire-blast-friendly-board",
       "name": "Fire blast: friendly board",
       "family": "aoe",
-      "zones": [
-        "friendlyBoard"
-      ],
+      "zones": ["friendlyBoard"],
       "tuning": {
         "intensity": 2,
         "fire": {
@@ -314,12 +296,7 @@
       "id": "fel-blast-all-characters",
       "name": "Demonic Green • All Characters",
       "family": "aoe",
-      "zones": [
-        "enemyBoard",
-        "friendlyBoard",
-        "enemyHero",
-        "friendlyHero"
-      ],
+      "zones": ["enemyBoard", "friendlyBoard", "enemyHero", "friendlyHero"],
       "tuning": {
         "intensity": 2,
         "fire": {
@@ -356,12 +333,7 @@
       "id": "frost-blast-all-characters",
       "name": "Frost / Storm Blue • All Characters",
       "family": "aoe",
-      "zones": [
-        "enemyBoard",
-        "friendlyBoard",
-        "enemyHero",
-        "friendlyHero"
-      ],
+      "zones": ["enemyBoard", "friendlyBoard", "enemyHero", "friendlyHero"],
       "tuning": {
         "intensity": 2,
         "fire": {
@@ -398,12 +370,7 @@
       "id": "holy-blast-all-characters",
       "name": "Orange / Gold • All Characters",
       "family": "aoe",
-      "zones": [
-        "enemyBoard",
-        "friendlyBoard",
-        "enemyHero",
-        "friendlyHero"
-      ],
+      "zones": ["enemyBoard", "friendlyBoard", "enemyHero", "friendlyHero"],
       "tuning": {
         "intensity": 2,
         "fire": {
@@ -440,12 +407,7 @@
       "id": "shadow-blast-all-characters",
       "name": "Shadow / Arcane Purple • All Characters",
       "family": "aoe",
-      "zones": [
-        "enemyBoard",
-        "friendlyBoard",
-        "enemyHero",
-        "friendlyHero"
-      ],
+      "zones": ["enemyBoard", "friendlyBoard", "enemyHero", "friendlyHero"],
       "tuning": {
         "intensity": 2,
         "fire": {
@@ -482,9 +444,7 @@
       "id": "shadow-blast-enemy-board",
       "name": "Shadow / Arcane Purple • Enemy Board",
       "family": "aoe",
-      "zones": [
-        "enemyBoard"
-      ],
+      "zones": ["enemyBoard"],
       "tuning": {
         "intensity": 2,
         "fire": {
@@ -521,10 +481,7 @@
       "id": "holy-blast-enemy-side",
       "name": "Orange / Gold • Enemy Side",
       "family": "aoe",
-      "zones": [
-        "enemyBoard",
-        "enemyHero"
-      ],
+      "zones": ["enemyBoard", "enemyHero"],
       "tuning": {
         "intensity": 2,
         "fire": {
@@ -561,10 +518,7 @@
       "id": "fel-blast-both-boards",
       "name": "Demonic Green • Both Boards",
       "family": "aoe",
-      "zones": [
-        "enemyBoard",
-        "friendlyBoard"
-      ],
+      "zones": ["enemyBoard", "friendlyBoard"],
       "tuning": {
         "intensity": 2,
         "fire": {
@@ -601,9 +555,7 @@
       "id": "frost-blast-enemy-board",
       "name": "Frost / Storm Blue • Enemy Board",
       "family": "aoe",
-      "zones": [
-        "enemyBoard"
-      ],
+      "zones": ["enemyBoard"],
       "tuning": {
         "intensity": 2,
         "fire": {
@@ -640,10 +592,7 @@
       "id": "holy-blast-both-boards",
       "name": "Orange / Gold • Both Boards",
       "family": "aoe",
-      "zones": [
-        "enemyBoard",
-        "friendlyBoard"
-      ],
+      "zones": ["enemyBoard", "friendlyBoard"],
       "tuning": {
         "intensity": 2,
         "fire": {
@@ -680,10 +629,7 @@
       "id": "shadow-blast-both-heroes",
       "name": "Shadow / Arcane Purple • Both Heroes",
       "family": "aoe",
-      "zones": [
-        "enemyHero",
-        "friendlyHero"
-      ],
+      "zones": ["enemyHero", "friendlyHero"],
       "tuning": {
         "intensity": 2,
         "fire": {
@@ -720,10 +666,7 @@
       "id": "shadow-blast-enemy-side",
       "name": "Shadow / Arcane Purple • Enemy Side",
       "family": "aoe",
-      "zones": [
-        "enemyBoard",
-        "enemyHero"
-      ],
+      "zones": ["enemyBoard", "enemyHero"],
       "tuning": {
         "intensity": 2,
         "fire": {
@@ -760,10 +703,7 @@
       "id": "shadow-blast-both-boards",
       "name": "Shadow / Arcane Purple • Both Boards",
       "family": "aoe",
-      "zones": [
-        "enemyBoard",
-        "friendlyBoard"
-      ],
+      "zones": ["enemyBoard", "friendlyBoard"],
       "tuning": {
         "intensity": 2,
         "fire": {
@@ -800,9 +740,7 @@
       "id": "fel-blast-enemy-board",
       "name": "Demonic Green • Enemy Board",
       "family": "aoe",
-      "zones": [
-        "enemyBoard"
-      ],
+      "zones": ["enemyBoard"],
       "tuning": {
         "intensity": 2,
         "fire": {
@@ -839,10 +777,7 @@
       "id": "frost-blast-both-boards",
       "name": "Frost / Storm Blue • Both Boards",
       "family": "aoe",
-      "zones": [
-        "enemyBoard",
-        "friendlyBoard"
-      ],
+      "zones": ["enemyBoard", "friendlyBoard"],
       "tuning": {
         "intensity": 2,
         "fire": {
@@ -1002,6 +937,131 @@
         "pathCurvature": -1,
         "tailMotion": 0
       }
+    },
+    {
+      "id": "heal-mass",
+      "name": "Mass Heal",
+      "family": "heal-aoe",
+      "tuning": {
+        "originalColors": true,
+        "tint": "#ffe3a0",
+        "intensity": 1,
+        "timingScale": 1,
+        "density": 1,
+        "trailDensity": 1,
+        "trailSize": 1,
+        "bloomStrength": 1,
+        "bloomScale": 1,
+        "waveScale": 1,
+        "ribbonWidth": 1,
+        "pathCurvature": 0.15,
+        "bloomOnly": false
+      },
+      "zones": ["friendlyBoard", "friendlyHero"]
+    },
+    {
+      "id": "heal-target",
+      "name": "Target Heal",
+      "family": "heal-target",
+      "tuning": {
+        "originalColors": true,
+        "tint": "#ffe3a0",
+        "intensity": 1,
+        "timingScale": 0.6,
+        "density": 1,
+        "trailDensity": 3,
+        "trailSize": 1,
+        "bloomStrength": 1,
+        "bloomScale": 1,
+        "waveScale": 1,
+        "ribbonWidth": 3,
+        "pathCurvature": 0.15,
+        "bloomOnly": false
+      }
+    },
+    {
+      "id": "heal-mass-both-boards",
+      "name": "heal-mass-both-boards",
+      "family": "heal-aoe",
+      "tuning": {
+        "originalColors": true,
+        "tint": "#ffe3a0",
+        "intensity": 1,
+        "timingScale": 1,
+        "density": 1,
+        "trailDensity": 1,
+        "trailSize": 1,
+        "bloomStrength": 1,
+        "bloomScale": 1,
+        "waveScale": 1,
+        "ribbonWidth": 1,
+        "pathCurvature": 0.15,
+        "bloomOnly": false
+      },
+      "zones": ["enemyBoard", "friendlyBoard"]
+    },
+    {
+      "id": "heal-mass-friendly-board",
+      "name": "heal-mass-friendly-board",
+      "family": "heal-aoe",
+      "tuning": {
+        "originalColors": true,
+        "tint": "#ffe3a0",
+        "intensity": 1,
+        "timingScale": 1,
+        "density": 1,
+        "trailDensity": 1,
+        "trailSize": 1,
+        "bloomStrength": 1,
+        "bloomScale": 1,
+        "waveScale": 1,
+        "ribbonWidth": 1,
+        "pathCurvature": 0.15,
+        "bloomOnly": false
+      },
+      "zones": ["friendlyBoard"]
+    },
+    {
+      "id": "heal-mass-all-characters",
+      "name": "heal-mass-all-characters",
+      "family": "heal-aoe",
+      "tuning": {
+        "originalColors": true,
+        "tint": "#ffe3a0",
+        "intensity": 1,
+        "timingScale": 1,
+        "density": 1,
+        "trailDensity": 1,
+        "trailSize": 1,
+        "bloomStrength": 1,
+        "bloomScale": 1,
+        "waveScale": 1,
+        "ribbonWidth": 1,
+        "pathCurvature": 0.15,
+        "bloomOnly": false
+      },
+      "zones": ["enemyBoard", "friendlyBoard", "enemyHero", "friendlyHero"]
+    },
+    {
+      "id": "heal-mass-both-heroes",
+      "name": "heal-mass-both-heroes",
+      "family": "heal-aoe",
+      "tuning": {
+        "originalColors": true,
+        "tint": "#ffe3a0",
+        "intensity": 1,
+        "timingScale": 1,
+        "density": 1,
+        "trailDensity": 1,
+        "trailSize": 1,
+        "bloomStrength": 1,
+        "bloomScale": 1,
+        "waveScale": 1,
+        "ribbonWidth": 1,
+        "pathCurvature": 0.15,
+        "bloomOnly": false
+      },
+      "zones": ["enemyHero", "friendlyHero"]
     }
   ]
 }

@@ -929,7 +929,10 @@ export class EffectRuntime {
         data
       ),
       ...(this.activeVfxGroup?.frame === frame &&
-      (action === 'damage' || action === 'destroy' || action === 'freeze') &&
+      (action === 'damage' ||
+        action === 'destroy' ||
+        action === 'freeze' ||
+        action === 'restore') &&
       this.activeVfxGroup.paths.some(
         (path) => actionPath === path || actionPath.startsWith(path + '.')
       )
@@ -1074,6 +1077,9 @@ export class EffectRuntime {
           ...cue,
           targetInstanceIds: outcomes.flatMap((outcome) =>
             typeof outcome.data?.target === 'string' &&
+            (outcome.action !== 'restore' ||
+              (!outcome.data.replaced &&
+                Number(outcome.data.displayAmount ?? outcome.data.amount) > 0)) &&
             configured.some(
               (entry) =>
                 entry.action.vfx === cue.vfxId &&
@@ -4448,8 +4454,38 @@ export class EffectRuntime {
     options: {
       readonly forceHealthReplacement?: boolean
       readonly skipReplacementSpellScaling?: boolean
+      readonly visualHandled?: boolean
     } = {}
   ): number {
+    // Lifesteal enters here directly, including copied/granted keywords and Jaina.
+    // Its frame must own a separate cue rather than inherit the damage visual.
+    if (
+      !options.visualHandled &&
+      this.activeVfxGroup?.frame !== frame &&
+      !this.deriving
+    ) {
+      let restored = 0
+      const replaced =
+        options.forceHealthReplacement ||
+        this.hasHealthReplacement(frame.controllerId, frame)
+      this.withActionVfx(
+        frame,
+        [
+          {
+            action: { vfx: replaced ? 'shadow-missile-small' : 'heal-target' },
+            path,
+            targets: [ref]
+          }
+        ],
+        () => {
+          restored = this.applyRestore(ref, amount, frame, path, {
+            ...options,
+            visualHandled: true
+          })
+        }
+      )
+      return restored
+    }
     const target =
       ref.kind === 'hero'
         ? this.player(ref.participantId).hero
@@ -4476,9 +4512,16 @@ export class EffectRuntime {
       displayAmount > 0
     ) {
       const replacementFrame = cloneFrame(frame, `${path}.replace-event`)
-      this.applyDamage(ref, displayAmount, replacementFrame, `${path}.replacement`, {
-        skipSpellScaling: options.skipReplacementSpellScaling
-      })
+      const visualGroup = this.activeVfxGroup
+      if (visualGroup?.frame === frame)
+        this.activeVfxGroup = { ...visualGroup, frame: replacementFrame }
+      try {
+        this.applyDamage(ref, displayAmount, replacementFrame, `${path}.replacement`, {
+          skipSpellScaling: options.skipReplacementSpellScaling
+        })
+      } finally {
+        this.activeVfxGroup = visualGroup
+      }
       this.emit(frame, 'restore', path, {
         target: ref.instanceId,
         amount: displayAmount,
@@ -9804,9 +9847,24 @@ export class EffectRuntime {
             frame.lastActionTarget = target
           }
         }
-        if (this.hasHealthReplacement(frame.controllerId, frame))
-          this.runDamageStep(restore)
-        else restore()
+        const replaced = this.hasHealthReplacement(frame.controllerId, frame)
+        this.withActionVfx(
+          frame,
+          [
+            {
+              action: {
+                ...action,
+                vfx: replaced ? 'shadow-missile-small' : (action.vfx ?? 'heal-target')
+              },
+              path,
+              targets
+            }
+          ],
+          () => {
+            if (replaced) this.runDamageStep(restore)
+            else restore()
+          }
+        )
         return
       }
       case 'return-to-play':
@@ -13919,9 +13977,17 @@ export class EffectRuntime {
           () => {
             const authoredAction =
               isRecord(action) &&
-              (action.action === 'damage' || action.action === 'destroy') &&
+              (action.action === 'damage' ||
+                action.action === 'destroy' ||
+                action.action === 'restore') &&
               effect.vfx
-                ? { ...action, vfx: effect.vfx }
+                ? {
+                    ...action,
+                    vfx:
+                      action.action === 'restore' && effect.kind === 'lifesteal-damage'
+                        ? 'heal-target'
+                        : effect.vfx
+                  }
                 : action
             this.runAction(authoredAction, frame, path)
             this.processDeaths()
@@ -14355,15 +14421,16 @@ export class EffectRuntime {
                 },
                 'hero-power.lifesteal'
               )
-              this.events.push({
-                type: 'character-healed',
-                participantId: options.participantId,
-                character: { kind: 'hero' },
-                amount: Math.max(0, player.hero.health - healthBefore),
-                attemptedAmount: dealt,
-                healthBefore,
-                healthAfter: player.hero.health
-              })
+              if (!this.hasHealthReplacement(frame.controllerId, frame))
+                this.events.push({
+                  type: 'character-healed',
+                  participantId: options.participantId,
+                  character: { kind: 'hero' },
+                  amount: Math.max(0, player.hero.health - healthBefore),
+                  attemptedAmount: dealt,
+                  healthBefore,
+                  healthAfter: player.hero.health
+                })
             }
             break
           }
@@ -14593,7 +14660,8 @@ export class EffectRuntime {
                       (event): event is EffectDomainEvent =>
                         event.type === 'effect-resolved' &&
                         event.action === 'damage' &&
-                        event.actionPath.startsWith('hero-power.damage.') &&
+                        event.actionPath.startsWith('hero-power.') &&
+                        event.data?.target === reportedTarget.instanceId &&
                         event.vfxGroupId !== undefined
                     )?.vfxGroupId,
                   participantId: reportedTarget.participantId,

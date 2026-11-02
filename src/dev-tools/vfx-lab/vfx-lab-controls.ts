@@ -1,5 +1,6 @@
 import type { Renderer } from 'pixi.js'
 import type { VfxTemplate } from '../../desktop/contracts/ipc/vfx-templates'
+import type { VfxAoeZone } from '../../desktop/contracts/ipc/vfx-templates'
 import {
   AOE_ZONES,
   type VfxEffectId,
@@ -29,6 +30,9 @@ interface ControlActions {
   saveTemplates(): void
   change(key: VfxLabSettingKey, value: VfxLabSettingValue): void
   play(): void
+  pause(): void
+  reset(): void
+  coverage(zones: VfxAoeZone[]): void
   loop(enabled: boolean): void
 }
 
@@ -314,6 +318,8 @@ export class VfxLabControls {
   private readonly saveStatus = element('p')
   private readonly parameterList = element('div')
   private readonly playButton = element('button', 'Play / Replay')
+  private readonly pauseButton = element('button', 'Pause')
+  private readonly resetButton = element('button', 'Reset healing defaults')
   private readonly loopInput = element('input')
   private readonly status = element('p')
   private readonly inputs = new Map<
@@ -386,7 +392,9 @@ export class VfxLabControls {
     this.effectSelect.setAttribute('aria-label', 'VFX effect')
     for (const [value, label] of [
       ['missile', 'Missile VFX'],
-      ['aoe', 'AoE VFX']
+      ['aoe', 'AoE VFX'],
+      ['heal-aoe', 'Mass Heal'],
+      ['heal-target', 'Target Heal']
     ] as const) {
       const option = element('option', label)
       option.value = value
@@ -411,6 +419,10 @@ export class VfxLabControls {
     this.saveStatus.setAttribute('aria-live', 'polite')
     this.playButton.type = 'button'
     this.playButton.onclick = () => actions.play()
+    this.pauseButton.type = 'button'
+    this.pauseButton.onclick = () => actions.pause()
+    this.resetButton.type = 'button'
+    this.resetButton.onclick = () => actions.reset()
     this.loopInput.type = 'checkbox'
     this.loopInput.onchange = () => actions.loop(this.loopInput.checked)
     this.status.className = 'status'
@@ -435,7 +447,7 @@ export class VfxLabControls {
     const loopLabel = element('label')
     loopLabel.className = 'loop'
     loopLabel.append(this.loopInput, document.createTextNode('Loop'))
-    toolbar.append(this.playButton, loopLabel)
+    toolbar.append(this.playButton, this.pauseButton, loopLabel)
 
     const note = element('p', 'Effects use stable keys for future card bindings.')
     note.className = 'note'
@@ -453,6 +465,7 @@ export class VfxLabControls {
       templateActions,
       scroll,
       toolbar,
+      this.resetButton,
       this.status,
       this.saveButton,
       this.saveStatus,
@@ -474,9 +487,12 @@ export class VfxLabControls {
     selectedId: string | null,
     dirty: boolean,
     saving: boolean,
-    saveMessage: string
+    saveMessage: string,
+    paused = false
   ): void {
     this.effectSelect.value = effect
+    this.pauseButton.textContent = paused ? 'Resume' : 'Pause'
+    this.resetButton.hidden = !effect.startsWith('heal-')
     const listKey =
       JSON.stringify(
         templates
@@ -510,6 +526,7 @@ export class VfxLabControls {
     this.saveButton.disabled = !dirty || saving
     this.saveStatus.textContent = saveMessage || (dirty ? 'Unsaved changes' : 'Saved')
     const parameterMode = [
+      settings.healOriginalColors,
       settings.missileOriginalColors,
       settings.firePalette,
       settings.fireGlowOverride,
@@ -536,14 +553,18 @@ export class VfxLabControls {
     }
     this.loopInput.checked = looping
     const noTargets =
-      effect === 'aoe' && selected && !AOE_ZONES.some(({ key }) => settings[key])
+      (effect === 'aoe' || effect === 'heal-aoe') &&
+      selected &&
+      !AOE_ZONES.some(({ key }) => settings[key])
     this.status.textContent = !selected
       ? 'Create an effect to preview'
       : noTargets
         ? 'Select a target zone to preview'
-        : playing
-          ? 'Playing…'
-          : 'Ready to play'
+        : paused
+          ? 'Paused'
+          : playing
+            ? 'Playing…'
+            : 'Ready to play'
   }
 
   setVisible(visible: boolean): void {
@@ -561,6 +582,139 @@ export class VfxLabControls {
     this.inputs.clear()
     this.outputs.clear()
     this.parameterList.replaceChildren()
+    if (effect === 'heal-aoe' || effect === 'heal-target') {
+      this.addGroup(
+        'Preview',
+        [
+          { key: 'opponentCaster', label: 'Preview opponent caster', type: 'checkbox' },
+          {
+            key: 'showTargetGuides',
+            label: 'Show guides / enable dragging',
+            type: 'checkbox'
+          },
+          ...(effect === 'heal-aoe'
+            ? [
+                {
+                  key: 'previewMinions' as const,
+                  label: 'Minions per row',
+                  type: 'range' as const,
+                  min: 0,
+                  max: 7,
+                  step: 1
+                }
+              ]
+            : [])
+        ],
+        settings
+      )
+      if (effect === 'heal-aoe') {
+        this.addGroup(
+          'Target zones',
+          AOE_ZONES.map(({ key, label }) => ({ key, label, type: 'checkbox' })),
+          settings
+        )
+        const presets = element('div')
+        for (const [label, zones] of [
+          ['Friendly side', ['friendlyBoard', 'friendlyHero']],
+          ['Enemy side', ['enemyBoard', 'enemyHero']],
+          ['Both boards', ['friendlyBoard', 'enemyBoard']],
+          ['All characters', AOE_ZONES.map((z) => z.key)]
+        ] as [string, VfxAoeZone[]][]) {
+          const button = element('button', label)
+          button.type = 'button'
+          button.onclick = () => this.actions.coverage(zones)
+          presets.append(button)
+        }
+        this.parameterList.append(
+          presets,
+          element(
+            'p',
+            'Click recipient circles to include or exclude their healing bloom.'
+          )
+        )
+      } else
+        this.parameterList.append(
+          element(
+            'p',
+            'Drag the source and target circles. Overlap them to preview a self-heal.'
+          )
+        )
+      this.addGroup(
+        'Healing appearance',
+        [
+          {
+            key: 'healOriginalColors',
+            label: 'Original Hearthstone colors',
+            type: 'checkbox'
+          },
+          ...(!settings.healOriginalColors
+            ? [{ key: 'healTint' as const, label: 'Tint', type: 'color' as const }]
+            : []),
+          ...(
+            [
+              ['healIntensity', 'Intensity'],
+              ['healTimingScale', 'Timing multiplier'],
+              ['healBloomScale', 'Bloom size'],
+              ['healBloomStrength', 'Bloom strength'],
+              [
+                effect === 'heal-aoe' ? 'healWaveScale' : 'healRibbonWidth',
+                effect === 'heal-aoe' ? 'Wave scale' : 'Ribbon width'
+              ]
+            ] as [VfxLabSettingKey, string][]
+          ).map(([key, label]) => ({
+            key,
+            label,
+            type: 'range' as const,
+            min: 0.25,
+            max: 3,
+            step: 0.05
+          })),
+          {
+            key: 'healDensity',
+            label: 'Particle density',
+            type: 'range',
+            min: 0,
+            max: 2,
+            step: 0.1
+          },
+          ...(effect === 'heal-target'
+            ? [
+                {
+                  key: 'healTrailDensity' as const,
+                  label: 'Trail particle count',
+                  type: 'range' as const,
+                  min: 0,
+                  max: 3,
+                  step: 0.1
+                },
+                {
+                  key: 'healTrailSize' as const,
+                  label: 'Trail particle size',
+                  type: 'range' as const,
+                  min: 0.25,
+                  max: 3,
+                  step: 0.05
+                },
+                {
+                  key: 'healCurvature' as const,
+                  label: 'Path curvature',
+                  type: 'range' as const,
+                  min: -1,
+                  max: 1,
+                  step: 0.05
+                },
+                {
+                  key: 'healBloomOnly' as const,
+                  label: 'Bloom only (no travel)',
+                  type: 'checkbox' as const
+                }
+              ]
+            : [])
+        ],
+        settings
+      )
+      return
+    }
     this.addGroup(
       'Impact',
       [

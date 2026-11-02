@@ -1,4 +1,8 @@
 import { EndTurnControl, type TurnControlFace } from './end-turn-control'
+import {
+  createEndTurnOutlineProxy,
+  END_TURN_OUTLINE_SHAPE_KEY
+} from './end-turn-outline-shape'
 import type { MatchControls3D } from '../board/match-controls-3d'
 import type { AnimationScope } from '../../../visual-components/animation/animations'
 import { Container, Sprite, Text, type Texture } from 'pixi.js'
@@ -39,11 +43,12 @@ export class GameHudView {
   readonly turnButtonLayer = new Container()
   readonly deckTracker: DeckTrackerView
   endTurnButton: Button | EndTurnControl | null = null
-  private endTurnOutlineTarget: Sprite | null = null
+  private endTurnOutlineTarget: Container | null = null
   private endTurnOutline: AnimatedOutline | null = null
-  private endTurnHoverOutlineTarget: Sprite | null = null
+  private endTurnHoverOutlineTarget: Container | null = null
   private endTurnHoverOutline: AnimatedOutline | null = null
   private endTurnHovered = false
+  private endTurnHeld = false
   private endTurnHoverSuppressed = false
   private endTurnTexture: Texture | null = null
   private endTurnEnabled = false
@@ -89,33 +94,49 @@ export class GameHudView {
   ): void {
     this.deckInfo = new DeckInfoView(assets.deckInfo)
     this.deckInfoLayer.addChild(this.deckInfo)
-    this.endTurnOutlineTarget = new Sprite(initialTurnTexture)
-    applyAnchoredPlacement(this.endTurnOutlineTarget, GAME_BOARD_LAYOUT.endTurnButton)
+    const createOutlineTarget = (): Container => {
+      if (controls3d) {
+        const proxy = createEndTurnOutlineProxy()
+        applyPlacement(proxy, GAME_BOARD_LAYOUT.endTurnButton)
+        return proxy
+      }
+      const proxy = new Sprite(initialTurnTexture)
+      applyAnchoredPlacement(proxy, GAME_BOARD_LAYOUT.endTurnButton)
+      return proxy
+    }
+    this.endTurnOutlineTarget = createOutlineTarget()
     this.endTurnOutlineTarget.eventMode = 'none'
     this.endTurnOutlineTarget.label = 'game.end-turn-exhausted-outline-target'
     this.endTurnOutline = new AnimatedOutline(this.endTurnOutlineTarget, {
       palette: 'green',
-      preset: 'end-turn'
+      preset: 'end-turn',
+      sharedShapeKey: controls3d ? END_TURN_OUTLINE_SHAPE_KEY : undefined
     })
     this.endTurnOutline.setEnabled(false)
     this.turnButtonLayer.addChild(this.endTurnOutlineTarget)
 
-    this.endTurnHoverOutlineTarget = new Sprite(initialTurnTexture)
-    applyAnchoredPlacement(
-      this.endTurnHoverOutlineTarget,
-      GAME_BOARD_LAYOUT.endTurnButton
-    )
+    this.endTurnHoverOutlineTarget = createOutlineTarget()
     this.endTurnHoverOutlineTarget.eventMode = 'none'
     this.endTurnHoverOutlineTarget.label = 'game.end-turn-hover-outline-target'
     this.endTurnHoverOutline = new AnimatedOutline(this.endTurnHoverOutlineTarget, {
       palette: 'white',
-      preset: 'end-turn'
+      preset: 'end-turn',
+      sharedShapeKey: controls3d ? END_TURN_OUTLINE_SHAPE_KEY : undefined
     })
     this.endTurnHoverOutline.setEnabled(false)
     this.turnButtonLayer.addChild(this.endTurnHoverOutlineTarget)
 
     this.endTurnButton = controls3d
-      ? new EndTurnControl(controls3d, initialTurnTexture, initialFace, onEndTurn)
+      ? new EndTurnControl(
+          controls3d,
+          initialTurnTexture,
+          initialFace,
+          onEndTurn,
+          (held) => {
+            this.endTurnHeld = held
+            this.syncEndTurnOutlines()
+          }
+        )
       : new Button(initialTurnTexture, {
           highlightOnHover: false,
           pressedScale: 0.9,
@@ -195,8 +216,9 @@ export class GameHudView {
     // advance to the next face before the button reaches its midpoint.
     this.endTurnOutline?.setEnabled(false)
     this.endTurnHoverOutline?.setEnabled(false)
-    if (this.endTurnOutlineTarget) this.endTurnOutlineTarget.texture = texture
-    if (this.endTurnHoverOutlineTarget) {
+    if (this.endTurnOutlineTarget instanceof Sprite)
+      this.endTurnOutlineTarget.texture = texture
+    if (this.endTurnHoverOutlineTarget instanceof Sprite) {
       this.endTurnHoverOutlineTarget.texture = texture
     }
     void button.flipTextureVertically(texture, END_TURN_FLIP_DURATION).then(() => {
@@ -360,19 +382,34 @@ export class GameHudView {
     const button = this.endTurnButton
     if (!button) return
     button.setEnabled(this.endTurnEnabled)
-    if (!this.endTurnEnabled || button.isTextureFlipping()) {
+    this.syncEndTurnOutlines()
+  }
+
+  private syncEndTurnOutlines(): void {
+    const button = this.endTurnButton
+    if (!button) return
+    if (
+      !this.endTurnEnabled ||
+      button.eventMode === 'none' ||
+      button.isTextureFlipping()
+    ) {
       // Pixi stops hit testing a disabled button, so `pointerout` never fires.
       this.endTurnHovered = false
     }
-    if (this.endTurnOutlineTarget) {
+    if (this.endTurnOutlineTarget instanceof Sprite) {
       this.endTurnOutlineTarget.texture = button.sprite.texture
     }
-    if (this.endTurnHoverOutlineTarget) {
+    if (this.endTurnHoverOutlineTarget instanceof Sprite) {
       this.endTurnHoverOutlineTarget.texture = button.sprite.texture
     }
     const settled =
-      button.sprite.texture === this.endTurnTexture && !button.isTextureFlipping()
-    this.endTurnOutline?.setEnabled(this.endTurnExhausted && settled)
+      button.sprite.texture === this.endTurnTexture &&
+      !button.isTextureFlipping() &&
+      !this.endTurnHeld &&
+      button.eventMode !== 'none'
+    this.endTurnOutline?.setEnabled(
+      this.endTurnEnabled && this.endTurnExhausted && settled
+    )
     this.endTurnHoverOutline?.setEnabled(
       this.endTurnEnabled &&
         this.endTurnHovered &&

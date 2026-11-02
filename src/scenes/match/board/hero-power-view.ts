@@ -165,7 +165,11 @@ export class HeroPowerView extends Actor {
         palette: 'green' | 'white',
         label: string
       ): AnimatedOutline => {
-        const proxy = createHeroPowerOutlineProxy(texture)
+        const proxy = createHeroPowerOutlineProxy(
+          texture,
+          !!options.controls3d,
+          premium
+        )
         proxy.pivot.set(
           HERO_POWER_ICON_CANVAS.width * cardPlacement.anchor.x,
           HERO_POWER_ICON_CANVAS.height * cardPlacement.anchor.y
@@ -177,7 +181,7 @@ export class HeroPowerView extends Actor {
         const outline = new AnimatedOutline(proxy, {
           palette,
           preset: 'hero-power',
-          sharedShapeKey: heroPowerOutlineShapeKey(texture)
+          sharedShapeKey: heroPowerOutlineShapeKey(texture, !!options.controls3d)
         })
         outline.setEnabled(false)
         return outline

@@ -1060,6 +1060,7 @@
         "actions": [
           {
             "action": "restore",
+            "vfx": "heal-target",
             "target": {
               "controller": "any",
               "type": "character",
@@ -2037,11 +2038,13 @@
         "actions": [
           {
             "action": "restore",
+            "vfx": "heal-target",
             "target": { "controller": "any", "type": "minion", "selection": "chosen" },
             "amount": 5
           },
           {
             "action": "restore",
+            "vfx": "heal-target",
             "target": { "controller": "self", "type": "hero", "selection": "hero" },
             "amount": 5
           }
@@ -4722,6 +4725,7 @@
         "actions": [
           {
             "action": "restore",
+            "vfx": "heal-target",
             "target": {
               "controller": "any",
               "type": "character",

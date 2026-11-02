@@ -1,4 +1,5 @@
 import { MATCH_CONTROL_ASSETS } from './match-control-assets'
+import { HEALING_ASSETS } from './healing-assets'
 import type { GhostTextures } from '../effects/ghost-materials'
 import ghostCloudsImage from '@assets/images/effects/ghost-clouds.png'
 import ghostBannerAtlasImage from '@assets/images/effects/ghost-banner-atlas.png'
@@ -321,6 +322,7 @@ import { asset, type AssetDefinition } from './asset-definition'
 
 const bespokeAssetDefinitions: readonly AssetDefinition[] = [
   ...MATCH_CONTROL_ASSETS,
+  ...HEALING_ASSETS,
   asset(
     'scene.main-menu.dust-round',
     ASSET_BUNDLE_IDS.mainMenu,

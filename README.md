@@ -140,6 +140,12 @@ straight path for Leper Gnome. **Nature — Left curve** supplies the same palet
 with maximum left curvature for existing Druid Nature missiles (including both
 Wrath choices). Arcane missiles use maximum right curvature.
 
+The VFX Lab also previews **Mass Heal** and **Target Heal**, with caster-relative
+coverage, recipient toggles, draggable endpoints, and saved appearance settings.
+These healing effects also play in matches for healing cards, hero powers, and Lifesteal.
+See [the healing lab guide](docs/healing-vfx.md) for controls, source assets, and
+validation commands.
+
 The VFX Lab derives board-effect placement from the match layout with the same
 translation as the board artwork. Heat filters retain their full quad bounds so
 viewport clipping cannot stretch or reposition the fire. Flame and smoke billows

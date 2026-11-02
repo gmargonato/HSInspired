@@ -6,6 +6,13 @@ export const HERO_POWER_CARD_CANVAS = { width: 620, height: 903 } as const
 /** Authored geometry shared by board, discovery, and history presentations. */
 export const HERO_POWER_PRESENTATION_LAYOUT = {
   name: 'Hero power presentation',
+  // Board-only proxy for the overhead 3D mesh. Inset two pixels to overlap
+  // its frame; full-card and legacy icon presentations keep their geometry.
+  boardOutline: {
+    center: { x: 72, y: 74 },
+    radius: 73,
+    premiumCrown: [45, 24, 49, -8, 51, -9, 85, -4, 103, 1, 120, 17]
+  },
   icon: {
     artwork: placement(
       { x: 75, y: 77 },

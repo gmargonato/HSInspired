@@ -83,7 +83,56 @@ interface VfxCommonTuning {
   readonly durationMs: number
 }
 
+export interface HealingTuning {
+  readonly trailDensity: number
+  readonly trailSize: number
+  readonly bloomStrength: number
+  readonly impactShake?: never
+  readonly originalColors: boolean
+  readonly tint: string
+  readonly intensity: number
+  readonly timingScale: number
+  readonly density: number
+  readonly bloomScale: number
+  readonly waveScale: number
+  readonly ribbonWidth: number
+  readonly pathCurvature: number
+  readonly bloomOnly: boolean
+}
+
+export const DEFAULT_HEALING_TUNING: HealingTuning = {
+  originalColors: true,
+  tint: '#ffe3a0',
+  intensity: 1,
+  timingScale: 1,
+  density: 1,
+  trailDensity: 1,
+  trailSize: 1,
+  bloomStrength: 1,
+  bloomScale: 1,
+  waveScale: 1,
+  ribbonWidth: 1,
+  pathCurvature: 0.15,
+  bloomOnly: false
+}
+
+export type HealingTemplate =
+  | {
+      readonly id: string
+      readonly name: string
+      readonly family: 'heal-aoe'
+      readonly zones: readonly VfxAoeZone[]
+      readonly tuning: HealingTuning
+    }
+  | {
+      readonly id: string
+      readonly name: string
+      readonly family: 'heal-target'
+      readonly tuning: HealingTuning
+    }
+
 export type VfxTemplate =
+  | HealingTemplate
   | {
       readonly id: string
       readonly name: string
@@ -304,6 +353,44 @@ export function parseVfxTemplateLibrary(value: unknown): VfxTemplateLibrary {
     if (typeof item.name !== 'string' || !item.name.trim() || item.name.length > 80)
       throw new Error(`Invalid VFX template name: ${item.id}`)
     const values = record(item.tuning, 'tuning')
+    if (item.family === 'heal-aoe' || item.family === 'heal-target') {
+      const tuning = Object.fromEntries(
+        Object.entries(DEFAULT_HEALING_TUNING).map(([key, fallback]) => [
+          key,
+          values[key] ?? fallback
+        ])
+      ) as unknown as HealingTuning
+      for (const key of ['originalColors', 'bloomOnly'] as const)
+        if (typeof tuning[key] !== 'boolean') throw new Error('Invalid healing ' + key)
+      if (!/^#[0-9a-f]{6}$/i.test(tuning.tint)) throw new Error('Invalid healing tint')
+      for (const key of [
+        'intensity',
+        'timingScale',
+        'bloomScale',
+        'trailSize',
+        'bloomStrength',
+        'waveScale',
+        'ribbonWidth'
+      ] as const)
+        numberInRange(tuning[key], 0.25, 3, 'healing.' + key)
+      numberInRange(tuning.density, 0, 2, 'healing.density')
+      numberInRange(tuning.trailDensity, 0, 3, 'healing.trailDensity')
+      numberInRange(tuning.pathCurvature, -1, 1, 'healing.pathCurvature')
+      if (item.family === 'heal-target')
+        return { id: item.id, name: item.name.trim(), family: item.family, tuning }
+      if (
+        !Array.isArray(item.zones) ||
+        item.zones.some((z) => !VFX_AOE_ZONES.includes(z as VfxAoeZone))
+      )
+        throw new Error('Invalid healing zones')
+      return {
+        id: item.id,
+        name: item.name.trim(),
+        family: item.family,
+        tuning,
+        zones: [...new Set(item.zones)] as VfxAoeZone[]
+      }
+    }
     if (item.family === 'missile')
       return {
         id: item.id,

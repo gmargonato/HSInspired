@@ -5,7 +5,6 @@ import frameShadow3 from '@assets/images/cards/shadow-frame-weapon.png'
 import frameShadow4 from '@assets/images/cards/shadow-frame-hero.png'
 import armorImage from '@assets/images/cards/armor.png'
 import premiumScrollTextureImage from '@assets/images/effects/premium-scroll-texture.png'
-import crystalScrollTextureImage from '@assets/images/effects/crystal-scroll-texture.png'
 import attackImage from '@assets/images/cards/ATTACK.png'
 import minionNameImage from '@assets/images/cards/minion-name.png'
 import spellNameImage from '@assets/images/cards/spell-name.png'
@@ -112,13 +111,6 @@ export const CARD_ASSET_DEFINITIONS = [
   cardAsset('card.frame-shadow.spell', 'shadow-frame-spell.png', frameShadow2, 565, 482),
   cardAsset('card.frame-shadow.weapon', 'shadow-frame-weapon.png', frameShadow3, 505, 500),
   cardAsset('card.frame-shadow.hero', 'shadow-frame-hero.png', frameShadow4, 433, 490),
-  cardAsset(
-    'card.effect.crystal-scroll',
-    'crystal-scroll-texture.png',
-    crystalScrollTextureImage,
-    256,
-    256
-  ),
   cardAsset(
     'card.effect.premium-scroll',
     'premium-scroll-texture.png',

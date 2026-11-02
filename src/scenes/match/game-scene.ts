@@ -1,3 +1,4 @@
+import type { HealingAssets } from '../../visual-components/assets/healing-assets'
 import type { MatchControlAssets } from '../../visual-components/assets/match-control-assets'
 import { prewarmMinionStatus } from './loading/minion-status-warmup'
 import { prewarmWindfury } from './loading/windfury-warmup'
@@ -305,6 +306,9 @@ export class GameScene extends Scene {
 
     await this.reportLoading(0.08, 'Loading game assets')
     const gameAssets = await this.assetScope.acquire<GameAssets>(ASSET_BUNDLE_IDS.game)
+    const healingAssets = await this.assetScope.acquire<HealingAssets>(
+      ASSET_BUNDLE_IDS.healingVfx
+    )
     const controlAssets = await this.assetScope.acquire<MatchControlAssets>(
       ASSET_BUNDLE_IDS.gameControls
     )
@@ -407,6 +411,7 @@ export class GameScene extends Scene {
       route: matchRoute,
       decks,
       gameAssets,
+      healingAssets,
       heroAssets,
       playerStats: this.playerStatsStore,
       renderer: this.appInstance.renderer,

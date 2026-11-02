@@ -26,12 +26,16 @@ import {
   type VfxLabSettings
 } from './vfx-lab-model'
 import { VFX_LAB_LAYOUT as LAYOUT } from './vfx-lab-layout'
+import { HealingEffect } from '../../visual-components/effects/healing-effect'
+import type { HealingAssets } from '../../visual-components/assets/healing-assets'
+import { healingPreview } from './healing-preview'
 
 interface VfxLabOptions {
   readonly canvas: HTMLCanvasElement
   readonly renderer: Renderer
   readonly parent: HTMLElement
   readonly assets: GameAssets
+  readonly healingAssets: HealingAssets
 }
 
 function makeMarker(label: string, color: number): Container {
@@ -57,10 +61,17 @@ export class VfxLab extends Container {
   private missileEffect?: FireballEffect
   private readonly fireResources: FireAoeResources
   private fireEffect?: FireAoeEffect
+  private healingEffect?: HealingEffect
+  private paused = false
+  private readonly excludedRecipients = new Set<string>()
+  private readonly healSource = { ...LAYOUT.missile.source.position }
+  private readonly healTarget = { ...LAYOUT.missile.target.position }
+  private dragging: 'source' | 'target' | null = null
   private readonly fireTargets = new Graphics()
   private get playbackDurationMS(): number {
     return (
-      (this.fireEffect?.duration ??
+      (this.healingEffect?.duration ??
+        this.fireEffect?.duration ??
         this.missileEffect?.duration ??
         this.settings.durationMs / 1000) * 1000
     )
@@ -81,7 +92,16 @@ export class VfxLab extends Container {
   private saveMessage = ''
   private readonly effectSettings: Record<VfxEffectId, VfxLabSettings> = {
     missile: { ...DEFAULT_VFX_LAB_SETTINGS },
-    aoe: { ...DEFAULT_VFX_LAB_SETTINGS }
+    aoe: { ...DEFAULT_VFX_LAB_SETTINGS },
+    'heal-aoe': {
+      ...DEFAULT_VFX_LAB_SETTINGS,
+      showTargetGuides: true,
+      enemyBoard: false,
+      enemyHero: false,
+      friendlyBoard: true,
+      friendlyHero: true
+    },
+    'heal-target': { ...DEFAULT_VFX_LAB_SETTINGS, showTargetGuides: true }
   }
   private get settings(): VfxLabSettings {
     return this.effectSettings[this.selectedEffect]
@@ -151,17 +171,41 @@ export class VfxLab extends Container {
         saveTemplates: () => void this.saveTemplates(),
         change: (key, value) => this.changeSetting(key, value),
         play: () => this.play(),
+        pause: () => {
+          this.paused = !this.paused
+          this.refreshControls()
+        },
+        reset: () => this.resetHealing(),
+        coverage: (zones) => {
+          for (const key of [
+            'friendlyBoard',
+            'enemyBoard',
+            'friendlyHero',
+            'enemyHero'
+          ] as const)
+            this.settings[key] = zones.includes(key)
+          if (this.selectedTemplate)
+            this.replaceSelectedTemplate(
+              templateFromSettings(this.selectedTemplate, this.settings)
+            )
+          this.markDirty()
+          this.play()
+        },
         loop: (enabled) => this.setLooping(enabled)
       }
     )
     this.loadSelectedTemplate()
+    options.canvas.addEventListener('pointerdown', this.pointerDown)
+    options.canvas.addEventListener('pointermove', this.pointerMove)
+    options.canvas.addEventListener('pointerup', this.pointerUp)
+    options.canvas.addEventListener('pointercancel', this.pointerUp)
     this.setEffectVisibility()
     this.refreshControls()
     this.play()
   }
 
   update(deltaMS: number): void {
-    if (this.disposed) return
+    if (this.disposed || this.paused) return
     const delta = Math.max(0, Math.min(deltaMS, 100))
     this.clockSeconds += delta / 1000
     if (this.playing) {
@@ -179,6 +223,7 @@ export class VfxLab extends Container {
 
     this.updateMissile()
     this.updateAoe()
+    this.healingEffect?.update(this.elapsedMS / 1000)
     this.updateImpactShake()
   }
 
@@ -192,6 +237,11 @@ export class VfxLab extends Container {
     this.impactShake.dispose()
     this.animations.kill()
     this.fireEffect?.dispose()
+    this.healingEffect?.dispose()
+    this.options.canvas.removeEventListener('pointerdown', this.pointerDown)
+    this.options.canvas.removeEventListener('pointermove', this.pointerMove)
+    this.options.canvas.removeEventListener('pointerup', this.pointerUp)
+    this.options.canvas.removeEventListener('pointercancel', this.pointerUp)
     this.fireResources.destroy()
     this.controls.dispose()
     this.missileEffect?.dispose()
@@ -199,6 +249,7 @@ export class VfxLab extends Container {
 
   private selectEffect(effect: VfxEffectId): void {
     if (this.disposed || this.selectedEffect === effect) return
+    this.dragging = null
     this.selectedEffect = effect
     this.selectedTemplateId =
       this.templates.find((template) => template.family === effect)?.id ?? null
@@ -221,7 +272,18 @@ export class VfxLab extends Container {
     const template = this.selectedTemplate
     if (template)
       this.settings = settingsFromTemplate(template, this.settings.showTargetGuides)
-    else this.settings = { ...DEFAULT_VFX_LAB_SETTINGS }
+    else
+      this.settings = {
+        ...DEFAULT_VFX_LAB_SETTINGS,
+        ...(this.selectedEffect === 'heal-aoe'
+          ? {
+              enemyBoard: false,
+              enemyHero: false,
+              friendlyBoard: true,
+              friendlyHero: true
+            }
+          : {})
+      }
   }
 
   private replaceSelectedTemplate(template: VfxTemplate): void {
@@ -251,13 +313,19 @@ export class VfxLab extends Container {
       template = { ...structuredClone(selected), id: this.uniqueId(name), name }
     } else {
       const name =
-        this.selectedEffect === 'aoe' ? 'New AoE effect' : 'New missile effect'
+        this.selectedEffect === 'heal-aoe'
+          ? 'New mass heal'
+          : this.selectedEffect === 'heal-target'
+            ? 'New target heal'
+            : this.selectedEffect === 'aoe'
+              ? 'New AoE effect'
+              : 'New missile effect'
       const id = this.uniqueId(name)
       template = createTemplateFromSettings(
         id,
         name,
         this.selectedEffect,
-        DEFAULT_VFX_LAB_SETTINGS
+        this.settings
       )
     }
     this.templates.push(template)
@@ -311,7 +379,8 @@ export class VfxLab extends Container {
       this.selectedTemplateId,
       this.revision !== this.savedRevision,
       this.saving,
-      this.saveMessage
+      this.saveMessage,
+      this.paused
     )
   }
 
@@ -370,6 +439,9 @@ export class VfxLab extends Container {
   }
 
   private play(): void {
+    this.paused = false
+    this.healingEffect?.dispose()
+    this.healingEffect = undefined
     this.impactShake.reset()
     this.impactTriggered = false
     this.missileEffect?.dispose()
@@ -379,7 +451,27 @@ export class VfxLab extends Container {
     this.fireTargets.clear()
     if (this.disposed || !this.selectedTemplate) return
     const template = this.selectedTemplate
-    if (template.family === 'missile') {
+    if (template.family === 'heal-aoe' || template.family === 'heal-target') {
+      const preview = healingPreview(this.settings, this.excludedRecipients)
+      const source = this.settings.opponentCaster ? this.healTarget : this.healSource,
+        target = this.settings.opponentCaster ? this.healSource : this.healTarget
+      this.healingEffect = new HealingEffect(this.options.healingAssets, {
+        family: template.family,
+        tuning: template.tuning,
+        source,
+        target,
+        ...preview
+      })
+      this.addChild(this.healingEffect.container)
+      if (template.family === 'heal-aoe')
+        for (const p of preview.candidates)
+          this.fireTargets.circle(p.x, p.y, 24).stroke({
+            color: this.excludedRecipients.has(p.id) ? 0x777777 : 0x86ffaf,
+            width: 2,
+            alpha: 0.9
+          })
+      this.addChild(this.fireTargets, this.missileSource, this.missileTarget)
+    } else if (template.family === 'missile') {
       this.missileEffect = new FireballEffect(
         this.options.renderer,
         this.options.assets,
@@ -464,11 +556,23 @@ export class VfxLab extends Container {
   }
 
   private setEffectVisibility(): void {
-    const source = LAYOUT.missile.source.position
-    const target = LAYOUT.missile.target.position
+    const healing = this.selectedEffect === 'heal-target'
+    const source = healing
+      ? this.settings.opponentCaster
+        ? this.healTarget
+        : this.healSource
+      : LAYOUT.missile.source.position
+    const target = healing
+      ? this.settings.opponentCaster
+        ? this.healSource
+        : this.healTarget
+      : LAYOUT.missile.target.position
+    this.missileSource.position.copyFrom(source)
+    this.missileTarget.position.copyFrom(target)
     const dx = target.x - source.x
     const dy = target.y - source.y
-    const bend = this.settings.pathCurvature * 0.5
+    const bend =
+      (healing ? this.settings.healCurvature : this.settings.pathCurvature) * 0.5
     this.missileGuide
       .clear()
       .moveTo(source.x, source.y)
@@ -479,7 +583,7 @@ export class VfxLab extends Container {
         target.y
       )
       .stroke({ color: 0xb79061, alpha: 0.26, width: 2 })
-    const missile = this.selectedEffect === 'missile'
+    const missile = this.selectedEffect === 'missile' || healing
     this.missileGuide.visible =
       missile && !!this.selectedTemplate && this.settings.showTargetGuides
     this.missileGroup.visible = missile && !!this.selectedTemplate
@@ -504,6 +608,7 @@ export class VfxLab extends Container {
   private updateImpactShake(): void {
     if (this.impactTriggered || !this.selectedTemplate) return
     const template = this.selectedTemplate
+    if (template.family === 'heal-aoe' || template.family === 'heal-target') return
     const impact =
       template.family === 'missile'
         ? this.missileEffect?.impactSeconds
@@ -514,5 +619,73 @@ export class VfxLab extends Container {
     this.impactTriggered = true
     if (this.settings.impactShakeEnabled)
       this.impactShake.trigger(this.settings.shakeIntensity)
+  }
+
+  private resetHealing(): void {
+    if (!this.selectedEffect.startsWith('heal-') || !this.selectedTemplate) return
+    this.settings = {
+      ...DEFAULT_VFX_LAB_SETTINGS,
+      showTargetGuides: true,
+      enemyBoard: false,
+      enemyHero: false,
+      friendlyBoard: true,
+      friendlyHero: true
+    }
+    this.excludedRecipients.clear()
+    Object.assign(this.healSource, LAYOUT.missile.source.position)
+    Object.assign(this.healTarget, LAYOUT.missile.target.position)
+    this.replaceSelectedTemplate(
+      templateFromSettings(this.selectedTemplate, this.settings)
+    )
+    this.markDirty()
+    this.play()
+  }
+  private pointerPosition(event: PointerEvent) {
+    const rect = this.options.canvas.getBoundingClientRect()
+    return this.toLocal({
+      x:
+        ((event.clientX - rect.left) * this.options.renderer.screen.width) / rect.width,
+      y:
+        ((event.clientY - rect.top) * this.options.renderer.screen.height) / rect.height
+    })
+  }
+  private readonly pointerDown = (event: PointerEvent): void => {
+    if (event.button !== 0 || !this.settings.showTargetGuides) return
+    const p = this.pointerPosition(event)
+    if (this.selectedEffect === 'heal-aoe') {
+      const target = healingPreview(
+        this.settings,
+        this.excludedRecipients
+      ).candidates.find((t) => Math.hypot(t.x - p.x, t.y - p.y) < 30)
+      if (target) {
+        if (this.excludedRecipients.has(target.id))
+          this.excludedRecipients.delete(target.id)
+        else this.excludedRecipients.add(target.id)
+        this.play()
+      }
+    } else if (this.selectedEffect === 'heal-target') {
+      this.dragging =
+        Math.hypot(p.x - this.healSource.x, p.y - this.healSource.y) < 40
+          ? 'source'
+          : Math.hypot(p.x - this.healTarget.x, p.y - this.healTarget.y) < 40
+            ? 'target'
+            : null
+      if (this.dragging) this.options.canvas.setPointerCapture(event.pointerId)
+    }
+  }
+  private readonly pointerMove = (event: PointerEvent): void => {
+    if (!this.dragging) return
+    const p = this.pointerPosition(event),
+      panel = LAYOUT.previewPanel
+    Object.assign(this.dragging === 'source' ? this.healSource : this.healTarget, {
+      x: Math.max(panel.position.x, Math.min(panel.position.x + panel.size.width, p.x)),
+      y: Math.max(panel.position.y, Math.min(panel.position.y + panel.size.height, p.y))
+    })
+    this.play()
+  }
+  private readonly pointerUp = (event: PointerEvent): void => {
+    this.dragging = null
+    if (this.options.canvas.hasPointerCapture(event.pointerId))
+      this.options.canvas.releasePointerCapture(event.pointerId)
   }
 }

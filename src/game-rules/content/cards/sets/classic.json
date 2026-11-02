@@ -357,6 +357,7 @@
               "actions": [
                 {
                   "action": "restore",
+                  "vfx": "heal-target",
                   "target": {
                     "controller": "any",
                     "type": "character",
@@ -447,6 +448,7 @@
         "actions": [
           {
             "action": "restore",
+            "vfx": "heal-target",
             "target": {
               "controller": "any",
               "type": "character",
@@ -1786,6 +1788,7 @@
         "actions": [
           {
             "action": "restore",
+            "vfx": "heal-mass-both-boards",
             "target": {
               "controller": "any",
               "type": "minion",
@@ -2909,6 +2912,7 @@
         "actions": [
           {
             "action": "restore",
+            "vfx": "heal-target",
             "target": {
               "controller": "any",
               "type": "character",
@@ -4126,6 +4130,7 @@
           },
           {
             "action": "restore",
+            "vfx": "heal-target",
             "target": {
               "controller": "self",
               "type": "hero",
@@ -4166,6 +4171,7 @@
           },
           {
             "action": "restore",
+            "vfx": "heal-mass",
             "target": {
               "controller": "self",
               "type": "character",
@@ -5031,6 +5037,7 @@
         "actions": [
           {
             "action": "restore",
+            "vfx": "heal-target",
             "target": {
               "controller": "any",
               "type": "character",
@@ -5370,6 +5377,7 @@
         "actions": [
           {
             "action": "restore",
+            "vfx": "heal-target",
             "target": {
               "controller": "self",
               "type": "character",
@@ -6421,6 +6429,7 @@
         "actions": [
           {
             "action": "restore",
+            "vfx": "heal-target",
             "target": {
               "controller": "self",
               "type": "hero",
@@ -6804,6 +6813,7 @@
         "actions": [
           {
             "action": "restore",
+            "vfx": "heal-target",
             "target": {
               "controller": "self",
               "type": "hero",
@@ -7752,6 +7762,7 @@
           },
           {
             "action": "restore",
+            "vfx": "heal-target",
             "target": {
               "controller": "self",
               "type": "hero",
@@ -8801,6 +8812,7 @@
         "actions": [
           {
             "action": "restore",
+            "vfx": "heal-target",
             "target": {
               "controller": "self",
               "type": "hero",

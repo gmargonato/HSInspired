@@ -1,12 +1,13 @@
 import type { VfxAoeZone } from '../../desktop/contracts/ipc/vfx-templates'
 import type { VfxTemplate } from '../../desktop/contracts/ipc/vfx-templates'
+import { DEFAULT_HEALING_TUNING } from '../../desktop/contracts/ipc/vfx-templates'
 import {
   DEFAULT_FIRE_AOE_TUNING,
   DEFAULT_FIRE_AOE_DYNAMICS,
   DEFAULT_VFX_IMPACT_SHAKE
 } from '../../desktop/contracts/ipc/vfx-templates'
 
-export type VfxEffectId = 'missile' | 'aoe'
+export type VfxEffectId = VfxTemplate['family']
 
 export const AOE_ZONES = [
   { key: 'enemyBoard', label: 'Enemy board' },
@@ -17,6 +18,19 @@ export const AOE_ZONES = [
 export type AoeZoneId = VfxAoeZone
 
 export interface VfxLabSettings {
+  healTrailDensity: number
+  healTrailSize: number
+  healBloomStrength: number
+  healOriginalColors: boolean
+  healTint: string
+  healIntensity: number
+  healTimingScale: number
+  healDensity: number
+  healBloomScale: number
+  healWaveScale: number
+  healRibbonWidth: number
+  healCurvature: number
+  healBloomOnly: boolean
   impactShakeEnabled: boolean
   shakeIntensity: number
   impactShakeAuthored: boolean
@@ -91,6 +105,19 @@ export type VfxLabSettingValue = string | number | boolean
 const VFX_DEFAULT_MISSILE_LENGTH = 550
 
 export const DEFAULT_VFX_LAB_SETTINGS: VfxLabSettings = {
+  healOriginalColors: true,
+  healTint: '#ffe3a0',
+  healIntensity: 1,
+  healTimingScale: 1,
+  healDensity: 1,
+  healTrailDensity: 1,
+  healTrailSize: 1,
+  healBloomStrength: 1,
+  healBloomScale: 1,
+  healWaveScale: 1,
+  healRibbonWidth: 1,
+  healCurvature: 0.15,
+  healBloomOnly: false,
   impactShakeEnabled: DEFAULT_VFX_IMPACT_SHAKE.enabled,
   shakeIntensity: DEFAULT_VFX_IMPACT_SHAKE.intensity,
   impactShakeAuthored: false,
@@ -167,6 +194,29 @@ export function settingsFromTemplate(
     ...DEFAULT_VFX_LAB_SETTINGS,
     ...template.tuning,
     showTargetGuides
+  }
+  if (template.family === 'heal-aoe' || template.family === 'heal-target') {
+    const t = template.tuning
+    Object.assign(settings, {
+      healOriginalColors: t.originalColors,
+      healTint: t.tint,
+      healIntensity: t.intensity,
+      healTimingScale: t.timingScale,
+      healDensity: t.density,
+      healTrailDensity: t.trailDensity,
+      healTrailSize: t.trailSize,
+      healBloomStrength: t.bloomStrength,
+      healBloomScale: t.bloomScale,
+      healWaveScale: t.waveScale,
+      healRibbonWidth: t.ribbonWidth,
+      healCurvature: t.pathCurvature,
+      healBloomOnly: t.bloomOnly,
+      impactShakeEnabled: false
+    })
+    for (const zone of AOE_ZONES)
+      settings[zone.key] =
+        template.family === 'heal-aoe' && template.zones.includes(zone.key)
+    return settings
   }
   const shake = template.tuning.impactShake ?? DEFAULT_VFX_IMPACT_SHAKE
   settings.impactShakeEnabled = shake.enabled
@@ -254,6 +304,33 @@ export function createTemplateFromSettings(
   family: VfxEffectId,
   settings: VfxLabSettings
 ): VfxTemplate {
+  if (family === 'heal-aoe' || family === 'heal-target') {
+    const tuning = {
+      ...DEFAULT_HEALING_TUNING,
+      originalColors: settings.healOriginalColors,
+      tint: settings.healTint,
+      intensity: settings.healIntensity,
+      timingScale: settings.healTimingScale,
+      density: settings.healDensity,
+      trailDensity: settings.healTrailDensity,
+      trailSize: settings.healTrailSize,
+      bloomStrength: settings.healBloomStrength,
+      bloomScale: settings.healBloomScale,
+      waveScale: settings.healWaveScale,
+      ribbonWidth: settings.healRibbonWidth,
+      pathCurvature: settings.healCurvature,
+      bloomOnly: settings.healBloomOnly
+    }
+    return family === 'heal-target'
+      ? { id, name, family, tuning }
+      : {
+          id,
+          name,
+          family,
+          tuning,
+          zones: AOE_ZONES.filter((z) => settings[z.key]).map((z) => z.key)
+        }
+  }
   const shake =
     settings.impactShakeAuthored ||
     !settings.impactShakeEnabled ||

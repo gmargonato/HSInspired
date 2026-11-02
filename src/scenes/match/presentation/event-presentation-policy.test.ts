@@ -14,6 +14,29 @@ import { describe, expect, it, vi } from 'vitest'
 import { EVENT_PRESENTATION_POLICY } from './event-presentation-policy'
 
 describe('event presentation policy', () => {
+  it('maps every authored heal, including nested choices and triggers, to a healing template', () => {
+    const library = getVfxTemplateLibrary()
+    let actions = 0
+    const visit = (entry: unknown): void => {
+      if (!entry || typeof entry !== 'object') return
+      const record = entry as Record<string, unknown>
+      if (record.action === 'restore') {
+        actions++
+        const template = library.templates.find((t) => t.id === record.vfx)
+        expect(template?.family, String(record.vfx)).toMatch(/^heal-(aoe|target)$/)
+      }
+      Object.values(record).forEach(visit)
+    }
+    visit(CARD_CATALOG.all)
+    expect(actions).toBe(61)
+    for (const power of HERO_POWER_CATALOG.all) {
+      if (
+        power.effect.kind === 'restore-character' ||
+        power.effect.kind === 'restore-and-buff-minion'
+      )
+        expect(power.effect.vfx).toBe('heal-target')
+    }
+  })
   it('assigns an intentional policy to every public event', () => {
     expect(Object.values(EVENT_PRESENTATION_POLICY)).not.toContain(undefined)
   })
@@ -717,7 +740,7 @@ describe('reviewed VFX variants', () => {
     expect(actionAt(cardId, path).vfx).toBe(vfx)
   )
 
-  it('preserves selective targets and keeps healing, buffs and self-cost unanimated', () => {
+  it('preserves selective targets and keeps buffs and self-cost unanimated', () => {
     expect(actionAt('basic_dread_infernal', 'effects/0/actions/0').target).toEqual({
       controller: 'any',
       type: 'character',
@@ -742,13 +765,8 @@ describe('reviewed VFX variants', () => {
       filter: { hasDeathrattle: true }
     })
     for (const [id, path] of [
-      ['classic_holy_nova', 'effects/0/actions/1'],
       ['classic_demonfire', 'effects/0/actions/0'],
       ['goblins_vs_gnomes_demonheart', 'effects/0/actions/0'],
-      [
-        'knights_of_the_frozen_throne_death_coil',
-        'effects/0/choice/options/1/actions/0'
-      ],
       ['classic_flame_imp', 'effects/0/actions/0'],
       ['basic_corruption', 'effects/0/actions/0']
     ])

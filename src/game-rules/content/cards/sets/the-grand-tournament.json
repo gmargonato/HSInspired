@@ -1047,6 +1047,7 @@
             "winActions": [
               {
                 "action": "restore",
+                "vfx": "heal-target",
                 "target": { "type": "hero", "controller": "self", "selection": "hero" },
                 "amount": 7
               }
@@ -1109,6 +1110,7 @@
             "actions": [
               {
                 "action": "restore",
+                "vfx": "heal-target",
                 "target": { "type": "hero", "controller": "self", "selection": "hero" },
                 "amount": 4
               }
@@ -1137,6 +1139,7 @@
         "actions": [
           {
             "action": "restore",
+            "vfx": "heal-target",
             "target": { "type": "character", "selection": "chosen" },
             "amount": 5
           }
@@ -1701,6 +1704,7 @@
             "winActions": [
               {
                 "action": "restore",
+                "vfx": "heal-target",
                 "target": {
                   "type": "character",
                   "controller": "any",
@@ -1712,6 +1716,7 @@
             "loseActions": [
               {
                 "action": "restore",
+                "vfx": "heal-target",
                 "target": {
                   "type": "character",
                   "controller": "any",
@@ -3055,6 +3060,7 @@
         "actions": [
           {
             "action": "restore",
+            "vfx": "heal-target",
             "target": { "type": "hero", "controller": "self", "selection": "hero" },
             "amount": 2
           }
@@ -3124,6 +3130,7 @@
         "actions": [
           {
             "action": "restore",
+            "vfx": "heal-mass-both-heroes",
             "target": { "type": "hero", "controller": "any", "selection": "all" },
             "amount": 4
           }

@@ -17,6 +17,7 @@
         "actions": [
           {
             "action": "restore",
+            "vfx": "heal-target",
             "target": {
               "controller": "opponent",
               "type": "hero",
@@ -745,6 +746,7 @@
         "actions": [
           {
             "action": "restore",
+            "vfx": "heal-target",
             "target": {
               "controller": "self",
               "type": "minion",

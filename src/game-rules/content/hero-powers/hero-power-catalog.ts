@@ -182,7 +182,7 @@ const HERO_POWER_DATA = [
     'Restore 2 Health.',
     'hero-power-priest',
     'any-character',
-    { kind: 'restore-character', amount: 2 }
+    { kind: 'restore-character', vfx: 'heal-target', amount: 2 }
   ],
   [
     'priest-mind-spike',
@@ -423,7 +423,7 @@ const HERO_POWER_DATA = [
     'Restore 3 Health. If you target a minion, also give it +3/+3.',
     'hero-power-obelisks-eye',
     'any-character',
-    { kind: 'restore-and-buff-minion', amount: 3 }
+    { kind: 'restore-and-buff-minion', vfx: 'heal-target', amount: 3 }
   ],
   [
     'saviors_of_uldum_ancient_blades',
@@ -526,7 +526,7 @@ const HERO_POWER_DATA = [
     'Restore 4 Health.',
     'hero-power-priest-upgraded',
     'any-character',
-    { kind: 'restore-character', amount: 4 }
+    { kind: 'restore-character', vfx: 'heal-target', amount: 4 }
   ],
   [
     'rogue-poisoned-daggers',

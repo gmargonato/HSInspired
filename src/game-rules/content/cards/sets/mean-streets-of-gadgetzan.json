@@ -569,6 +569,7 @@
         "actions": [
           {
             "action": "restore",
+            "vfx": "heal-target",
             "target": {
               "controller": "self",
               "type": "character",
@@ -982,6 +983,7 @@
         "actions": [
           {
             "action": "restore",
+            "vfx": "heal-target",
             "target": {
               "controller": "any",
               "type": "character",
@@ -1289,6 +1291,7 @@
         "actions": [
           {
             "action": "restore",
+            "vfx": "heal-mass-both-heroes",
             "target": {
               "controller": "any",
               "type": "hero",
@@ -2387,6 +2390,7 @@
         "actions": [
           {
             "action": "restore",
+            "vfx": "heal-target",
             "target": {
               "controller": "self",
               "type": "character",
@@ -3823,7 +3827,8 @@
         "trigger": "battlecry",
         "actions": [
           {
-            "action": "set-health",
+            "action": "restore",
+            "vfx": "heal-target",
             "target": {
               "controller": "any",
               "type": "minion",
@@ -3973,6 +3978,7 @@
         "actions": [
           {
             "action": "restore",
+            "vfx": "heal-target",
             "target": {
               "controller": "any",
               "type": "character",

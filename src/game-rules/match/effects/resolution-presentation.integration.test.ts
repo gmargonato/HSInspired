@@ -1,4 +1,4 @@
-import { getDerivedState, resolveCardPlay } from './effect-runtime'
+import { getDerivedState, resolveCardPlay, resolveHeroPower } from './effect-runtime'
 import { CARD_CATALOG } from '../../content/cards'
 import { validateCardSet } from '../../content/cards/card-validator'
 import type { OpeningMatchEvent, OpeningMatchState } from '../opening-match-types'
@@ -9,6 +9,192 @@ import { createMatchScenario } from '../testing/match-scenario-builder'
 import { getOpeningMatchPublicEvents } from '../match-public-projection'
 
 type Scenario = ReturnType<typeof createMatchScenario>
+
+describe('healing VFX integration', () => {
+  const cues = (events: readonly OpeningMatchEvent[]) =>
+    events.filter((e) => e.type === 'effect-vfx-started')
+  it.each(['priest-lesser-heal', 'knights_of_the_frozen_throne_siphon_life'])(
+    '%s converted healing uses damage cues and no heal indicators',
+    (id) => {
+      const f = damagePhaseFixture()
+      f.summon('classic_auchenai_soulpriest', f.self)
+      const state = structuredClone(f.s.match.getState())
+      Object.assign(state.players.find((p) => p.participantId === f.self)!.heroPower, {
+        id,
+        available: true,
+        cost: 2,
+        targetType: 'any-character'
+      })
+      const result = resolveHeroPower({
+        state,
+        participantId: f.self,
+        target: { kind: 'hero', participantId: f.enemy },
+        rng: createSeededRng(123)
+      })
+      if (!result.accepted) throw new Error(result.message)
+      expect(cues(result.events).length).toBeGreaterThan(0)
+      expect(cues(result.events).every((e) => e.vfxId === 'shadow-missile-small')).toBe(
+        true
+      )
+      expect(result.events.some((e) => e.type === 'character-healed')).toBe(false)
+      for (const event of result.events)
+        if (event.type === 'character-damaged') expect(event.vfxGroupId).toBeDefined()
+    }
+  )
+  it.each([
+    'priest-lesser-heal',
+    'priest-heal',
+    'saviors_of_uldum_obelisks_eye',
+    'knights_of_the_frozen_throne_siphon_life'
+  ])('%s emits healing from the power without replacing its damage visual', (id) => {
+    const f = damagePhaseFixture()
+    const state = structuredClone(f.s.match.getState())
+    const own = state.players.find((p) => p.participantId === f.self)!
+    Object.assign(own.heroPower, {
+      id,
+      available: true,
+      cost: 2,
+      targetType: 'any-character'
+    })
+    Object.assign(own.hero, { health: 20, damageTaken: 10 })
+    const result = resolveHeroPower({
+      state,
+      participantId: f.self,
+      target: { kind: 'hero', participantId: f.enemy },
+      rng: createSeededRng(123)
+    })
+    if (!result.accepted) throw new Error(result.message)
+    expect(result.accepted).toBe(true)
+    const heal = cues(result.events).filter((e) => e.vfxId === 'heal-target')
+    expect(heal).toHaveLength(1)
+    expect(heal[0]).toMatchObject({
+      origin: 'hero-power',
+      targetInstanceIds: [`${id.endsWith('siphon_life') ? f.self : f.enemy}:hero`]
+    })
+    if (id.endsWith('siphon_life'))
+      expect(cues(result.events).map((e) => e.vfxId)).toEqual([
+        'shadow-missile-small',
+        'heal-target'
+      ])
+  })
+  it.each([
+    ['classic_circle_of_healing', 'heal-mass-both-boards'],
+    ['basic_darkscale_healer', 'heal-mass'],
+    ['classic_holy_nova', 'heal-mass'],
+    ['goblins_vs_gnomes_tree_of_life', 'heal-mass-all-characters'],
+    ['future_past_critter_caretaker', 'heal-mass-both-heroes'],
+    ['the_grand_tournament_refreshment_vendor', 'heal-mass-both-heroes']
+  ])(
+    '%s emits one mass healing cue correlated with its recipients',
+    (cardId, vfxId) => {
+      const f = damagePhaseFixture(cardId)
+      f.summon('basic_chillwind_yeti')
+      f.summon('basic_chillwind_yeti', f.self)
+      for (const participantId of [f.self, f.enemy])
+        f.s.match.dispatch({ type: 'dev-set-hero', participantId, health: 20 })
+      const played = f.play()
+      const result =
+        cardId === 'future_past_critter_caretaker'
+          ? f.s.match.dispatch({ type: 'end-turn', participantId: f.self })
+          : played
+      const heal = cues(result.events).filter((e) => e.vfxId === vfxId)
+      expect(heal).toHaveLength(1)
+      const recipients = result.events.flatMap((e) =>
+        e.type === 'effect-resolved' &&
+        e.action === 'restore' &&
+        Number(e.data?.displayAmount ?? e.data?.amount) > 0 &&
+        e.vfxGroupId === heal[0].vfxGroupId
+          ? [e.data?.target]
+          : []
+      )
+      expect(new Set(heal[0].targetInstanceIds)).toEqual(new Set(recipients))
+      expect(recipients.length).toBeGreaterThan(0)
+    }
+  )
+  it('keeps Binding Heal as two targeted heals', () => {
+    const f = damagePhaseFixture('journey_to_ungoro_binding_heal')
+    const target = f.summon('basic_chillwind_yeti')
+    expect(
+      cues(f.play(target).events).map((e) => [e.vfxId, e.targetInstanceIds])
+    ).toEqual([
+      ['heal-target', [target.instanceId]],
+      ['heal-target', [`${f.self}:hero`]]
+    ])
+  })
+  it('uses damage visuals when Auchenai converts a mass heal', () => {
+    const f = damagePhaseFixture('classic_circle_of_healing')
+    f.summon('classic_auchenai_soulpriest', f.self)
+    f.summon('basic_chillwind_yeti')
+    const result = f.play()
+    expect(cues(result.events).map((e) => e.vfxId)).toEqual(['shadow-missile-small'])
+  })
+  it('Lifesteal keeps damage and healing in distinct visual groups', () => {
+    const f = damagePhaseFixture('knights_of_the_frozen_throne_drain_soul')
+    const target = f.summon('basic_chillwind_yeti')
+    const result = f.play(target)
+    const heal = cues(result.events).find((e) => e.vfxId === 'heal-target')!
+    expect(heal).toMatchObject({ targetInstanceIds: [`${f.self}:hero`] })
+    expect(
+      result.events.some(
+        (e) =>
+          e.type === 'effect-resolved' &&
+          e.action === 'restore' &&
+          e.vfxGroupId === heal.vfxGroupId
+      )
+    ).toBe(true)
+    expect(
+      result.events.some(
+        (e) =>
+          e.type === 'effect-resolved' &&
+          e.action === 'damage' &&
+          e.vfxGroupId === heal.vfxGroupId
+      )
+    ).toBe(false)
+  })
+  it('Hozen Healer resolves as healing rather than setting health', () => {
+    const f = damagePhaseFixture('mean_streets_of_gadgetzan_hozen_healer')
+    const target = f.summon('basic_chillwind_yeti')
+    const state = structuredClone(f.s.match.getState())
+    const damaged = state.players
+      .find((p) => p.participantId === f.enemy)!
+      .board.find((m) => m.instanceId === target.instanceId)!
+    Object.assign(damaged, { health: 1, damageTaken: 4 })
+    const result = resolveCardPlay({
+      state,
+      participantId: f.self,
+      cardInstanceId: f
+        .player(f.self)
+        .hand.find((c) => c.cardId === 'mean_streets_of_gadgetzan_hozen_healer')!
+        .instanceId,
+      position: 0,
+      targets: [
+        { kind: 'minion', participantId: f.enemy, instanceId: target.instanceId }
+      ],
+      rng: createSeededRng(123)
+    })
+    expect(result.accepted).toBe(true)
+    if (!result.accepted) throw new Error(result.message)
+    expect(cues(result.events)).toMatchObject([
+      { vfxId: 'heal-target', targetInstanceIds: [target.instanceId] }
+    ])
+    expect(
+      result.events.some(
+        (e) => e.type === 'effect-resolved' && e.action === 'set-health'
+      )
+    ).toBe(false)
+    expect(
+      result.state.players
+        .find((p) => p.participantId === f.enemy)!
+        .board.find((m) => m.instanceId === target.instanceId)?.health
+    ).toBe(5)
+  })
+  it('Healing Totem emits a friendly-board cue on end turn', () => {
+    const f = damagePhaseFixture()
+    f.summon('basic_healing_totem', f.self)
+    const result = f.s.match.dispatch({ type: 'end-turn', participantId: f.self })
+    expect(cues(result.events)).toMatchObject([{ vfxId: 'heal-mass-friendly-board' }])
+  })
+})
 
 function deckAdditions(events: readonly OpeningMatchEvent[]) {
   return events.flatMap((event) =>
@@ -1153,7 +1339,10 @@ describe('explicit action VFX', () => {
     })
     expect(r.accepted).toBe(true)
     expect(cues(r.events)).toMatchObject([
-      { vfxId: 'shadow-missile-small', targetInstanceIds: [victim.instanceId] }
+      { vfxId: 'shadow-missile-small', targetInstanceIds: [victim.instanceId] },
+      ...(cardId === 'future_past_dark_pact'
+        ? [{ vfxId: 'heal-target', targetInstanceIds: [`${f.self}:hero`] }]
+        : [])
     ])
     expect(
       f.player(f.self).board.some((minion) => minion.instanceId === victim.instanceId)

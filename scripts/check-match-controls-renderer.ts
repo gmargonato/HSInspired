@@ -1,16 +1,19 @@
 import 'pixi.js/unsafe-eval'
 import * as THREE from 'three'
-import { Application, Assets, Sprite } from 'pixi.js'
+import { Application, Assets, Sprite, Texture } from 'pixi.js'
 import { ipcRenderer } from 'electron'
 import { MatchControls3D } from '../src/scenes/match/board/match-controls-3d'
 import { EndTurnControl } from '../src/scenes/match/hud/end-turn-control'
+import { GameHudView } from '../src/scenes/match/hud/game-hud-view'
+import { CardAssetResolver } from '../src/visual-components/assets/card-asset-resolver'
 import { HeroPowerView } from '../src/scenes/match/board/hero-power-view'
 import { CENTER, placement } from '../src/visual-components/layout'
-import { gsap } from '../src/visual-components/animation/animations'
+import { AnimationScope, gsap } from '../src/visual-components/animation/animations'
 import data from '../assets/models/match/match-controls.json'
 import { HERO_POWER_ASSET_SOURCES } from '../src/visual-components/assets/hero-power-assets'
 import boardUrl from '../assets/images/table/board.png'
 import fontUrl from '../assets/fonts/belwe_bold.ttf'
+import endTurnUrl from '../assets/images/match/button-end-my-turn.png'
 
 const checks: string[] = []
 const calibration: { expected: number[]; actual: number[] }[] = []
@@ -137,10 +140,29 @@ async function run() {
     return power
   })
   let clicks = 0
-  const end = new EndTurnControl(renderer, frames[0], 'endTurn', () => clicks++)
-  end.position.set(1060, 325)
-  app.stage.addChild(end)
-  end.setEnabled(true)
+  const endTexture = await Assets.load(endTurnUrl)
+  const animations = new AnimationScope()
+  const hud = new GameHudView(new CardAssetResolver(), animations)
+  hud.mount(
+    {
+      endTurn: endTexture,
+      manaAvailable: Texture.WHITE,
+      manaSpent: Texture.WHITE,
+      manaGlow: Texture.WHITE,
+      manaOverload: Texture.WHITE,
+      deckInfo: Texture.WHITE
+    },
+    () => {
+      clicks++
+      hud.syncEndTurnButton(endTexture, false, false, 'enemyTurn')
+    },
+    endTexture,
+    renderer
+  )
+  const end = hud.endTurnButton as EndTurnControl
+  hud.turnButtonLayer.position.set(-535, -162)
+  app.stage.addChild(hud.turnButtonLayer)
+  hud.syncEndTurnButton(endTexture, true, false)
   const tick = (_time: number, delta: number) => renderer.render(delta)
   gsap.ticker.add(tick)
   const capture = async (name: string) => {
@@ -156,6 +178,92 @@ async function run() {
     }
     return promise
   }
+  const outline = (color: 'green' | 'white') =>
+    hud.turnButtonLayer.children.find(
+      (child) =>
+        child.label ===
+        `game.end-turn-${color === 'green' ? 'exhausted' : 'hover'}-outline-target`
+    )!
+  const noOutlines = () => !outline('green').visible && !outline('white').visible
+  hud.syncEndTurnButton(endTexture, true, true)
+  powers.forEach((p) => p.setEnabled(true))
+  powers.forEach((p) => p.prebuildOutlines(app.renderer))
+  // Let composed contour snapshots prepare outside the active filter pass.
+  await capture('outline-green')
+  await capture('outline-green')
+  check(
+    outline('green').visible && !outline('white').visible,
+    'Exhausted turn shows green'
+  )
+  end.emit('pointerover', {})
+  powers.forEach((p) => p.setHoverAura(true))
+  await capture('outline-white')
+  await capture('outline-white')
+  end.emit('pointerdown', { button: 2 })
+  check(outline('white').visible, 'Right press preserves hover outline')
+  end.emit('pointertap', { button: 2 })
+  check(clicks === 0, 'Right click never ends the turn')
+  end.emit('pointerdown', { button: 0 })
+  check(noOutlines(), 'Both outlines hide synchronously on press')
+  await finish(Promise.resolve())
+  check(noOutlines(), 'Outlines remain hidden through a prolonged hold')
+  await capture('outline-held')
+  end.emit('pointerout', {})
+  await Promise.resolve()
+  check(noOutlines(), 'Leaving while held does not restore outlines')
+  end.emit('pointerover', {})
+  check(noOutlines(), 'Re-entering while held does not restore outlines')
+  end.emit('pointerout', {})
+  end.emit('pointerupoutside', { button: 0 })
+  await Promise.resolve()
+  check(
+    outline('green').visible && !outline('white').visible && clicks === 0,
+    'Outside release restores green without submitting'
+  )
+  end.emit('pointerover', {})
+  end.emit('pointerdown', { button: 0 })
+  end.emit('pointercancel', {})
+  await Promise.resolve()
+  check(outline('white').visible, 'Cancellation restores the eligible hover outline')
+  end.emit('pointerdown', { button: 0 })
+  window.dispatchEvent(new Event('blur'))
+  await Promise.resolve()
+  check(!noOutlines(), 'Window blur clears a held gesture')
+  end.emit('pointerdown', { button: 0 })
+  window.dispatchEvent(new PointerEvent('pointerup', { button: 0 }))
+  await Promise.resolve()
+  check(!noOutlines(), 'Window-level release clears a held gesture')
+  end.emit('pointerdown', { button: 0 })
+  hud.syncEndTurnButton(endTexture, false, false)
+  await Promise.resolve()
+  check(
+    noOutlines() && end.eventMode === 'none',
+    'Disabling during a hold hides outlines and stays disabled'
+  )
+  hud.syncEndTurnButton(endTexture, true, true)
+  end.emit('pointerover', {})
+  end.emit('pointerdown', { button: 0 })
+  end.emit('pointerup', { button: 0 })
+  check(noOutlines(), 'Release does not flash an outline before pointertap')
+  end.emit('pointertap', { button: 0 })
+  await Promise.resolve()
+  check(
+    noOutlines() && clicks === 1,
+    'Committed click stays dark throughout the turn transition'
+  )
+  await finish(Promise.resolve())
+  hud.syncEndTurnButton(endTexture, true, true, 'extraTurn')
+  await finish(Promise.resolve())
+  await capture('outline-extra-turn')
+  hud.syncEndTurnButton(endTexture, false, false)
+  powers.forEach((p) => {
+    p.setEnabled(false)
+    p.setHoverAura(false)
+  })
+  // Complete HUD synchronization before the standalone animation checks below.
+  await finish(Promise.resolve())
+  clicks = 0
+  end.setEnabled(true)
   await capture('01-standard-and-golden')
   const heroControls = [...renderer.controls].filter((c) => c.kind === 'heroPower')
   const powerMesh = (index: number) =>
@@ -380,7 +488,7 @@ async function run() {
   Reflect.deleteProperty(document, 'hidden')
   const pending = powers[0].flipDown()
   powers.forEach((p) => p.dispose())
-  end.dispose()
+  hud.dispose()
   await pending
   check(
     renderer.controls.size === 0,

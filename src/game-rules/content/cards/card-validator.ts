@@ -955,6 +955,7 @@ function actionsValue(value: unknown, path: string): void {
         ![
           'damage',
           'freeze',
+          'restore',
           'domino-effect',
           'destroy',
           'redirect-damage',
@@ -965,7 +966,7 @@ function actionsValue(value: unknown, path: string): void {
       )
         fail(
           `${actionPath}.vfx`,
-          'requires a damage, freeze or character-destruction action'
+          'requires a damage, restore, freeze or character-destruction action'
         )
       const vfx = stringValue(record['vfx'], `${actionPath}.vfx`)
       if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(vfx))

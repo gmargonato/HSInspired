@@ -6,11 +6,13 @@ import type { MatchControls3D, ControlMeshView } from '../board/match-controls-3
 export type TurnControlFace = 'endTurn' | 'extraTurn' | 'enemyTurn'
 
 export class EndTurnControl extends Actor {
-  /** The static silhouette remains available to the existing Pixi outlines. */
+  /** Face texture retained for HUD state synchronization; the visible control is 3D. */
   readonly sprite: Sprite
   private readonly mesh: ControlMeshView
   private enabled = false
   private held = false
+  private physicallyPressed = false
+  private gestureRevision = 0
   private face: TurnControlFace
   private revision = 0
 
@@ -18,7 +20,8 @@ export class EndTurnControl extends Actor {
     renderer: MatchControls3D,
     texture: Texture,
     face: TurnControlFace,
-    onClick: () => void
+    onClick: () => void,
+    private readonly onHeldChange?: (held: boolean) => void
   ) {
     super()
     this.face = face
@@ -39,22 +42,45 @@ export class EndTurnControl extends Actor {
     this.on('pointerdown', (event) => {
       if (event.button !== 0 || !this.enabled || this.mesh.busy) return
       this.held = true
+      ++this.gestureRevision
+      this.physicallyPressed = true
       this.mesh.press(true)
+      this.onHeldChange?.(true)
     })
-    this.on('pointerup', () => this.release())
-    this.on('pointerout', () => this.release())
-    this.on('pointerupoutside', () => this.release())
+    this.on('pointerup', this.handlePointerUp)
+    this.on('pointerout', this.releaseAnimation)
+    this.on('pointerupoutside', this.handlePointerUp)
     this.on('pointercancel', () => this.release())
     this.on('pointertap', (event) => {
       if (event.button === 0 && this.enabled && !this.mesh.busy) onClick()
     })
     window.addEventListener('blur', this.release)
+    window.addEventListener('pointerup', this.handlePointerUp)
+    window.addEventListener('pointercancel', this.release)
+  }
+
+  private handlePointerUp = (event: { button: number }): void => {
+    if (event.button > 0) return
+    this.release()
+  }
+
+  private releaseAnimation = (): void => {
+    if (!this.physicallyPressed) return
+    this.physicallyPressed = false
+    this.mesh.press(false)
   }
 
   private release = (): void => {
     if (!this.held) return
     this.held = false
-    this.mesh.press(false)
+    this.releaseAnimation()
+    const revision = ++this.gestureRevision
+    // Pixi emits pointertap after pointerup. Let the click update turn state
+    // before restoring outlines so a committed click cannot flash white.
+    queueMicrotask(() => {
+      if (!this.destroyed && revision === this.gestureRevision)
+        this.onHeldChange?.(false)
+    })
   }
 
   isTextureFlipping(): boolean {
@@ -86,7 +112,10 @@ export class EndTurnControl extends Actor {
 
   override dispose(): void {
     ++this.revision
+    ++this.gestureRevision
     window.removeEventListener('blur', this.release)
+    window.removeEventListener('pointerup', this.handlePointerUp)
+    window.removeEventListener('pointercancel', this.release)
     this.mesh.dispose()
     super.dispose()
   }
