@@ -1,3 +1,4 @@
+import { reviewEquivalentTrade } from './expert-equivalent-trade'
 import { expertAttackSetupPreference } from './expert-resource-preference'
 import { createExpertActionInspector } from './expert-action-outcome'
 import { reviewChanceAttackOrder, hasChanceWeaponSetup } from './expert-chance-order'
@@ -2150,4 +2151,145 @@ describe('Recorded summon dependency and unpaid friendly target controls', () =>
     expect(ownPenalty('basic_shadow_word_pain', 'classic_auchenai_soulpriest')).toBe(0))
   it('preserves enrage setup', () =>
     expect(ownPenalty('basic_elven_archer', 'classic_amani_berserker')).toBe(0))
+})
+
+describe('Equivalent plain-target finishing review', () => {
+  function trade(options: Partial<AiFixtureOptions> = {}, stop = () => false) {
+    const session = fixture({
+      aiMana: 0,
+      aiHand: [],
+      aiHeroPowerAvailable: false,
+      aiBoard: [{ cardId: 'basic_silver_hand_recruit', ready: true }],
+      opponentBoard: [
+        { cardId: 'basic_chillwind_yeti', attack: 1, health: 5, maxHealth: 5 },
+        { cardId: 'basic_chillwind_yeti', attack: 1, health: 1, maxHealth: 5 }
+      ],
+      ...options
+    })
+    const checkpoint = session.match.getCheckpoint()
+    const target = checkpoint.state.players.find(
+      (p) => p.participantId !== session.remoteParticipantId
+    )!.board[0]!
+    const selected = session.match.analyze((root) =>
+      enumerateLegalCommands(root, session.remoteParticipantId).find(
+        (c) =>
+          c.type === 'attack-character' &&
+          c.defender.kind === 'minion' &&
+          c.defender.instanceId === target.instanceId
+      )
+    )!
+    return {
+      session,
+      selected,
+      result: reviewEquivalentTrade(
+        checkpoint,
+        session.remoteParticipantId,
+        selected,
+        [],
+        stop,
+        () => 0
+      )
+    }
+  }
+  it('finishes an equivalent wounded target with the same sacrifice', () => {
+    const { session, result } = trade()
+    const enemy = session
+      .getState()
+      .players.find((p) => p.participantId !== session.remoteParticipantId)!
+    expect(result.command).toMatchObject({
+      defender: { instanceId: enemy.board[1]!.instanceId }
+    })
+  })
+  it('preserves a committed summon after the sacrifice', () => {
+    const { session, selected } = trade({
+      aiMana: 2,
+      aiHand: ['knights_of_the_frozen_throne_righteous_protector']
+    })
+    const play = session.match.analyze((root) =>
+      enumerateLegalCommands(root, session.remoteParticipantId).find(
+        (c) => c.type === 'play-card'
+      )
+    )!
+    const result = reviewEquivalentTrade(
+      session.match.getCheckpoint(),
+      session.remoteParticipantId,
+      selected,
+      [aiActionIntent(play, session.localParticipantId)],
+      () => false,
+      () => 0
+    )
+    expect(result.command).not.toBeNull()
+  })
+  it('does not inspect concealed target provenance', () => {
+    const { session, selected } = trade()
+    const checkpoint = session.match.getCheckpoint()
+    const changed = {
+      ...checkpoint,
+      state: {
+        ...checkpoint.state,
+        players: checkpoint.state.players.map((p) =>
+          p.participantId !== session.remoteParticipantId
+            ? {
+                ...p,
+                board: p.board.map((m, i) => ({
+                  ...m,
+                  startedInDeck: i === 0,
+                  concealedDeathrattleChoice: i
+                }))
+              }
+            : p
+        ) as unknown as typeof checkpoint.state.players
+      }
+    }
+    expect(
+      reviewEquivalentTrade(
+        changed,
+        session.remoteParticipantId,
+        selected,
+        [],
+        () => false,
+        () => 0
+      ).command
+    ).not.toBeNull()
+  })
+  it('does not replace an immediate kill with another', () => {
+    expect(
+      trade({ aiBoard: [{ cardId: 'basic_chillwind_yeti', attack: 5, ready: true }] })
+        .result.command
+    ).toBeNull()
+  })
+  it('rejects targets with different retaliation', () => {
+    expect(
+      trade({
+        opponentBoard: [
+          { cardId: 'basic_chillwind_yeti', attack: 1, health: 5, maxHealth: 5 },
+          { cardId: 'basic_chillwind_yeti', attack: 2, health: 1, maxHealth: 5 }
+        ]
+      }).result.command
+    ).toBeNull()
+  })
+  it('rejects deathrattle targets', () => {
+    expect(
+      trade({
+        opponentBoard: [
+          { cardId: 'classic_loot_hoarder', attack: 1, health: 5, maxHealth: 5 },
+          { cardId: 'classic_loot_hoarder', attack: 1, health: 1, maxHealth: 5 }
+        ]
+      }).result.command
+    ).toBeNull()
+  })
+  it('abstains when attack reveals a drawn card', () => {
+    expect(
+      trade({ aiBoard: [{ cardId: 'classic_acolyte_of_pain', ready: true }] }).result
+        .command
+    ).toBeNull()
+  })
+  it('abstains on secrets', () => {
+    expect(
+      trade({ opponentSecrets: [{ cardId: 'classic_ice_barrier' }] }).result.command
+    ).toBeNull()
+  })
+  it('abstains when the budget expires', () => {
+    expect(trade({}, () => true).result.command).toBeNull()
+  })
 })

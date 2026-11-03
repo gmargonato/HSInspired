@@ -40,6 +40,7 @@ import {
   EXPERT_ORDERING_MAX_DISPATCHES
 } from './expert-action-ordering'
 import { reviewCommittedActionOrder } from './expert-committed-order'
+import { reviewEquivalentTrade } from './expert-equivalent-trade'
 import { reviewCompletedAttackOrder } from './expert-completed-attack-order'
 import { reviewRedundantHealingPrefix } from './expert-redundant-healing'
 import {
@@ -1166,11 +1167,103 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     return true
   }
 
+  private guardEquivalentTrade(
+    request: AiDecisionRequest,
+    response: AiDecisionResponse
+  ): AiDecisionResponse {
+    if (
+      request.phase === 'mulligan' ||
+      response.usage?.decisionPriority === 'verified-win' ||
+      this.session.getState().revision !== request.expectedRevision
+    )
+      return response
+    const intents = response.usage?.plannedActionIntents
+    if (
+      !Array.isArray(intents) ||
+      !intents.length ||
+      intents.length > 6 ||
+      !intents.every(isAiActionIntent) ||
+      intents[0]!.type !== 'attack-character' ||
+      !this.session
+        .getState()
+        .players.find((p) => p.participantId === this.perspectiveParticipantId)
+        ?.board.some((m) => m.instanceId === intents[0]!.source) ||
+      !this.session
+        .getState()
+        .players.find((p) => p.participantId !== this.perspectiveParticipantId)
+        ?.board.some((m) => m.instanceId === intents[0]!.targets[0])
+    )
+      return response
+    const id =
+      'plan' in response.choice
+        ? response.choice.plan.firstActionId
+        : 'actionId' in response.choice
+          ? response.choice.actionId
+          : null
+    const legal = this.currentLegalActions().filter((a) =>
+      request.actionIds.includes(a.id)
+    )
+    const selected = legal.find((a) => a.id === id)
+    const opponentId = this.opponentParticipantId()
+    if (
+      !selected ||
+      !sameAiIntent(intents[0]!, aiActionIntent(selected.command, opponentId))
+    )
+      return response
+    const started = this.now(),
+      remaining = this.remainingBudget(request)
+    if (!Number.isFinite(remaining) || remaining <= 0) return response
+    const reviewed = reviewEquivalentTrade(
+      this.session.match.getCheckpoint(),
+      this.perspectiveParticipantId,
+      selected.command,
+      intents.slice(1),
+      () => this.now() >= started + remaining,
+      this.now
+    )
+    const elapsed = Math.max(0, this.now() - started)
+    this.searchUsedMs += elapsed
+    if (!reviewed.command) return response
+    const next = legal.find(
+      (a) => canonicalCommandKey(a.command) === canonicalCommandKey(reviewed.command!)
+    )
+    if (!next) return response
+    const sequence = [aiActionIntent(next.command, opponentId), ...intents.slice(1)]
+    const reason =
+      'Finish an equivalent plain target with the same attack and retaliation, preserving the selected continuation.'
+    return {
+      ...response,
+      reason,
+      durationMs: response.durationMs + elapsed,
+      choice: {
+        actionId: next.id,
+        intent: sequence[0]!,
+        expectedResult: reason,
+        planUpdate: null
+      },
+      usage: {
+        ...response.usage,
+        decisionPriority:
+          response.usage?.decisionPriority === 'tactical-safety'
+            ? 'tactical-safety'
+            : 'tactical-preference',
+        tacticalOverride: true,
+        actionOutcomeReason: 'equivalent-target-trade',
+        plannedActionIntents: sequence.map((intent) => ({
+          ...intent,
+          targets: [...intent.targets]
+        })),
+        equivalentTradeReview: reviewed.stats
+      }
+    }
+  }
+
   private guardCommittedOrder(
     request: AiDecisionRequest,
     response: AiDecisionResponse,
     resourceReviewCheckpoint?: OpeningMatchCheckpoint
   ): AiDecisionResponse {
+    response = this.guardEquivalentTrade(request, response)
     response = this.guardRedundantSpell(request, response, resourceReviewCheckpoint)
     // A successful omission can expose a healing prefix; do not stack a second
     // resource review onto the same decision's bounded review allowance.
