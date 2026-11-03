@@ -122,6 +122,7 @@ export interface ExpertActionOutcome {
   readonly reason?:
     | 'no-payoff'
     | 'unpaid-sacrifice'
+    | 'unpaid-friendly-target'
     | 'unpaid-friendly-damage'
     | 'wasted-healing-target'
     | 'opponent-heal'
@@ -446,6 +447,155 @@ function enablesHeldDamagePayoff(
     return Object.values(entry).some(inspect)
   }
   return after.hand.some((card) => inspect(CARD_CATALOG.get(card.cardId)?.effects))
+}
+
+/** A public death-history payoff can justify sacrificing an otherwise useful body. */
+function hasKnownDeathPayoff(root: OpeningMatchAnalysis, actorId: PlayerId): boolean {
+  const observation = root.getAiObservation?.(actorId, 'fair')
+  const self = observation?.players.find((player) => player.participantId === actorId)
+  if (!self || !observation) return true
+  const dependsOnDeath = (value: unknown): boolean => {
+    if (typeof value === 'string')
+      return /resurrect|graveyard|died|deathrattle/.test(value)
+    return (
+      !!value && typeof value === 'object' && Object.values(value).some(dependsOnDeath)
+    )
+  }
+  return [...self.hand, ...self.board, ...observation.selfOriginalDeck.cards].some(
+    (card) => dependsOnDeath(CARD_CATALOG.get(card.cardId)?.effects)
+  )
+}
+
+/**
+ * A damaging battlecry's new body is ordinary development, not payment for an
+ * unnecessary friendly target. Compare the actual effects, preserving triggers,
+ * death/health setups and board-space uses rather than banning self-targeting.
+ */
+function unpaidFriendlyTarget(
+  root: OpeningMatchAnalysis,
+  actorId: PlayerId,
+  command: Extract<TurnMatchCommand, { type: 'play-card' }>,
+  shouldStop: () => boolean
+): ExpertActionOutcome {
+  const state = root.getState()
+  const self = state.players.find((player) => player.participantId === actorId)
+  const card = self?.hand.find((entry) => entry.instanceId === command.cardInstanceId)
+  const definition = card && CARD_CATALOG.get(card.cardId)
+  const target = command.targets?.[0]
+  const targetMinion =
+    target?.kind === 'minion'
+      ? self?.board.find((entry) => entry.instanceId === target.instanceId)
+      : undefined
+  const changesFutureResolution = (value: unknown): boolean => {
+    if (!value || typeof value !== 'object') return false
+    const entry = value as Record<string, unknown>
+    return (
+      (typeof entry.action === 'string' &&
+        ['replace-event', 'destroy', 'damage', 'silence', 'transform'].includes(
+          entry.action
+        )) ||
+      Object.values(entry).some(changesFutureResolution)
+    )
+  }
+  if (
+    !self ||
+    !definition ||
+    command.targets?.length !== 1 ||
+    target?.kind !== 'minion' ||
+    target.participantId !== actorId ||
+    self.hand.length >= 10 ||
+    self.board.length >= (definition.type === 'Minion' ? 6 : 7) ||
+    state.players.some((player) => player.secrets?.length) ||
+    !definition.effects.length ||
+    !definition.effects.every(
+      (effect) =>
+        ['cast', 'battlecry'].includes(effect.trigger) &&
+        !!effect.actions?.length &&
+        effect.actions.every((action) => ['damage', 'destroy'].includes(action.action))
+    ) ||
+    // Removing an ongoing replacement or harmful trigger can be the payoff
+    // (for example, restoring healing or preventing a future friendly wipe).
+    (targetMinion &&
+      !targetMinion.silenced &&
+      CARD_CATALOG.get(targetMinion.cardId)?.effects.some(
+        (effect) =>
+          ['start-of-turn', 'end-of-turn'].includes(effect.trigger) ||
+          (!['battlecry', 'on-play'].includes(effect.trigger) &&
+            changesFutureResolution(effect.actions))
+      )) ||
+    hasKnownDeathPayoff(root, actorId) ||
+    shouldStop()
+  )
+    return { penalty: 0 }
+  // Development can justify an otherwise awkward mandatory battlecry. Only
+  // warn on minions when the same play has a legal nonfriendly target instead.
+  if (
+    definition.type === 'Minion' &&
+    !enumerateLegalCommands(root, actorId).some(
+      (alternative) =>
+        alternative.type === 'play-card' &&
+        alternative.cardInstanceId === command.cardInstanceId &&
+        alternative.targets?.some((entry) => entry.participantId !== actorId)
+    )
+  )
+    return { penalty: 0 }
+  return root.analyze((fork) => {
+    const before = fork.getAiObservation?.(actorId, 'fair')
+    const player = before?.players.find((entry) => entry.participantId === actorId)
+    const original = player?.board.find(
+      (entry) => entry.instanceId === target.instanceId
+    )
+    if (!before || !player || !original || !fork.getRandomState) return { penalty: 0 }
+    const rng = JSON.stringify(fork.getRandomState())
+    const result = fork.dispatch(command)
+    const after = fork.getAiObservation?.(actorId, 'fair')
+    const next = after?.players.find((entry) => entry.participantId === actorId)
+    if (
+      !result.accepted ||
+      result.state.phase !== 'turns' ||
+      !after ||
+      !next ||
+      shouldStop() ||
+      revealsTacticalInformation(result.events) ||
+      rng !== JSON.stringify(fork.getRandomState()) ||
+      hasDeferredCastPayoff(next) ||
+      enablesHeldDamagePayoff(player, next)
+    )
+      return { penalty: 0 }
+    const damaged = next.board.find((entry) => entry.instanceId === target.instanceId)
+    if (damaged && damaged.health >= original.health) return { penalty: 0 }
+    const ignored = definition.type === 'Minion' ? [command.cardInstanceId] : []
+    const restored = {
+      ...next,
+      board: damaged
+        ? next.board.map((entry) =>
+            entry.instanceId === target.instanceId
+              ? { ...entry, health: original.health, damageTaken: original.damageTaken }
+              : entry
+          )
+        : [...next.board, original].sort(
+            (a, b) =>
+              player.board.findIndex((entry) => entry.instanceId === a.instanceId) -
+              player.board.findIndex((entry) => entry.instanceId === b.instanceId)
+          )
+    }
+    const unpaid = before.players.every((entry) =>
+      entry.participantId === actorId
+        ? position(entry, command.cardInstanceId, ignored) ===
+          position(restored, command.cardInstanceId, ignored)
+        : position(entry) ===
+          position(after.players.find((p) => p.participantId === entry.participantId)!)
+    )
+    // A mandatory battlecry can still be preferable to benefiting an enemy
+    // damage/death trigger. Keep it below the continuation-veto threshold.
+    return unpaid
+      ? {
+          penalty: definition.type === 'Minion' ? 0.2 : 0.25,
+          reason:
+            definition.type === 'Minion' ? 'unpaid-sacrifice' : 'unpaid-friendly-target'
+        }
+      : { penalty: 0 }
+  })
 }
 
 /** A soft warning, not a ban: pure enemy Attack gifts need a known payoff. */
@@ -1053,15 +1203,17 @@ export function createExpertActionInspector(
     match ??= createOpeningMatchFromCheckpoint(
       createFairHypothesisCheckpoint(checkpoint, actorId, 0x71ac71c)
     )
-    return match.analyze((fork) =>
-      inspectExpertAction(
-        fork,
-        actorId,
-        command,
-        () => hasPublicSecrets || stopResourceProbe(),
-        measureResourceProbe
-      )
-    )
+    return match.analyze((fork) => {
+      const stop = () => hasPublicSecrets || stopResourceProbe()
+      // Review the selected real action, not every hypothetical rollout suffix.
+      // Penalizing sampled suffixes discarded useful attacks along with a later
+      // sacrifice; execution-time review preserves the already-chosen progress.
+      if (command.type === 'play-card') {
+        const friendly = unpaidFriendlyTarget(fork, actorId, command, stop)
+        if (friendly.penalty > 0) return friendly
+      }
+      return inspectExpertAction(fork, actorId, command, stop, measureResourceProbe)
+    })
   }
 }
 

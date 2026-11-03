@@ -3411,6 +3411,141 @@ describe('Expert fresh friendly-target repair', () => {
     }
   }
 
+  it.each([true, false])(
+    'rejects a pure own sacrifice without discarding a ready attack (%s)',
+    (ready) => {
+      const h = harness({
+        seed: 913,
+        aiHeroId: 'anduin',
+        opponentHeroId: 'jaina',
+        aiMana: 2,
+        aiHeroPowerAvailable: false,
+        aiHand: ['basic_shadow_word_pain'],
+        aiBoard: [{ cardId: 'basic_murloc_raider', ready }],
+        opponentBoard: []
+      })
+      const selected = h.target('self', 'minion')
+      const end = h.actions.find((action) => action.command.type === 'end-turn')!
+      const before = h.session.match.getCheckpoint()
+      try {
+        const result = h.guard(h.request, h.responseFor(selected, [end]))
+        const action = h.actions.find(
+          (entry) => 'actionId' in result.choice && entry.id === result.choice.actionId
+        )!
+        expect(action.command.type).toBe(ready ? 'attack-character' : 'end-turn')
+        expect(result.usage?.actionOutcomeReason).toBe('unpaid-friendly-target')
+        expect(h.session.match.getCheckpoint()).toEqual(before)
+      } finally {
+        h.api.dispose()
+      }
+    }
+  )
+
+  it('retains a validated already-planned attack suffix after rejecting a pure sacrifice', () => {
+    const h = harness({
+      seed: 914,
+      aiHeroId: 'anduin',
+      opponentHeroId: 'jaina',
+      aiMana: 2,
+      aiHeroPowerAvailable: false,
+      aiHand: ['basic_shadow_word_pain'],
+      aiBoard: [
+        { cardId: 'basic_murloc_raider', ready: false },
+        { cardId: 'basic_chillwind_yeti', ready: true },
+        { cardId: 'basic_goldshire_footman', ready: true }
+      ],
+      opponentBoard: []
+    })
+    const selected = h.target('self', 'minion')
+    const attacks = h.actions.filter(
+      (action) =>
+        action.command.type === 'attack-character' &&
+        action.command.defender.kind === 'hero'
+    )
+    const response: AiDecisionResponse = {
+      ...h.responseFor(selected),
+      usage: {
+        plannedActionIntents: [selected, ...attacks].map((action) => ({
+          ...aiActionIntent(action.command, h.session.localParticipantId),
+          targets: [
+            ...aiActionIntent(action.command, h.session.localParticipantId).targets
+          ]
+        }))
+      }
+    }
+    const before = h.session.match.getCheckpoint()
+    try {
+      const result = h.guard(h.request, response)
+      expect(result.choice).toMatchObject({ actionId: attacks[0]!.id })
+      expect(result.usage?.plannedActionIntents).toEqual(
+        attacks.map((action) =>
+          aiActionIntent(action.command, h.session.localParticipantId)
+        )
+      )
+      expect(h.session.match.getCheckpoint()).toEqual(before)
+    } finally {
+      h.api.dispose()
+    }
+  })
+
+  it.each([
+    'information boundary',
+    'random boundary',
+    'duplicate',
+    'stale',
+    'over-cap'
+  ] as const)('does not cache repaired suffix across %s', (kind) => {
+    const cardId =
+      kind === 'information boundary'
+        ? 'mean_streets_of_gadgetzan_genzo_the_shark'
+        : kind === 'random boundary'
+          ? 'mean_streets_of_gadgetzan_shaku_the_collector'
+          : 'basic_chillwind_yeti'
+    const h = harness({
+      seed: 914,
+      aiHeroId: 'anduin',
+      opponentHeroId: 'jaina',
+      aiMana: 2,
+      aiHeroPowerAvailable: false,
+      aiHand: ['basic_shadow_word_pain'],
+      aiBoard: [
+        { cardId: 'basic_murloc_raider', ready: false },
+        { cardId, ready: true },
+        { cardId: 'basic_goldshire_footman', ready: true }
+      ],
+      opponentBoard: []
+    })
+    const selected = h.target('self', 'minion')
+    const attacks = h.actions.filter(
+      (action) =>
+        action.command.type === 'attack-character' &&
+        action.command.defender.kind === 'hero'
+    )
+    const chosen =
+      kind === 'duplicate'
+        ? [attacks[0]!, attacks[0]!]
+        : kind === 'over-cap'
+          ? Array.from({ length: 6 }, () => attacks[0]!)
+          : attacks
+    const intents = [selected, ...chosen].map((action) => {
+      const intent = aiActionIntent(action.command, h.session.localParticipantId)
+      return { ...intent, targets: [...intent.targets] }
+    })
+    if (kind === 'stale') intents[1] = { ...intents[1]!, source: 'missing-attacker' }
+    const response: AiDecisionResponse = {
+      ...h.responseFor(selected),
+      usage: { plannedActionIntents: intents }
+    }
+    const before = h.session.match.getCheckpoint()
+    try {
+      const result = h.guard(h.request, response)
+      expect(result.usage?.plannedActionIntents).toHaveLength(1)
+      expect(h.session.match.getCheckpoint()).toEqual(before)
+    } finally {
+      h.api.dispose()
+    }
+  })
+
   it('repairs authored opponent healing to the useful same-card self-heal', () => {
     const h = harness({
       seed: 2026102010,
