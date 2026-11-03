@@ -145,6 +145,66 @@ export function createAiObservation(
     ...(state.isExtraTurn ? { isExtraTurn: true } : {}),
     perspectivePlayerId,
     players,
+    ...(state.pendingDiscover?.participantId === perspectivePlayerId
+      ? {
+          pendingDiscover: {
+            participantId: state.pendingDiscover.participantId,
+            sourceCardInstanceId: state.pendingDiscover.sourceCardInstanceId,
+            candidates: state.pendingDiscover.candidates.map((card) =>
+              observedCard(card, true)
+            )
+          }
+        }
+      : {}),
+    ...(state.pendingCardChoice?.participantId === perspectivePlayerId
+      ? {
+          pendingCardChoice: {
+            participantId: state.pendingCardChoice.participantId,
+            sourceCardInstanceId: state.pendingCardChoice.sourceCardInstanceId,
+            sourceCardId: state.pendingCardChoice.sourceCardId,
+            ...(state.pendingCardChoice.prompt !== undefined
+              ? { prompt: state.pendingCardChoice.prompt }
+              : {}),
+            ...(state.pendingCardChoice.resolution?.type === 'kazakus-potion'
+              ? {
+                  resolutionContext: {
+                    type: 'kazakus-potion' as const,
+                    stage: state.pendingCardChoice.resolution.stage,
+                    ...(state.pendingCardChoice.resolution.selectedCostOption
+                      ? {
+                          selectedCost:
+                            state.pendingCardChoice.resolution.selectedCostOption.cost,
+                          selectedCostCardId:
+                            state.pendingCardChoice.resolution.selectedCostOption
+                              .presentationCardId
+                        }
+                      : {}),
+                    ...(state.pendingCardChoice.resolution.selectedFirstIngredient !==
+                    undefined
+                      ? {
+                          selectedFirstIngredient:
+                            state.pendingCardChoice.resolution.selectedFirstIngredient
+                        }
+                      : {})
+                  }
+                }
+              : {}),
+            options: state.pendingCardChoice.options.map((option) => ({
+              choice: option.choice,
+              label: option.label,
+              ...(option.presentationCardId !== undefined
+                ? { presentationCardId: option.presentationCardId }
+                : {}),
+              ...(option.presentationCost !== undefined
+                ? { presentationCost: option.presentationCost }
+                : {}),
+              ...(option.presentationHeroPowerId !== undefined
+                ? { presentationHeroPowerId: option.presentationHeroPowerId }
+                : {})
+            }))
+          }
+        }
+      : {}),
     selfOriginalDeck: observedDeck(deck)
   }
 }
