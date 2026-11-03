@@ -100,6 +100,88 @@ function isPublicFixedGeneration(
   )
 }
 
+/** A sampled empty summon pool consumes no RNG, but is not public evidence. */
+function inspectsConcealedSummonPool(
+  event: OpeningMatchEvent,
+  before: OpeningMatchState,
+  playerId: PlayerId
+): boolean {
+  const activated =
+    event.type === 'battlecry-repetition-started'
+      ? {
+          cardId: event.minion.cardId,
+          controllerId: event.participantId,
+          trigger: 'battlecry'
+        }
+      : event.type === 'trigger-activated'
+        ? {
+            cardId: event.source.cardId,
+            controllerId: event.participantId,
+            trigger: event.trigger
+          }
+        : event.type === 'history-action-resolved' && event.action === 'card'
+          ? {
+              cardId: event.source.cardId,
+              controllerId: event.participantId,
+              trigger: 'cast'
+            }
+          : null
+  if (!activated?.cardId) return false
+  return (
+    CARD_CATALOG.get(activated.cardId)?.effects.some(
+      (block) =>
+        block.trigger === activated.trigger &&
+        block.actions?.some((action) => {
+          if (action.action !== 'put-into-play') return false
+          const source = action.source
+          const zone =
+            typeof source === 'string'
+              ? source
+              : source && typeof source === 'object' && 'zone' in source
+                ? source.zone
+                : null
+          if (zone !== 'hand' && zone !== 'deck') return false
+          const filter =
+            source && typeof source === 'object' && 'filter' in source
+              ? source.filter
+              : action.filter
+          const randomSelection =
+            action.selection === 'random' ||
+            (source &&
+              typeof source === 'object' &&
+              'selection' in source &&
+              source.selection === 'random')
+          // Knowing a card's identity does not reveal its hidden hand buffs.
+          // A fixed type plus random selection can prove only an empty pool:
+          // selecting any eligible card consumes RNG and is rejected separately.
+          const identityOnlyFilter =
+            randomSelection &&
+            filter &&
+            typeof filter === 'object' &&
+            'cardType' in filter &&
+            typeof filter.cardType === 'string' &&
+            Object.keys(filter).every((key) => key === 'cardType')
+          // These source forms are relative to each destination player's frame.
+          // Inspect the public existence of unknown cards, never sampled identities.
+          return before.players.some((player) => {
+            const targeted =
+              action.player === 'each' ||
+              (action.player === 'opponent'
+                ? player.participantId !== activated.controllerId
+                : player.participantId === activated.controllerId)
+            return (
+              targeted &&
+              player.participantId !== playerId &&
+              player[zone].some(
+                (card) => !identityOnlyFilter || !card.knownTo?.includes(playerId)
+              )
+            )
+          })
+        })
+    ) === true
+  )
+}
+
 /** Draws/choices stop exact forecasting, even when a sampled deck is deterministic. */
 export function revealsTacticalInformation(
   events: readonly OpeningMatchEvent[],
@@ -111,6 +193,11 @@ export function revealsTacticalInformation(
   }
 ): boolean {
   return events.some((event, index) => {
+    if (
+      publicContext &&
+      inspectsConcealedSummonPool(event, publicContext.before, publicContext.playerId)
+    )
+      return true
     if (
       event.type === 'card-generated' &&
       publicContext &&

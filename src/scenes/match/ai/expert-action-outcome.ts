@@ -929,6 +929,62 @@ function wastedHealingTarget(
     : { penalty: 0 }
 }
 
+/** Both public joust outcomes must only restore the chosen character's Health.
+ * The sampled amount is not a certainty claim; either branch has the same sign.
+ * Extra instructions (draws, returns or unknown branches) remain search decisions.
+ */
+function isHealingJoust(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  const action = value as Record<string, unknown>
+  const heals = (branch: unknown): boolean =>
+    Array.isArray(branch) &&
+    branch.length > 0 &&
+    branch.every((value) => {
+      if (!value || typeof value !== 'object') return false
+      const restore = value as Record<string, unknown>
+      const target = restore.target as Record<string, unknown> | undefined
+      return (
+        restore.action === 'restore' &&
+        Object.keys(restore).every((key) =>
+          ['action', 'target', 'amount', 'vfx'].includes(key)
+        ) &&
+        (restore.amount === 'full' ||
+          (typeof restore.amount === 'number' &&
+            Number.isFinite(restore.amount) &&
+            restore.amount > 0)) &&
+        target?.selection === 'chosen' &&
+        target.controller === 'any' &&
+        target.type === 'character' &&
+        Object.keys(target).every((key) =>
+          ['selection', 'controller', 'type'].includes(key)
+        )
+      )
+    })
+  return (
+    action.action === 'joust' &&
+    Object.keys(action).every((key) =>
+      ['action', 'winActions', 'loseActions'].includes(key)
+    ) &&
+    heals(action.winActions) &&
+    heals(action.loseActions)
+  )
+}
+
+/** Either healing branch can change a visible trigger, threshold or follow-up target. */
+function hasHealingDependentEffect(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  const entry = value as Record<string, unknown>
+  return (
+    entry.trigger === 'on-heal' ||
+    entry.event === 'health-restored' ||
+    (typeof entry.type === 'string' && /health|damaged/.test(entry.type)) ||
+    typeof entry.damaged === 'boolean' ||
+    (typeof entry.reference === 'string' &&
+      /health|damage|healing/.test(entry.reference)) ||
+    Object.values(entry).some(hasHealingDependentEffect)
+  )
+}
+
 /** One reversible simulation on an already fair search fork, never a live dispatch. */
 export function inspectExpertAction(
   root: OpeningMatchAnalysis,
@@ -997,6 +1053,35 @@ export function inspectExpertAction(
     const card = self.hand.find((c) => c.instanceId === spentCard)
     const definition = card ? CARD_CATALOG.get(card.cardId) : undefined
     const isSpell = !card || definition?.type === 'Spell'
+    const healingJoust =
+      definition?.effects.some((effect) => effect.actions?.some(isHealingJoust)) ===
+      true
+    // Different healing amounts can remove damaged/enrage minion benefits.
+    // This bounded review only extends to hero targets; minions stay in search.
+    if (
+      healingJoust &&
+      (command.type !== 'play-card' ||
+        command.targets?.length !== 1 ||
+        command.targets[0]?.kind !== 'hero' ||
+        before!.players.some((player) =>
+          hasHealingDependentEffect([
+            player.hero.enchantments,
+            player.heroPower.enchantments,
+            ...player.hand.map((held) => CARD_CATALOG.get(held.cardId)?.effects),
+            player.weapon && CARD_CATALOG.get(player.weapon.cardId)?.effects,
+            player.weapon?.enchantments,
+            ...player.board
+              .filter((minion) => !minion.dormant && !minion.silenced)
+              .map((minion) => [
+                CARD_CATALOG.get(minion.cardId)?.effects,
+                minion.enchantments,
+                minion.grantedTriggers,
+                minion.attachedEffects
+              ])
+          ])
+        ))
+    )
+      return { penalty: 0 }
     // Only immediate effects whose payoff is represented below. Deck replacement,
     // delayed effects and future-turn enchantments must not be mistaken for no-ops.
     if (
@@ -1004,14 +1089,15 @@ export function inspectExpertAction(
       !definition.effects.every(
         (effect) =>
           effect.trigger === 'cast' &&
-          effect.actions?.every((action) =>
-            [
-              'damage',
-              'restore',
-              'spend-all-mana',
-              'summon-random',
-              'sacrifice-and-damage'
-            ].includes(action.action)
+          effect.actions?.every(
+            (action) =>
+              [
+                'damage',
+                'restore',
+                'spend-all-mana',
+                'summon-random',
+                'sacrifice-and-damage'
+              ].includes(action.action) || isHealingJoust(action)
           )
       )
     )
@@ -1138,24 +1224,51 @@ export function inspectExpertAction(
     // combo activation or making room before a draw into a full hand.
     if (spentCard && (hasDeferredCastPayoff(nextSelf) || self.handSize >= 10))
       return { penalty: 0 }
-    if (
-      before!.players.some((player) => {
-        if (player.participantId === actorId) return false
+    let opponentHealing = 0
+    const onlyOpponentHealing = before!.players
+      .filter((player) => player.participantId !== actorId)
+      .every((player) => {
         const next = after.players.find(
           (entry) => entry.participantId === player.participantId
         )!
-        return (
-          next.hero.health > player.hero.health ||
-          player.board.some(
-            (minion) =>
-              (next.board.find((entry) => entry.instanceId === minion.instanceId)
-                ?.health ?? 0) > minion.health
-          )
+        if (
+          next.hero.health < player.hero.health ||
+          enablesHeldDamagePayoff(next, player)
         )
-      }) &&
+          return false
+        opponentHealing += next.hero.health - player.hero.health
+        const board = next.board.map((minion) => {
+          const old = player.board.find(
+            (entry) => entry.instanceId === minion.instanceId
+          )
+          if (!old || minion.health <= old.health) return minion
+          opponentHealing += minion.health - old.health
+          return { ...minion, health: old.health, damageTaken: old.damageTaken }
+        })
+        // Healing can remove an enemy's damaged/enrage benefit. Keep those
+        // stat, keyword, trigger and cost changes rather than banning the target.
+        return (
+          position(player) ===
+          position({
+            ...next,
+            board,
+            hero: {
+              ...next.hero,
+              health: player.hero.health,
+              damageTaken: player.hero.damageTaken
+            }
+          })
+        )
+      })
+    if (
+      onlyOpponentHealing &&
+      opponentHealing > 0 &&
       payoffPosition(self, spentCard) === payoffPosition(nextSelf, spentCard)
     )
       return { penalty: 0.25, reason: 'opponent-heal' }
+    // The public reveal is information even when no Health changes. This new
+    // grammar only reviews adverse healing, not the value of paying to reveal.
+    if (healingJoust) return { penalty: 0 }
     const enemyUnchanged = before!.players
       .filter((p) => p.participantId !== actorId)
       .every((p) => {
