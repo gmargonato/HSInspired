@@ -3,6 +3,7 @@ import { dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import {
   parseAiMode,
+  parseAiCheatsEnabled,
   parseCursorScale,
   parseLastPlayedDeckId,
   type AiMode,
@@ -16,6 +17,7 @@ interface PersistedPreferences {
   readonly lastPlayedDeckId: string | null
   readonly cursorScale: number
   readonly aiMode: AiMode
+  readonly aiCheatsEnabled: boolean
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -30,6 +32,7 @@ function clonePreferences(preferences: Preferences): Preferences {
   return {
     lastPlayedDeckId: preferences.lastPlayedDeckId,
     cursorScale: preferences.cursorScale,
+    aiCheatsEnabled: preferences.aiCheatsEnabled,
     aiMode: preferences.aiMode
   }
 }
@@ -46,13 +49,19 @@ export class PreferencesRepository {
   async get(): Promise<Preferences> {
     await this.ensureLoaded()
     return clonePreferences(
-      this.preferences ?? { lastPlayedDeckId: null, aiMode: 'api', cursorScale: 1 }
+      this.preferences ?? {
+        lastPlayedDeckId: null,
+        aiMode: 'api',
+        cursorScale: 1,
+        aiCheatsEnabled: true
+      }
     )
   }
 
   async set(preferences: Preferences): Promise<void> {
     parseLastPlayedDeckId(preferences.lastPlayedDeckId)
     parseAiMode(preferences.aiMode)
+    parseAiCheatsEnabled(preferences.aiCheatsEnabled)
     parseCursorScale(preferences.cursorScale)
     await this.ensureLoaded()
     await this.persist(preferences)
@@ -89,6 +98,8 @@ export class PreferencesRepository {
       try {
         this.preferences = {
           lastPlayedDeckId: parseLastPlayedDeckId(parsed.lastPlayedDeckId),
+          aiCheatsEnabled:
+            typeof parsed.aiCheatsEnabled === 'boolean' ? parsed.aiCheatsEnabled : true,
           cursorScale:
             typeof parsed.cursorScale === 'number' &&
             Number.isFinite(parsed.cursorScale) &&
@@ -119,6 +130,7 @@ export class PreferencesRepository {
       version: PREFERENCES_FILE_VERSION,
       lastPlayedDeckId: preferences.lastPlayedDeckId,
       cursorScale: preferences.cursorScale,
+      aiCheatsEnabled: preferences.aiCheatsEnabled,
       aiMode: preferences.aiMode
     }
     const temporaryPath = `${this.filePath}.${randomUUID()}.tmp`

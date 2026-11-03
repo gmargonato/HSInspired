@@ -499,7 +499,6 @@ export class GameHandDrag {
     if (this.draggingIndex === null || this.dragReturning) return
     this.setDropAllowed(false)
     const index = this.index ?? this.draggingIndex
-    const revision = this.gestureRevision
     this.dragPointer = null
     this.dragPointerId = null
     this.previewPending = false
@@ -516,20 +515,32 @@ export class GameHandDrag {
       ? this.context.entryFor(this.cosmeticSlot)
       : this.context.entryAt(index)
     if (entry?.restTransform) {
-      void this.context
-        .returnToHand(
-          entry.slot,
-          entry.restTransform,
-          0,
-          OPENING_TIMING.hover,
-          OPENING_TIMING.hover
-        )
-        .then(() => {
-          if (revision === this.gestureRevision) this.finishDrag(index, entry.slot)
-        })
+      void this.retargetReturn(
+        entry.slot,
+        entry.restTransform,
+        OPENING_TIMING.hover,
+        OPENING_TIMING.hover
+      )
       return
     }
     this.finishDrag(index, this.cosmeticSlot ?? undefined)
+  }
+
+  /** Keep return cleanup attached to the latest fan animation. */
+  retargetReturn(
+    slot: GameCardSlot,
+    transform: HandCardTransform,
+    positionDuration: number,
+    scaleDuration: number
+  ): Promise<void> {
+    const index = this.index
+    if (index === null || !this.dragReturning) return Promise.resolve()
+    const revision = ++this.gestureRevision
+    return this.context
+      .returnToHand(slot, transform, 0, positionDuration, scaleDuration)
+      .then(() => {
+        if (revision === this.gestureRevision) this.finishDrag(index, slot)
+      })
   }
 
   private finishDrag(index: number, slot?: GameCardSlot): void {

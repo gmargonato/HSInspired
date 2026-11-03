@@ -11,6 +11,19 @@ collection, create decks, and play turn-based matches against AI opponents.
 - **Tavern Brawl:** Play a special preset-deck challenge. The current brawl gives
   both players 30 Unstable Portals.
 
+## Settings
+
+Menu settings groups Resolution under Graphics, Difficulty and AI Cheats under
+Game, and Cursor Size under Miscellaneous. AI Cheats defaults to On and gives the
+AI either an upgraded starting hero power or a 1-mana starting hero power, with
+an equal chance of each. Off disables both startup bonuses. The saved setting
+applies to future matches across difficulty modes.
+
+In-game settings blocks player input while the match, animations, and AI continue.
+It closes automatically at match end. Board choices use numbered labels and apply
+immediately for that match. Settings labels and dropdown text use Franklin Gothic
+Condensed; section headings and action-button lettering remain part of the artwork.
+
 ## Cards and effects
 
 Cards come in four types: minions, spells, weapons, and hero cards. Minions stay

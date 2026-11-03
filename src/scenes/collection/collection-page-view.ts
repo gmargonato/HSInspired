@@ -1,5 +1,4 @@
 import {
-  AlphaFilter,
   Container,
   type FederatedPointerEvent,
   type Renderer,
@@ -22,7 +21,10 @@ import {
   CARD_GRID_LAYOUT,
   COLLECTION_CARD_SHADOW,
   COLLECTION_LAYOUT,
-  COMPLETED_COLLECTION_CARD_ALPHA
+  DECK_LIMIT_CARD_OFFSET_Y,
+  DECK_LIMIT_CARD_SCALE,
+  getCollectionDeckLimitFramePlacement,
+  getCollectionDeckLimitLabelPlacement
 } from './collection-layout'
 import type { CollectionPage } from './collection-pages'
 import type { CardPreviewRouteBounds } from '../../application/navigation/card-preview-route'
@@ -35,7 +37,10 @@ export interface CollectionPageViewState {
 }
 
 export interface CollectionPageViewOptions {
-  readonly assets: Pick<CollectionAssets, 'searchNoResults'>
+  readonly assets: Pick<
+    CollectionAssets,
+    'searchNoResults' | 'cardDeckLimitFrame' | 'cardDeckLabel'
+  >
   readonly renderer: Renderer
   readonly resolver?: CardAssetResolver
   readonly state: CollectionPageViewState
@@ -51,14 +56,15 @@ export interface CollectionPageViewOptions {
   ) => void | Promise<void>
 }
 
-/** Owns collection-page card creation, labels, completion dimming, and swaps. */
+/** Owns collection-page cards, labels, deck-limit indicators, and swaps. */
 export class CollectionPageView extends Container {
   private readonly cardResolver: CardAssetResolver
   private readonly options: CollectionPageViewOptions
   private readonly cardLayerRoot = new Container()
   private readonly shadowLayerRoot = new Container()
+  private readonly deckLimitLayerRoot = new Container()
+  private readonly deckLimitLabelLayerRoot = new Container()
   private readonly shadowTexture: CardShadowTextureLease
-  private readonly completionFilters = new WeakMap<CardView, AlphaFilter>()
   private readonly classLabel: Text
   private readonly pageLabel: Text
   private readonly emptyStateImage: Sprite
@@ -77,7 +83,16 @@ export class CollectionPageView extends Container {
     this.shadowTexture = acquireCardShadowTexture(options.renderer)
     this.once('destroyed', () => this.shadowTexture.release())
     this.label = 'collection.page-content'
-    this.addChild(this.shadowLayerRoot, this.cardLayerRoot)
+    this.addChild(
+      this.shadowLayerRoot,
+      this.deckLimitLayerRoot,
+      this.cardLayerRoot,
+      this.deckLimitLabelLayerRoot
+    )
+    this.deckLimitLabelLayerRoot.label = 'collection.deck-limit-labels'
+    this.deckLimitLabelLayerRoot.eventMode = 'none'
+    this.deckLimitLayerRoot.label = 'collection.deck-limit-indicators'
+    this.deckLimitLayerRoot.eventMode = 'none'
     this.shadowLayerRoot.label = 'collection.card-shadows'
     this.shadowLayerRoot.eventMode = 'none'
     this.cardLayerRoot.label = 'collection.card-layer'
@@ -144,6 +159,10 @@ export class CollectionPageView extends Container {
     this.loading = true
     const nextCardLayer = new Container()
     const nextShadowLayer = new Container()
+    const nextDeckLimitLayer = new Container()
+    const nextDeckLimitLabelLayer = new Container()
+    nextDeckLimitLabelLayer.label = `collection.deck-limit-labels.page-${page.pageNumber}`
+    nextDeckLimitLayer.label = `collection.deck-limit-indicators.page-${page.pageNumber}`
     nextShadowLayer.label = `collection.card-shadows.page-${page.pageNumber}`
     nextCardLayer.label = `collection.card-layer.page-${page.pageNumber}`
     try {
@@ -181,6 +200,8 @@ export class CollectionPageView extends Container {
         }
         this.layoutCard(view, cardIndex)
         nextShadowLayer.addChild(this.createCardShadow(view, cardIndex))
+        nextDeckLimitLayer.addChild(this.createDeckLimitIndicator(view, cardIndex))
+        nextDeckLimitLabelLayer.addChild(this.createDeckLimitLabel(view, cardIndex))
         view.setPremiumAppearancePaused(this.premiumAppearancePaused)
         // Keep the full authored card resolution for sharp thumbnails and card-add
         // snapshots, but composite its static masks and blends only once per page.
@@ -189,10 +210,17 @@ export class CollectionPageView extends Container {
       }
       const previousCardLayer = this.cardLayerRoot.removeChildren()[0]
       const previousShadowLayer = this.shadowLayerRoot.removeChildren()[0]
+      const previousDeckLimitLayer = this.deckLimitLayerRoot.removeChildren()[0]
+      const previousDeckLimitLabelLayer =
+        this.deckLimitLabelLayerRoot.removeChildren()[0]
       this.cardLayerRoot.addChild(nextCardLayer)
       this.shadowLayerRoot.addChild(nextShadowLayer)
+      this.deckLimitLayerRoot.addChild(nextDeckLimitLayer)
+      this.deckLimitLabelLayerRoot.addChild(nextDeckLimitLabelLayer)
       previousCardLayer?.destroy({ children: true })
       previousShadowLayer?.destroy({ children: true })
+      previousDeckLimitLayer?.destroy({ children: true })
+      previousDeckLimitLabelLayer?.destroy({ children: true })
       this.pageIndex = index
       this.currentPage = page
       this.classLabel.text = page.cardClass
@@ -204,6 +232,9 @@ export class CollectionPageView extends Container {
     } finally {
       if (!nextCardLayer.parent) nextCardLayer.destroy({ children: true })
       if (!nextShadowLayer.parent) nextShadowLayer.destroy({ children: true })
+      if (!nextDeckLimitLayer.parent) nextDeckLimitLayer.destroy({ children: true })
+      if (!nextDeckLimitLabelLayer.parent)
+        nextDeckLimitLabelLayer.destroy({ children: true })
       if (sequence === this.renderSequence) this.loading = false
     }
   }
@@ -216,6 +247,12 @@ export class CollectionPageView extends Container {
     const oldLayer = this.cardLayerRoot.removeChildren()
     for (const child of oldLayer) child.destroy({ children: true })
     for (const child of this.shadowLayerRoot.removeChildren()) {
+      child.destroy({ children: true })
+    }
+    for (const child of this.deckLimitLayerRoot.removeChildren()) {
+      child.destroy({ children: true })
+    }
+    for (const child of this.deckLimitLabelLayerRoot.removeChildren()) {
       child.destroy({ children: true })
     }
     this.classLabel.text = ''
@@ -234,36 +271,13 @@ export class CollectionPageView extends Container {
       const atLimit = Boolean(
         deck && card && getDeckCardCount(deck, card.id) >= getCardCopyLimit(card)
       )
+      this.layoutCard(child, cardIndex, atLimit)
       const shadow = this.shadowLayerRoot.children[0]?.children[cardIndex]
-      if (shadow) {
-        shadow.alpha =
-          COLLECTION_CARD_SHADOW.opacity *
-          (atLimit ? COMPLETED_COLLECTION_CARD_ALPHA : 1)
-      }
-      // Fade the finished composite so live artwork cannot bleed through the frame.
-      let filter = this.completionFilters.get(child)
-      if (atLimit && !filter) {
-        filter = new AlphaFilter({
-          alpha: COMPLETED_COLLECTION_CARD_ALPHA,
-          resolution: 'inherit'
-        })
-        filter.enabled = false
-        this.completionFilters.set(child, filter)
-        const ownedFilter = filter
-        child.once('destroyed', () => ownedFilter.destroy())
-      }
-      if (filter && filter.enabled !== atLimit) {
-        // Cached masks/blends rebuild in local coordinates; the outer fade filter
-        // uses screen coordinates. Render live while dimmed to keep them consistent.
-        if (atLimit) {
-          child.disableTextureCache()
-          child.filters = [...(child.filters ?? []), filter]
-        } else {
-          child.filters = (child.filters ?? []).filter((entry) => entry !== filter)
-          child.enableTextureCache()
-        }
-        filter.enabled = atLimit
-      }
+      if (shadow) shadow.visible = !atLimit
+      const indicator = this.deckLimitLayerRoot.children[0]?.children[cardIndex]
+      if (indicator) indicator.visible = atLimit
+      const label = this.deckLimitLabelLayerRoot.children[0]?.children[cardIndex]
+      if (label) label.visible = atLimit
     }
   }
 
@@ -273,15 +287,53 @@ export class CollectionPageView extends Container {
     this.destroy({ children: true })
   }
 
-  private layoutCard(view: CardView, cardIndex: number): void {
+  private layoutCard(view: CardView, cardIndex: number, atLimit = false): void {
     const placement = getCollectionCardPlacement(
       cardIndex,
       view.plan.width,
       view.renderedHeight,
       CARD_GRID_LAYOUT
     )
-    view.scale.set(placement.scale)
-    view.position.set(placement.x, placement.y)
+    const scale = atLimit ? DECK_LIMIT_CARD_SCALE : placement.scale
+    view.scale.set(scale)
+    view.position.set(
+      placement.x + (view.plan.width * (placement.scale - scale)) / 2,
+      placement.y +
+        (view.renderedHeight * (placement.scale - scale)) / 2 +
+        (atLimit ? DECK_LIMIT_CARD_OFFSET_Y : 0)
+    )
+  }
+
+  private createDeckLimitIndicator(view: CardView, cardIndex: number): Sprite {
+    const indicator = new Sprite(this.options.assets.cardDeckLimitFrame)
+    indicator.label = `collection.deck-limit-indicator.${cardIndex}`
+    indicator.eventMode = 'none'
+    indicator.visible = false
+    const body = CARD_BODY_BOUNDS
+    applyAnchoredPlacement(
+      indicator,
+      getCollectionDeckLimitFramePlacement({
+        x: view.x + (body.x + body.width / 2) * view.scale.x,
+        y: view.y + body.y * view.plan.renderScaleY * view.scale.y
+      })
+    )
+    return indicator
+  }
+
+  private createDeckLimitLabel(view: CardView, cardIndex: number): Sprite {
+    const label = new Sprite(this.options.assets.cardDeckLabel)
+    label.label = `collection.deck-limit-label.${cardIndex}`
+    label.eventMode = 'none'
+    label.visible = false
+    const body = CARD_BODY_BOUNDS
+    applyAnchoredPlacement(
+      label,
+      getCollectionDeckLimitLabelPlacement({
+        x: view.x + (body.x + body.width / 2) * view.scale.x,
+        y: view.y + (body.y + body.height) * view.plan.renderScaleY * view.scale.y
+      })
+    )
+    return label
   }
 
   private createCardShadow(view: CardView, cardIndex: number): Sprite {

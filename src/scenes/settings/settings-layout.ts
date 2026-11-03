@@ -10,27 +10,27 @@ export const SETTINGS_LAYOUT = {
   name: 'Settings overlay',
   boardCorners: {
     title: placement(
-      { x: 970, y: 515 },
+      { x: 781.5, y: 660 },
       { width: 344, height: 54 },
-      { anchor: CENTER }
+      { anchor: TOP_LEFT }
     ),
     field: placement(
-      { x: 970, y: 590 },
-      { width: 344, height: 76 },
+      { x: 970, y: 745 },
+      { width: 377, height: 80 },
       { anchor: CENTER }
     ),
     value: placement(
-      { x: 928, y: 590 },
+      { x: 928, y: 745 },
       { width: 208, height: 42 },
       { anchor: CENTER }
     ),
     button: placement(
-      { x: 1068, y: 590 },
-      { width: 62, height: 42 },
+      { x: 1068, y: 745 },
+      { width: 69, height: 51 },
       { anchor: CENTER }
     ),
     options: placement(
-      { x: 850, y: 636 },
+      { x: 850, y: 785 },
       { width: 240, height: 0 },
       {
         anchor: TOP_LEFT,
@@ -52,25 +52,26 @@ export const SETTINGS_LAYOUT = {
   ),
 
   resolutionTitle: placement(
-    { x: 790, y: 320 },
+    { x: 530, y: 335 },
     { width: 344, height: 54 },
     {
       anchor: TOP_LEFT,
-      note: 'White Belwe heading for the native window resolution setting.'
+      note: 'Warm yellow Franklin heading for the native window resolution setting.'
     }
   ),
 
   resolutionField: placement(
-    { x: 960, y: 420 },
-    { width: 344, height: 76 },
+    { x: 702, y: 420 },
+    { width: 377, height: 80 },
     {
       anchor: CENTER,
-      note: 'Closed resolution selector field, centered in the settings panel.'
+      scale: 344 / 377,
+      note: 'Closed resolution selector field, centered in the Graphics section.'
     }
   ),
 
   resolutionValue: placement(
-    { x: 918, y: 420 },
+    { x: 660, y: 420 },
     { width: 208, height: 42 },
     {
       anchor: CENTER,
@@ -79,16 +80,17 @@ export const SETTINGS_LAYOUT = {
   ),
 
   resolutionButton: placement(
-    { x: 1058, y: 420 },
-    { width: 62, height: 42 },
+    { x: 791, y: 420 },
+    { width: 69, height: 51 },
     {
       anchor: CENTER,
+      scale: 62 / 69,
       note: 'Arrow button fitted into the dark socket at the field right edge.'
     }
   ),
 
   resolutionOptions: placement(
-    { x: 840, y: 440 },
+    { x: 582, y: 456 },
     { width: 240, height: 260 },
     {
       anchor: TOP_LEFT,
@@ -106,29 +108,29 @@ export const SETTINGS_LAYOUT = {
   ),
 
   aiModeTitle: placement(
-    { x: 790, y: 480 },
+    { x: 1040, y: 335 },
     { width: 344, height: 54 },
-    { anchor: TOP_LEFT, note: 'AI mode heading below Resolution.' }
+    { anchor: TOP_LEFT, note: 'Difficulty heading in the Game section.' }
   ),
   aiModeField: placement(
-    { x: 960, y: 580 },
-    { width: 344, height: 76 },
-    { anchor: CENTER, note: 'Closed AI mode selector.' }
+    { x: 1212, y: 420 },
+    { width: 377, height: 80 },
+    { anchor: CENTER, scale: 344 / 377, note: 'Closed AI mode selector.' }
   ),
   aiModeValue: placement(
-    { x: 918, y: 580 },
+    { x: 1170, y: 420 },
     { width: 208, height: 42 },
     { anchor: CENTER, note: 'Selected AI mode within the field.' }
   ),
   aiModeButton: placement(
-    { x: 1058, y: 580 },
-    { width: 62, height: 42 },
-    { anchor: CENTER, note: 'AI mode selector arrow.' }
+    { x: 1301, y: 420 },
+    { width: 69, height: 51 },
+    { anchor: CENTER, scale: 62 / 69, note: 'AI mode selector arrow.' }
   ),
   aiModeOptions: placement(
-    { x: 840, y: 600 },
+    { x: 1092, y: 456 },
     { width: 240, height: 156 },
-    { anchor: TOP_LEFT, note: 'Three-row Easy, Hardware V2, and API mode dropdown.' }
+    { anchor: TOP_LEFT, note: 'Three-row Easy, Expert, and API mode dropdown.' }
   ),
   aiModeOption: placement(
     { x: 20, y: 26 },
@@ -136,22 +138,43 @@ export const SETTINGS_LAYOUT = {
     { anchor: CENTER, note: 'Local text placement within an AI mode option.' }
   ),
   cursorSizeTitle: placement(
-    { x: 790, y: 640 },
+    { x: 788, y: 730 },
     { width: 344, height: 54 },
     { anchor: TOP_LEFT, note: 'Cursor Size heading.' }
   ),
   cursorSlider: placement(
-    { x: 960, y: 740 },
+    { x: 960, y: 815 },
     { width: 379, height: 83 },
     { anchor: CENTER, scale: 344 / 379, note: 'Cursor size track.' }
   ),
   cursorSliderHandle: placement(
-    { x: 960, y: 740 },
+    { x: 960, y: 815 },
     { width: 35, height: 77 },
     { anchor: CENTER, scale: 344 / 379, note: 'Handle centered on the recessed track.' }
   ),
   cursorSliderTravel: { minX: 858, maxX: 1062 },
+  aiCheats: {
+    checkbox: placement(
+      { x: 1040, y: 515 },
+      { width: 39, height: 36 },
+      { anchor: TOP_LEFT }
+    ),
+    title: placement(
+      { x: 1094, y: 511 },
+      { width: 260, height: 44 },
+      { anchor: TOP_LEFT }
+    )
+  },
   /** Match-only action frames and buttons, centered inside the game settings panel. */
+  gameDivider: placement(
+    { x: 781.5, y: 625 },
+    { width: 377, height: 1 },
+    {
+      anchor: TOP_LEFT,
+      note: 'Brown separator between match actions and Board settings.'
+    }
+  ),
+  gameDividerColor: 0x28170d,
   gameActions: {
     concedeFrame: placement(
       { x: 970, y: 395 },
@@ -170,7 +193,7 @@ export const SETTINGS_LAYOUT = {
       }
     ),
     quitFrame: placement(
-      { x: 970, y: 730 },
+      { x: 970, y: 535 },
       { width: 398, height: 109 },
       {
         anchor: CENTER,
@@ -178,7 +201,7 @@ export const SETTINGS_LAYOUT = {
       }
     ),
     quitButton: placement(
-      { x: 970, y: 730 },
+      { x: 970, y: 535 },
       { width: 294, height: 97 },
       {
         anchor: CENTER,

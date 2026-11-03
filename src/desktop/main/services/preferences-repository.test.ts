@@ -34,16 +34,44 @@ afterEach(async () => {
 })
 
 describe('PreferencesRepository', () => {
+  it('persists disabled AI cheats and retains them through unrelated updates', async () => {
+    const { repository, filePath } = await createRepository()
+    expect((await repository.get()).aiCheatsEnabled).toBe(true)
+    await repository.set({ ...(await repository.get()), aiCheatsEnabled: false })
+    const reloaded = new PreferencesRepository(filePath)
+    expect((await reloaded.get()).aiCheatsEnabled).toBe(false)
+    await reloaded.set({ ...(await reloaded.get()), cursorScale: 0.75 })
+    expect((await new PreferencesRepository(filePath).get()).aiCheatsEnabled).toBe(
+      false
+    )
+  })
+
+  it('accepts only boolean AI cheat updates and defaults old responses to On', () => {
+    for (const enabled of [true, false]) {
+      expect(parsePreferencesUpdateRequest({ aiCheatsEnabled: enabled })).toEqual({
+        aiCheatsEnabled: enabled
+      })
+    }
+    for (const value of [null, 0, 1, 'true', 'false', {}]) {
+      expect(() => parsePreferencesUpdateRequest({ aiCheatsEnabled: value })).toThrow()
+    }
+    expect(
+      parsePreferences({ lastPlayedDeckId: null, aiMode: 'api' }).aiCheatsEnabled
+    ).toBe(true)
+  })
+
   it('persists cursor size without changing other preferences', async () => {
     const { repository, filePath } = await createRepository()
     await repository.set({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'hardware-v2',
+      aiCheatsEnabled: true,
       cursorScale: 0.75
     })
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'hardware-v2',
+      aiCheatsEnabled: true,
       cursorScale: 0.75
     })
   })
@@ -64,6 +92,7 @@ describe('PreferencesRepository', () => {
       expect(await repository.get()).toEqual({
         lastPlayedDeckId: 'deck-123',
         aiMode: 'hardware-v2',
+        aiCheatsEnabled: true,
         cursorScale: 1
       })
     }
@@ -84,6 +113,7 @@ describe('PreferencesRepository', () => {
     expect(await repository.get()).toEqual({
       lastPlayedDeckId: null,
       aiMode: 'api',
+      aiCheatsEnabled: true,
       cursorScale: 1
     })
   })
@@ -94,11 +124,13 @@ describe('PreferencesRepository', () => {
     await repository.set({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'api',
+      aiCheatsEnabled: true,
       cursorScale: 1
     })
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'api',
+      aiCheatsEnabled: true,
       cursorScale: 1
     })
   })
@@ -109,15 +141,22 @@ describe('PreferencesRepository', () => {
     await repository.set({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'hardware',
+      aiCheatsEnabled: true,
       cursorScale: 1
     })
-    await repository.set({ lastPlayedDeckId: null, aiMode: 'hardware', cursorScale: 1 })
+    await repository.set({
+      lastPlayedDeckId: null,
+      aiMode: 'hardware',
+      aiCheatsEnabled: true,
+      cursorScale: 1
+    })
 
     const persisted = JSON.parse(await readFile(filePath, 'utf8'))
     expect(persisted.version).toBe(2)
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: null,
       aiMode: 'hardware',
+      aiCheatsEnabled: true,
       cursorScale: 1
     })
   })
@@ -128,17 +167,20 @@ describe('PreferencesRepository', () => {
     await repository.set({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'hardware-v2',
+      aiCheatsEnabled: true,
       cursorScale: 1
     })
 
     expect(JSON.parse(await readFile(filePath, 'utf8'))).toMatchObject({
       version: 2,
       aiMode: 'hardware-v2',
+      aiCheatsEnabled: true,
       cursorScale: 1
     })
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'hardware-v2',
+      aiCheatsEnabled: true,
       cursorScale: 1
     })
   })
@@ -160,6 +202,7 @@ describe('PreferencesRepository', () => {
     expect(preferences).toEqual({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'hardware-v2',
+      aiCheatsEnabled: true,
       cursorScale: 1
     })
     expect(parsePreferencesUpdateRequest({ expertDeckStrategyEnabled: false })).toEqual(
@@ -177,23 +220,31 @@ describe('PreferencesRepository', () => {
     await repository.set({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'api',
+      aiCheatsEnabled: true,
       cursorScale: 1
     })
     const saved = await readFile(filePath, 'utf8')
 
     await expect(
-      repository.set({ lastPlayedDeckId: '', aiMode: 'api', cursorScale: 1 })
+      repository.set({
+        lastPlayedDeckId: '',
+        aiMode: 'api',
+        aiCheatsEnabled: true,
+        cursorScale: 1
+      })
     ).rejects.toThrow()
     await expect(
       repository.set({
         lastPlayedDeckId: '   ' as string,
         aiMode: 'api',
+        aiCheatsEnabled: true,
         cursorScale: 1
       })
     ).rejects.toThrow()
     expect(await repository.get()).toEqual({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'api',
+      aiCheatsEnabled: true,
       cursorScale: 1
     })
     expect(await readFile(filePath, 'utf8')).toBe(saved)
@@ -206,16 +257,19 @@ describe('PreferencesRepository', () => {
     expect(await repository.get()).toEqual({
       lastPlayedDeckId: null,
       aiMode: 'api',
+      aiCheatsEnabled: true,
       cursorScale: 1
     })
     await repository.set({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'api',
+      aiCheatsEnabled: true,
       cursorScale: 1
     })
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'api',
+      aiCheatsEnabled: true,
       cursorScale: 1
     })
   })
@@ -231,6 +285,7 @@ describe('PreferencesRepository', () => {
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: null,
       aiMode: 'api',
+      aiCheatsEnabled: true,
       cursorScale: 1
     })
   })
@@ -246,16 +301,19 @@ describe('PreferencesRepository', () => {
     expect(await repository.get()).toEqual({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'api',
+      aiCheatsEnabled: true,
       cursorScale: 1
     })
     await repository.set({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'hardware',
+      aiCheatsEnabled: true,
       cursorScale: 1
     })
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'hardware',
+      aiCheatsEnabled: true,
       cursorScale: 1
     })
   })
@@ -271,6 +329,7 @@ describe('PreferencesRepository', () => {
     expect(await repository.get()).toEqual({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'api',
+      aiCheatsEnabled: true,
       cursorScale: 1
     })
   })
@@ -281,6 +340,7 @@ describe('PreferencesRepository', () => {
       expect(parsePreferences({ lastPlayedDeckId: null, aiMode })).toEqual({
         lastPlayedDeckId: null,
         aiMode,
+        aiCheatsEnabled: true,
         cursorScale: 1
       })
     }

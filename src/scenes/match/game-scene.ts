@@ -67,9 +67,6 @@ import type { ExpertDeckStrategyBinding } from '../../game-rules/decks/expert-de
 import { ExpertAiDecisionApi } from './ai/expert-ai-decision-api'
 import { LocalAiDecisionApi } from './ai/local-ai-decision-api'
 
-/** Set true to restore the AI's randomized startup Hero Power bonus. */
-const AI_HERO_POWER_BONUS_ENABLED = true
-
 /** Full-screen route adapter for the first playable opening sequence. */
 export class GameScene extends Scene {
   private readonly deckStore: DeckStore
@@ -84,6 +81,12 @@ export class GameScene extends Scene {
   private expertAiApi: ExpertAiDecisionApi | null = null
   private recorder?: MatchRecorder
   private readonly rewardMatchId = crypto.randomUUID()
+  private matchEnded = false
+
+  get hasMatchEnded(): boolean {
+    return this.matchEnded
+  }
+
   private statisticsAttempted = false
   private opponentLeftShown = false
   private readonly recordWindowFocus = (): void => this.recordWindowState('focus')
@@ -164,7 +167,13 @@ export class GameScene extends Scene {
     options: readonly { id: string; label: string }[]
     selected: string | null
   } {
-    return { options: TABLE_CORNERS, selected: this.selectedCorner }
+    return {
+      options: TABLE_CORNERS.map((corner) => ({
+        ...corner,
+        label: `Board #${corner.label}`
+      })),
+      selected: this.selectedCorner
+    }
   }
 
   setBoardCorner(id: string): void {
@@ -225,7 +234,7 @@ export class GameScene extends Scene {
     })
     this.logger?.info(
       '[GameScene] decks resolved',
-      decks.map((d) => `${d.id} — ${d.heroId}`)
+      decks.map((d) => `${d.id} â€” ${d.heroId}`)
     )
 
     const aiPreferences = await this.readAiPreferences()
@@ -242,7 +251,7 @@ export class GameScene extends Scene {
       ...this.route,
       setup: {
         ...this.route.setup,
-        aiHeroPowerBonusEnabled: AI_HERO_POWER_BONUS_ENABLED
+        aiHeroPowerBonusEnabled: aiPreferences.aiCheatsEnabled
       }
     }
     this.recorder = new MatchRecorder(
@@ -442,12 +451,23 @@ export class GameScene extends Scene {
     const preferences =
       this.preferences ??
       (typeof window !== 'undefined' ? window.api?.preferences : undefined)
-    if (!preferences) return { lastPlayedDeckId: null, aiMode: 'api', cursorScale: 1 }
+    if (!preferences)
+      return {
+        lastPlayedDeckId: null,
+        aiMode: 'api',
+        cursorScale: 1,
+        aiCheatsEnabled: true
+      }
     try {
       return await preferences.get()
     } catch (error) {
       this.logger?.warn('[GameScene] AI mode preference unavailable; using API.', error)
-      return { lastPlayedDeckId: null, aiMode: 'api', cursorScale: 1 }
+      return {
+        lastPlayedDeckId: null,
+        aiMode: 'api',
+        cursorScale: 1,
+        aiCheatsEnabled: true
+      }
     }
   }
 
@@ -494,6 +514,8 @@ export class GameScene extends Scene {
   }
 
   private async recordMatchResult(event: MatchEndedEvent): Promise<number> {
+    this.matchEnded = true
+    await this.sceneManager.dismissOverlaysAbove?.(this)
     const human = this.route.setup.participants.find(
       (participant) => participant.controllerKind === 'human'
     )
@@ -558,6 +580,10 @@ export class GameScene extends Scene {
     } catch (error) {
       this.logger?.warn('Failed to save the match result.', error)
     }
+  }
+
+  protected override onInputBlocked(blocked: boolean): void {
+    this.view?.setInputBlocked(blocked)
   }
 
   update(deltaMS: number): void {

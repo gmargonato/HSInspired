@@ -36,12 +36,14 @@ import type {
   OpeningCard,
   OpeningMatchEvent,
   OpeningMatchState,
+  BoardMinion,
   PlayerId
 } from '../../../game-rules/match'
 import { HeroView } from '../board/hero-view'
 import type { GameCardSlot } from '../hand/game-card-slot'
 import { TargetGestureController } from '../targeting/target-gesture'
-import { asCardId } from '../../../game-rules/content/cards'
+import { asCardId, CARD_CATALOG } from '../../../game-rules/content/cards'
+import { boardMinionAbilityMarkers } from '../board/board-ability-markers'
 import { GAME_BOARD_LAYOUT } from '../game-scene-layout'
 import {
   BOARD_TIMING,
@@ -1007,6 +1009,89 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+describe('minion identity decorations', () => {
+  it.each(['local', 'remote'] as const)(
+    'refreshes legendary decorations on a reused %s board view',
+    async (side) => {
+      const value = board()
+      const internal = value as unknown as {
+        session: GameBoardSession
+        resolver: CardAssetResolver
+        insertLocalMinionView(position: number, view: MinionView): void
+        insertRemoteMinionView(position: number, view: MinionView): void
+        syncBoardMinionPresentation(state: OpeningMatchState): void
+      }
+      vi.spyOn(internal.resolver, 'loadArtwork').mockResolvedValue(Texture.WHITE)
+      const state = internal.session.getState()
+      const owner =
+        side === 'local'
+          ? internal.session.localParticipantId
+          : internal.session.remoteParticipantId
+      const definition = CARD_CATALOG.require('classic_tirion_fordring')
+      const minion: BoardMinion = {
+        instanceId: 'transformed-minion',
+        cardId: definition.id,
+        attack: 6,
+        health: 6,
+        maxHealth: 6,
+        keywords: definition.keywords,
+        summonedOnTurn: 1,
+        lastAttackedOnTurn: null
+      }
+      const view = await MinionView.create(
+        {
+          label: 'identity-regression',
+          attack: 6,
+          health: 6,
+          maxHealth: 6,
+          legendary: true,
+          frozen: false,
+          ...boardMinionAbilityMarkers(minion, definition, state.turnNumber)
+        },
+        new Proxy({} as MinionViewTextures, { get: () => Texture.WHITE }),
+        Texture.WHITE
+      )
+      view.instanceId = minion.instanceId
+      view.cardId = definition.id
+      view.ownerId = owner
+      if (side === 'local') internal.insertLocalMinionView(0, view)
+      else internal.insertRemoteMinionView(0, view)
+      const sync = (current: BoardMinion) =>
+        internal.syncBoardMinionPresentation({
+          ...state,
+          players: [
+            state.players[0].participantId === owner
+              ? { ...state.players[0], board: [current] }
+              : state.players[0],
+            state.players[1].participantId === owner
+              ? { ...state.players[1], board: [current] }
+              : state.players[1]
+          ]
+        })
+      const legendary = view.getChildByLabel('minion.frame-legendary')!
+      const taunt = view.getChildByLabel('minion.taunt')!
+      sync({ ...minion, dormant: true })
+      expect(legendary.visible || taunt.visible).toBe(false)
+      sync(minion)
+      expect(legendary.visible && taunt.visible).toBe(true)
+      sync({
+        ...minion,
+        cardId: asCardId('basic_sheep'),
+        keywords: [],
+        attack: 1,
+        health: 1,
+        maxHealth: 1
+      })
+      expect(view.cardId).toBe('basic_sheep')
+      expect(legendary.visible || taunt.visible).toBe(false)
+      sync({ ...minion, dormant: true })
+      expect(legendary.visible || taunt.visible).toBe(false)
+      sync(minion)
+      expect(legendary.visible && taunt.visible).toBe(true)
+    }
+  )
+})
+
 describe('opponent-turn hand pickup', () => {
   function setup() {
     const value = board()
@@ -1167,6 +1252,71 @@ describe('opponent-turn hand pickup', () => {
     await finishReturn()
   })
 
+  it.each(['before', 'during'] as const)(
+    'settles into the updated fan when a draw occurs %s automatic return',
+    async (drawTiming) => {
+      const { view, slot, entry, pick, target, dispatch } = setup()
+      pick()
+      view.hand.drag.update(16)
+      const draw = () => {
+        const neighbor = mulliganSlot('drawn-neighbor')
+        view.hand.layer.addChild(neighbor)
+        view.hand.append({
+          ...entry,
+          slot: neighbor,
+          card: { ...entry.card, instanceId: 'drawn-neighbor' },
+          displaced: false
+        })
+        return view.hand.applyLayout({
+          positionDuration: OPENING_TIMING.cardDeal,
+          scaleDuration: OPENING_TIMING.cardDeal,
+          preserveHover: true
+        })
+      }
+      let layout: Promise<void> | undefined
+      if (drawTiming === 'before') {
+        const heldPose = { x: slot.x, y: slot.y, scale: slot.scale.x }
+        await draw()
+        expect({ x: slot.x, y: slot.y, scale: slot.scale.x }).toEqual(heldPose)
+        expect(view.hand.drag.returning).toBe(false)
+        view.hand.drag.flushPointer({ x: slot.x + 50, y: slot.y }, 1)
+        view.hand.drag.update(16)
+        expect(slot.x).not.toBe(heldPose.x)
+      }
+      view.session.dispatch({
+        type: 'end-turn',
+        participantId: view.session.remoteParticipantId
+      })
+      dispatch.mockClear()
+      view.hand.drag.update(16)
+      expect(view.hand.drag.returning).toBe(true)
+      if (drawTiming === 'during') {
+        gsap.getTweensOf(slot)[0]!.parent!.progress(0.5)
+        layout = draw()
+      }
+      for (const tween of gsap.getTweensOf(slot)) tween.parent!.progress(1)
+      await Promise.resolve()
+      await Promise.resolve()
+      await layout
+      const rest = layoutHand(2)[0]!
+      expect(slot.x).toBeCloseTo(rest.x)
+      expect(slot.y).toBeCloseTo(rest.y)
+      expect(slot.rotation).toBeCloseTo(rest.rotation)
+      expect(slot.scale.x).toBeCloseTo(rest.scale)
+      expect(slot.scale.y).toBeCloseTo(rest.scale)
+      expect(slot.zIndex).toBe(rest.zIndex)
+      expect(view.hand.drag.index).toBeNull()
+      expect(view.hand.drag.returning).toBe(false)
+      expect(slot.card.visible).toBe(true)
+      expect(slot.children.some((child) => child instanceof PerspectiveMesh)).toBe(
+        false
+      )
+      expect(slot.suppressPlayableOutline).toHaveBeenLastCalledWith(false)
+      expect(dispatch).not.toHaveBeenCalled()
+      expect(target).not.toHaveBeenCalled()
+    }
+  )
+
   it('keeps the held identity through insertion and cancels when that card leaves', async () => {
     const { view, slot, entry, point, pick, dispatch } = setup()
     pick()
@@ -1248,13 +1398,11 @@ describe('turn taskbar attention', () => {
         | undefined
       startInitialTurn(): void
       presentMatchResult(): Promise<void>
-      heroPowerEffects: { reveal(): Promise<void> }
       presentEvent(event: OpeningMatchEvent): Promise<void>
     }
     vi.spyOn(internal, 'syncTurnHud').mockImplementation(() => undefined)
     vi.spyOn(internal, 'syncTurnControls').mockImplementation(() => undefined)
     vi.spyOn(internal, 'handleTurnStarted').mockImplementation(() => undefined)
-    vi.spyOn(internal.heroPowerEffects, 'reveal').mockResolvedValue(undefined)
     return { value, internal, setHighlighted }
   }
 

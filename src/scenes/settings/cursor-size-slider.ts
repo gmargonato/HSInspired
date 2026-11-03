@@ -28,7 +28,7 @@ export class CursorSizeSlider extends Container {
     this.label = 'settings.cursor-size-slider'
     const title = new Text({
       text: 'Cursor Size',
-      style: { fontFamily: 'Belwe', fontSize: 42, fill: 0xffffff }
+      style: { fontFamily: 'Franklin Gothic Condensed', fontSize: 36, fill: 0xf5e3b6 }
     })
     title.label = 'settings.cursor-size-title'
     title.eventMode = 'none'

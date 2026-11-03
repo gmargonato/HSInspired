@@ -7,6 +7,7 @@ export interface Preferences {
   readonly lastPlayedDeckId: string | null
   readonly cursorScale: number
   readonly aiMode: AiMode
+  readonly aiCheatsEnabled: boolean
 }
 
 export type AiMode = 'hardware' | 'hardware-v2' | 'api'
@@ -15,6 +16,7 @@ export interface PreferencesUpdateRequest {
   readonly lastPlayedDeckId?: string | null
   readonly cursorScale?: number
   readonly aiMode?: AiMode
+  readonly aiCheatsEnabled?: boolean
 }
 
 export interface PreferencesApi {
@@ -37,6 +39,11 @@ export function parseAiMode(value: unknown): AiMode {
   throw new Error('Invalid AI mode')
 }
 
+export function parseAiCheatsEnabled(value: unknown): boolean {
+  if (typeof value !== 'boolean') throw new Error('Invalid AI cheats setting')
+  return value
+}
+
 export function parseCursorScale(value: unknown): number {
   if (
     typeof value !== 'number' ||
@@ -55,6 +62,10 @@ export function parsePreferences(value: unknown): Preferences {
     lastPlayedDeckId: parseLastPlayedDeckId(value.lastPlayedDeckId),
     cursorScale:
       value.cursorScale === undefined ? 1 : parseCursorScale(value.cursorScale),
+    aiCheatsEnabled:
+      value.aiCheatsEnabled === undefined
+        ? true
+        : parseAiCheatsEnabled(value.aiCheatsEnabled),
     aiMode: parseAiMode(value.aiMode)
   }
 }
@@ -70,6 +81,9 @@ export function parsePreferencesUpdateRequest(
     ...(value.cursorScale === undefined
       ? {}
       : { cursorScale: parseCursorScale(value.cursorScale) }),
-    ...(value.aiMode === undefined ? {} : { aiMode: parseAiMode(value.aiMode) })
+    ...(value.aiMode === undefined ? {} : { aiMode: parseAiMode(value.aiMode) }),
+    ...(value.aiCheatsEnabled === undefined
+      ? {}
+      : { aiCheatsEnabled: parseAiCheatsEnabled(value.aiCheatsEnabled) })
   }
 }

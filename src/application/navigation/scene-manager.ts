@@ -26,6 +26,7 @@ export class SceneManager {
   private readonly logger: AppLogger
   private readonly world = new Container()
   private readonly stack: Scene[] = []
+  private readonly liveOverlays = new Set<Scene>()
   private transition: Promise<void> = Promise.resolve()
   private transitioningScene: Scene | null = null
   private started = false
@@ -84,12 +85,15 @@ export class SceneManager {
     })
   }
 
-  async push(scene: Scene): Promise<void> {
+  async push(
+    scene: Scene,
+    options: { keepUnderlyingActive?: boolean } = {}
+  ): Promise<void> {
     return this.enqueue(async () => {
       if (!this.started) {
         throw new Error('SceneManager must be started before pushing scenes')
       }
-      await this.pushImmediate(scene)
+      await this.pushImmediate(scene, options.keepUnderlyingActive)
       this.notifySceneChanged()
     })
   }
@@ -196,8 +200,23 @@ export class SceneManager {
     }
   }
 
-  async pop(): Promise<Scene | null> {
+  async dismissOverlaysAbove(scene: Scene): Promise<void> {
     return this.enqueue(async () => {
+      if (!this.stack.includes(scene)) return
+      while (
+        this.current !== scene &&
+        this.current &&
+        this.liveOverlays.has(this.current)
+      ) {
+        await this.popImmediate()
+      }
+      this.notifySceneChanged()
+    })
+  }
+
+  async pop(expected?: Scene): Promise<Scene | null> {
+    return this.enqueue(async () => {
+      if (expected && this.current !== expected) return null
       const result = await this.popImmediate()
       this.notifySceneChanged()
       return result
@@ -217,14 +236,19 @@ export class SceneManager {
     })
   }
 
-  private async pushImmediate(scene: Scene): Promise<void> {
+  private async pushImmediate(
+    scene: Scene,
+    keepUnderlyingActive = false
+  ): Promise<void> {
     const previous = this.current
     let loaded = false
     try {
-      previous?.pause()
+      if (keepUnderlyingActive) previous?.setInputBlocked(true)
+      else previous?.pause()
       await scene.load(this.app, this)
       loaded = true
       this.stack.push(scene)
+      if (keepUnderlyingActive) this.liveOverlays.add(scene)
       this.world.addChild(scene.root)
       this.fitToScreen()
     } catch (error) {
@@ -238,6 +262,8 @@ export class SceneManager {
       if (loaded || scene.state !== 'new') {
         await scene.unload().catch(() => undefined)
       }
+      this.liveOverlays.delete(scene)
+      if (keepUnderlyingActive) previous?.setInputBlocked(false)
       if (previous?.state === 'paused') previous.resume()
       this.fitToScreen()
       throw error
@@ -252,6 +278,7 @@ export class SceneManager {
       this.world.removeChild(top.root)
     }
 
+    const live = this.liveOverlays.delete(top)
     const previous = this.current
     let firstError: unknown
 
@@ -262,7 +289,8 @@ export class SceneManager {
     }
 
     try {
-      previous?.resume()
+      if (live) previous?.setInputBlocked(false)
+      else previous?.resume()
     } catch (error) {
       firstError ??= error
     }
@@ -467,7 +495,11 @@ export class SceneManager {
 
   private tick = (): void => {
     this.fitToScreen()
-    this.current?.tick(this.app.ticker.deltaMS)
+    // Only overlays explicitly marked live keep lower scenes updating.
+    let first = this.stack.length - 1
+    while (first > 0 && this.liveOverlays.has(this.stack[first])) first--
+    for (const scene of this.stack.slice(Math.max(0, first)))
+      scene.tick(this.app.ticker.deltaMS)
     if (this.transitioningScene && this.transitioningScene !== this.current) {
       this.transitioningScene.tick(this.app.ticker.deltaMS)
     }

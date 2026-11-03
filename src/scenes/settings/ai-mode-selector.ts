@@ -55,8 +55,8 @@ export class AiModeSelector extends Container {
     this.addChild(this.dismissLayer)
 
     const title = new Text({
-      text: 'AI Settings',
-      style: { fontFamily: 'Belwe', fontSize: 42, fill: 0xffffff }
+      text: 'Difficulty',
+      style: { fontFamily: 'Franklin Gothic Condensed', fontSize: 36, fill: 0xf5e3b6 }
     })
     title.label = 'settings.ai-mode-title'
     title.eventMode = 'none'
@@ -72,7 +72,7 @@ export class AiModeSelector extends Container {
     this.valueLabel = new Text({
       text: '',
       style: {
-        fontFamily: 'Belwe',
+        fontFamily: 'Franklin Gothic Condensed',
         fontSize: 28,
         fill: 0x120d09,
         align: 'center'
@@ -114,6 +114,7 @@ export class AiModeSelector extends Container {
 
   closeOptions(): void {
     if (!this.open) return
+    this.zIndex = 0
     this.open = false
     this.dismissLayer.visible = false
     this.optionsLayer.visible = false
@@ -127,6 +128,7 @@ export class AiModeSelector extends Container {
       return
     }
     this.onOpen()
+    this.zIndex = 10
     this.open = true
     this.dismissLayer.visible = true
     this.optionsLayer.visible = true
@@ -176,7 +178,7 @@ export class AiModeSelector extends Container {
 
       const label = new Text({
         text: modeLabel(mode),
-        style: { fontFamily: 'Belwe', fontSize: 26, fill: 0xf5e3b6 }
+        style: { fontFamily: 'Franklin Gothic Condensed', fontSize: 26, fill: 0xf5e3b6 }
       })
       label.label = `settings.ai-mode-option-label-${mode}`
       label.eventMode = 'none'

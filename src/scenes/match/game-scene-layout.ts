@@ -149,7 +149,7 @@ export const GAME_BOARD_LAYOUT = {
   weapons: {
     /** Local equipped weapon, screen-left of the local hero frame. */
     local: placement(
-      { x: 800, y: 850 },
+      { x: 800, y: 827 },
       { width: 240, height: 210 },
       {
         anchor: CENTER,

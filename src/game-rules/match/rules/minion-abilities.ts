@@ -159,7 +159,14 @@ export function boardMinionAbilityMarkers(
   heroId?: string | null
 ): BoardAbilityMarkers {
   const authored = boardAbilityMarkers(
-    minion.silenced ? { keywords: [], effects: [] } : definition
+    minion.silenced
+      ? { keywords: [], effects: [] }
+      : {
+          ...definition,
+          effects: definition.effects.filter(
+            (effect) => !effect.whileDormant || minion.dormant === true
+          )
+        }
   )
   const runtime = boardMinionRuntimeMarkers(minion, turnNumber, heroId)
   const active = (startsOnTurn?: number, expiresOnTurn?: number): boolean =>

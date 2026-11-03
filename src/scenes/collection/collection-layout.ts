@@ -259,6 +259,9 @@ export const CARD_GRID_COLUMNS = 4
 export const CARD_GRID_ROWS = 2
 export const CARD_SLOT_PADDING_X = 10
 export const CARD_SLOT_PADDING_Y = 12
+/** Collection cards at the deck copy limit use 34% of their authored size. */
+export const DECK_LIMIT_CARD_SCALE = 0.34
+export const DECK_LIMIT_CARD_OFFSET_Y = -15
 export const CARD_GRID_LAYOUT: CollectionCardGridLayout = {
   x: COLLECTION_LAYOUT.cardGrid.position.x,
   y: COLLECTION_LAYOUT.cardGrid.position.y,
@@ -277,8 +280,31 @@ export const DOOR_MIN_WIDTH = 1
 export const COVER_LOCK_PERSPECTIVE_DEPTH = 10
 export const COVER_PERSPECTIVE_DEPTH = 14
 
-/** Cards already at their deck copy limit are dimmed to this alpha. */
-export const COMPLETED_COLLECTION_CARD_ALPHA = 0.25
+/** Align the backing's inner top edge with the displayed card body. */
+export function getCollectionDeckLimitFramePlacement(
+  bodyTopCenter: LayoutPoint
+): LayoutPlacement {
+  return placement(
+    { x: bodyTopCenter.x, y: bodyTopCenter.y - 15 },
+    { width: 268, height: 401 },
+    {
+      anchor: { x: 0.5, y: 0 },
+      scale: 0.9,
+      note: 'Deck-limit frame behind the card.'
+    }
+  )
+}
+
+/** Place the label over the lower edge of the displayed card body. */
+export function getCollectionDeckLimitLabelPlacement(
+  bodyBottomCenter: LayoutPoint
+): LayoutPlacement {
+  return placement(
+    { x: bodyBottomCenter.x, y: bodyBottomCenter.y - 22 },
+    { width: 257, height: 50 },
+    { anchor: CENTER, scale: 0.95, note: 'Deck-limit label above the card.' }
+  )
+}
 /** Small cast shadow in design pixels; light comes from the upper right. */
 export const COLLECTION_CARD_SHADOW = {
   offset: { x: -3, y: 5 },

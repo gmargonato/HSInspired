@@ -34,6 +34,8 @@ export abstract class Scene {
   private active = false
   private lifecycle: SceneLifecycle = 'new'
   private rootDestroyed = false
+  private inputBlocked = false
+  private uncoveredInteractiveChildren: boolean | undefined = true
   private readonly animationScope = new AnimationScope()
   protected readonly assetScope = new AssetScope()
 
@@ -194,6 +196,16 @@ export abstract class Scene {
     this.animationScope.kill(target)
   }
 
+  /** Modal coverage blocks input independently of ticking and animation. */
+  setInputBlocked(blocked: boolean): void {
+    if (blocked === this.inputBlocked) return
+    if (blocked) this.uncoveredInteractiveChildren = this.root.interactiveChildren
+    this.inputBlocked = blocked
+    this.root.interactiveChildren = blocked ? false : this.uncoveredInteractiveChildren
+    this.onInputBlocked(blocked)
+  }
+
+  protected onInputBlocked(_blocked: boolean): void {}
   protected onEnter(): void {}
   protected onExit(): void {}
   protected onPause(): void {}
