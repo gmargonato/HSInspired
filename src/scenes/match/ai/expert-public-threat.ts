@@ -25,6 +25,27 @@ function onlyKeys(value: object, allowed: readonly string[]): boolean {
   return Object.keys(value).every((key) => allowed.includes(key))
 }
 
+/** This replacement only spends weapon Attack instead of Durability on minion
+ * combat; the real engine resolves it and it cannot increase the attack bound. */
+function combatWeaponEffect(effect: object): boolean {
+  const entry = effect as {
+    trigger?: string
+    event?: unknown
+    actions?: readonly Record<string, unknown>[]
+  }
+  return (
+    onlyKeys(effect, ['trigger', 'event', 'actions']) &&
+    entry.trigger === 'on-attack' &&
+    JSON.stringify(entry.event) ===
+      JSON.stringify({ source: { type: 'hero', controller: 'self' } }) &&
+    entry.actions?.length === 1 &&
+    onlyKeys(entry.actions[0]!, ['action', 'event', 'replacement']) &&
+    entry.actions[0]!.action === 'replace-event' &&
+    entry.actions[0]!.event === 'character-attacked' &&
+    entry.actions[0]!.replacement === 'weapon-attack-instead-of-durability'
+  )
+}
+
 /** These public effects cannot create a ready attacker during the reply. */
 function sleepingCopies(effect: object): boolean {
   const entry = effect as {
@@ -146,7 +167,7 @@ function publicCombatSupported(state: OpeningMatchState, actorId: PlayerId): boo
       return false
     if (
       player.weapon &&
-      (CARD_CATALOG.get(player.weapon.cardId)?.effects.length !== 0 ||
+      (!CARD_CATALOG.get(player.weapon.cardId)?.effects.every(combatWeaponEffect) ||
         !plainEnchantments(player.weapon.enchantments))
     )
       return false

@@ -1,3 +1,4 @@
+import { createOpeningMatchFromCheckpoint } from '../../../game-rules/match/opening-match'
 import type { AiCandidateUpdate } from './ai-attention-controller'
 import {
   AiRequestError,
@@ -28,6 +29,7 @@ import { aiActions } from './ai-context'
 import { canonicalCommandKey } from '../../../game-rules/match/ai/legal-commands'
 import {
   tacticalStateKey,
+  revealsTacticalInformation,
   type TacticalOutcome
 } from '../../../game-rules/match/ai/tactical-search'
 import { immediateExpertWin } from './expert-tactics'
@@ -804,6 +806,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         'no-payoff',
         'opponent-heal',
         'unpaid-friendly-damage',
+        'unpaid-friendly-target',
         'wasted-healing-target'
       ].includes(inspect(action.command).reason ?? '')
     if (
@@ -847,11 +850,95 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     // A local healing comparison authorizes only the alternative it checked.
     if (selectedOutcome.reason === 'wasted-healing-target' && !healingAlternative)
       return response
+    const rawRecovery = response.usage?.plannedActionIntents
+    const recoveryActions: typeof legal = []
+    if (
+      selectedOutcome.reason === 'unpaid-friendly-target' &&
+      Array.isArray(rawRecovery) &&
+      rawRecovery.length > 1 &&
+      rawRecovery.length <= 6 &&
+      rawRecovery.every(isAiActionIntent) &&
+      sameAiIntent(
+        rawRecovery[0]!,
+        aiActionIntent(selected.command, this.opponentParticipantId())
+      )
+    ) {
+      const suffix =
+        rawRecovery.at(-1)?.type === 'end-turn'
+          ? rawRecovery.slice(1, -1)
+          : rawRecovery.slice(1)
+      const proposed = suffix.map((intent) =>
+        legal.find((action) =>
+          sameAiIntent(
+            intent,
+            aiActionIntent(action.command, this.opponentParticipantId())
+          )
+        )
+      )
+      if (
+        proposed.length &&
+        proposed.every(
+          (action) =>
+            action &&
+            action.command.type === 'attack-character' &&
+            action.command.attacker.kind === 'minion' &&
+            action.command.defender.kind === 'hero' &&
+            !unsafe(action)
+        )
+      ) {
+        const recoveryMatch = createOpeningMatchFromCheckpoint(
+          createFairHypothesisCheckpoint(
+            this.session.match.getCheckpoint(),
+            this.perspectiveParticipantId,
+            0x71ac71c
+          )
+        )
+        const preserves = recoveryMatch.analyze((fork) => {
+          if (!fork.getRandomState) return false
+          const rng = JSON.stringify(fork.getRandomState())
+          const recoveryDeadline = performance.now() + EXPERT_TERMINAL_SAFETY_MAX_MS
+          for (const action of proposed) {
+            if (performance.now() >= recoveryDeadline) return false
+            const result = fork.dispatch(action!.command)
+            if (
+              !result.accepted ||
+              (result.state.phase === 'ended' &&
+                result.state.winnerId !== this.perspectiveParticipantId) ||
+              revealsTacticalInformation(result.events) ||
+              rng !== JSON.stringify(fork.getRandomState())
+            )
+              return false
+          }
+          return true
+        })
+        if (preserves) recoveryActions.push(...(proposed as typeof legal))
+      }
+    }
+    // Replacing an unpaid sacrifice must not throw away the rest of the turn.
+    // Reuse the existing public-state fallback ranking over safe legal choices;
+    // this is not an unconditional attack-over-pass rule.
+    const unpaidReplacement =
+      selectedOutcome.reason === 'unpaid-friendly-target'
+        ? selectExpertTimeoutFallbackAction(
+            this.session,
+            legal
+              .filter((action) => action.id !== selected.id && !unsafe(action))
+              .map((action) => action.command)
+          )?.command
+        : undefined
+    const fallbackReplacement =
+      unpaidReplacement &&
+      legal.find(
+        (action) =>
+          canonicalCommandKey(action.command) === canonicalCommandKey(unpaidReplacement)
+      )
     const alternatives = healingAlternative
       ? [healingAlternative]
       : [
           // Repair a target before discarding a useful minion or the whole selected play.
           ...[...ranked, ...legal].filter(samePlay),
+          ...recoveryActions,
+          fallbackReplacement,
           ...ranked,
           legal.find((action) => action.command.type === 'end-turn'),
           ...legal
@@ -913,15 +1000,18 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         actionOutcomeReason: terminalLoss
           ? 'immediate-terminal-loss'
           : (inspect(selected.command).reason ?? 'unpaid-friendly-damage'),
-        plannedActionIntents: [
-          {
-            type: intent.type,
-            source: intent.source,
-            targets: [...intent.targets],
-            position: intent.position,
-            option: intent.option
-          }
-        ]
+        plannedActionIntents: (recoveryActions[0]?.id === replacement.id
+          ? recoveryActions.map((action) =>
+              aiActionIntent(action.command, this.opponentParticipantId())
+            )
+          : [intent]
+        ).map((action) => ({
+          type: action.type,
+          source: action.source,
+          targets: [...action.targets],
+          position: action.position,
+          option: action.option
+        }))
       }
     }
   }

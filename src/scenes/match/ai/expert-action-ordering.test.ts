@@ -1,3 +1,5 @@
+import { expertAttackSetupPreference } from './expert-resource-preference'
+import { createExpertActionInspector } from './expert-action-outcome'
 import { reviewChanceAttackOrder, hasChanceWeaponSetup } from './expert-chance-order'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
@@ -2073,4 +2075,79 @@ describe('complete-turn redundant damage spell review', () => {
     vi.mocked(performance.now).mockReturnValueOnce(0).mockReturnValue(25)
     expect(f.review().stats).toMatchObject({ dispatches: 0, abstained: true })
   })
+})
+
+describe('Recorded summon dependency and unpaid friendly target controls', () => {
+  function setupPreference(options: Partial<AiFixtureOptions> = {}) {
+    const session = fixture({
+      aiMana: 3,
+      aiHand: ['basic_murloc_raider'],
+      aiBoard: [{ cardId: 'classic_murloc_tidecaller', ready: true }],
+      ...options
+    })
+    const before = session.match.getCheckpoint()
+    const value = session.match.analyze((root) => {
+      const command = enumerateLegalCommands(root, session.remoteParticipantId).find(
+        (c) => c.type === 'play-card'
+      )!
+      return expertAttackSetupPreference(root, session.remoteParticipantId, command)
+    })
+    expect(session.match.getCheckpoint()).toEqual(before)
+    return value
+  }
+  it('seeds a vanilla tribal summon, not just the recorded Discover card', () =>
+    expect(setupPreference()).toBeGreaterThan(0))
+  it('does not pay for an exhausted source', () =>
+    expect(
+      setupPreference({
+        aiBoard: [{ cardId: 'classic_murloc_tidecaller', ready: false }]
+      })
+    ).toBe(0))
+  it('does not pay for an unrelated summon', () =>
+    expect(setupPreference({ aiHand: ['basic_goldshire_footman'] })).toBe(0))
+  it('does not attribute other live trigger outcomes to the source', () =>
+    expect(
+      setupPreference({
+        aiBoard: [
+          { cardId: 'classic_murloc_tidecaller', ready: true },
+          { cardId: 'classic_knife_juggler', ready: true }
+        ]
+      })
+    ).toBe(0))
+  function ownPenalty(cardId: string, targetId: string) {
+    const session = fixture({
+      aiHeroId: 'anduin',
+      aiMana: 10,
+      aiHand: [cardId],
+      aiBoard: [{ cardId: targetId, ready: true }]
+    })
+    return session.match.analyze((root) => {
+      const command = enumerateLegalCommands(root, session.remoteParticipantId).find(
+        (c) =>
+          c.type === 'play-card' &&
+          c.targets?.[0]?.kind === 'minion' &&
+          c.targets[0].participantId === session.remoteParticipantId
+      )!
+      expect(command).toBeDefined()
+      return createExpertActionInspector(
+        session.match.getCheckpoint(),
+        session.remoteParticipantId,
+        () => false
+      )(command).penalty
+    })
+  }
+  it('warns against pure own-minion destruction', () =>
+    expect(
+      ownPenalty('basic_shadow_word_pain', 'basic_goldshire_footman')
+    ).toBeGreaterThan(0))
+  it('preserves a deathrattle payoff', () =>
+    expect(ownPenalty('basic_shadow_word_pain', 'classic_loot_hoarder')).toBe(0))
+  it('preserves damage-trigger draw', () =>
+    expect(ownPenalty('basic_elven_archer', 'classic_acolyte_of_pain')).toBe(0))
+  it('preserves removing a future board-wipe source', () =>
+    expect(ownPenalty('basic_shadow_word_pain', 'classic_doomsayer')).toBe(0))
+  it('preserves removing a healing-to-damage replacement aura', () =>
+    expect(ownPenalty('basic_shadow_word_pain', 'classic_auchenai_soulpriest')).toBe(0))
+  it('preserves enrage setup', () =>
+    expect(ownPenalty('basic_elven_archer', 'classic_amani_berserker')).toBe(0))
 })
