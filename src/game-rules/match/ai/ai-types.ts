@@ -1,6 +1,7 @@
 import type { CardId } from '../../content/cards'
 import type { Deck } from '../../decks'
 import type {
+  CardChoiceOption,
   OpeningCard,
   OpeningMatchState,
   OpeningPlayerState
@@ -100,5 +101,34 @@ export interface AiObservation {
   readonly isExtraTurn?: boolean
   readonly perspectivePlayerId: PlayerId
   readonly players: readonly [AiObservedPlayer, AiObservedPlayer]
+  /** Only the choosing player sees the offered cards; never expose the hidden answer or continuation. */
+  readonly pendingDiscover?: {
+    readonly participantId: PlayerId
+    readonly sourceCardInstanceId: string
+    readonly candidates: readonly AiObservedCard[]
+  }
+  /** Current options and already made choices; never include raw resolution or future queued offers. */
+  readonly pendingCardChoice?: {
+    readonly participantId: PlayerId
+    readonly sourceCardInstanceId: string
+    readonly sourceCardId: CardId
+    readonly prompt?: string
+    /** Already selected potion ingredients are known to the chooser; future offers are not. */
+    readonly resolutionContext?: {
+      readonly type: 'kazakus-potion'
+      readonly stage: 'cost' | 'first-ingredient' | 'second-ingredient'
+      readonly selectedCost?: number
+      readonly selectedCostCardId?: CardId
+      readonly selectedFirstIngredient?: CardId
+    }
+    readonly options: readonly Pick<
+      CardChoiceOption,
+      | 'choice'
+      | 'label'
+      | 'presentationCardId'
+      | 'presentationCost'
+      | 'presentationHeroPowerId'
+    >[]
+  }
   readonly selfOriginalDeck: AiObservedDeck
 }
