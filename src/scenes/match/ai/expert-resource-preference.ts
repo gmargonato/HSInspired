@@ -43,6 +43,117 @@ function handGrowth(value: unknown): boolean {
 }
 
 /**
+ * Seed a public summon/attack dependency before spending a ready attack. This is
+ * search advice, not a cached continuation or a proof about Discover's outcome.
+ * Only the already-visible source's immediate Attack gain is valued; generated
+ * cards and the sampled choice pool never contribute to this preference.
+ */
+export function expertAttackSetupPreference(
+  root: OpeningMatchAnalysis,
+  actorId: PlayerId,
+  command: TurnMatchCommand,
+  shouldStop: () => boolean = () => false
+): number {
+  if (command.type !== 'play-card' || shouldStop()) return 0
+  const state = root.getState()
+  const self = state.players.find((player) => player.participantId === actorId)
+  const card = self?.hand.find((entry) => entry.instanceId === command.cardInstanceId)
+  const definition = card && CARD_CATALOG.get(card.cardId)
+  if (
+    !self ||
+    definition?.type !== 'Minion' ||
+    state.players.some((player) => player.secrets?.length) ||
+    // Information-only battlecries are allowed, but a random board effect must
+    // not manufacture the visible attack gain used by this ordering hint.
+    definition.effects.some(
+      (effect) =>
+        effect.trigger !== 'battlecry' ||
+        !effect.actions?.every((action) => action.action === 'discover')
+    )
+  )
+    return 0
+  const potentialSources = self.board.filter(
+    (minion) =>
+      !minion.silenced &&
+      !minion.dormant &&
+      CARD_CATALOG.get(minion.cardId)?.effects.some(
+        (effect) =>
+          effect.trigger === 'on-summon' &&
+          effect.actions?.some(
+            (action) =>
+              action.action === 'modify' &&
+              record(action.target).selection === 'source' &&
+              typeof action.attack === 'number' &&
+              action.attack > 0
+          )
+      )
+  )
+  if (!potentialSources.length || shouldStop()) return 0
+  // Discover itself advances RNG. Rather than attribute a sampled board buff
+  // to the dependency, abstain when another live trigger could alter it.
+  const sourceIds = new Set(potentialSources.map((minion) => minion.instanceId))
+  if (
+    state.players.some((player) =>
+      player.board.some(
+        (minion) =>
+          !minion.silenced &&
+          (minion.grantedTriggers?.length ||
+            minion.attachedEffects?.length ||
+            CARD_CATALOG.get(minion.cardId)?.effects.some(
+              (effect) =>
+                !['battlecry', 'deathrattle', 'aura'].includes(effect.trigger) &&
+                !(
+                  sourceIds.has(minion.instanceId) &&
+                  effect.trigger === 'on-summon' &&
+                  effect.actions?.every(
+                    (action) =>
+                      action.action === 'modify' &&
+                      record(action.target).selection === 'source' &&
+                      typeof action.attack === 'number'
+                  )
+                )
+            ))
+      )
+    )
+  )
+    return 0
+  const ready = new Set(
+    enumerateLegalCommands(root, actorId)
+      .filter(
+        (action) =>
+          action.type === 'attack-character' &&
+          action.attacker.kind === 'minion' &&
+          action.defender.kind === 'hero'
+      )
+      .map((action) =>
+        action.type === 'attack-character' && action.attacker.kind === 'minion'
+          ? action.attacker.instanceId
+          : ''
+      )
+  )
+  const sources = potentialSources.filter((minion) => ready.has(minion.instanceId))
+  if (!sources.length || shouldStop()) return 0
+  return root.analyze((fork) => {
+    const result = fork.dispatch(command)
+    if (
+      !result.accepted ||
+      shouldStop() ||
+      result.state.phase !== 'turns' ||
+      result.state.activePlayerId !== actorId
+    )
+      return 0
+    const after = result.state.players.find(
+      (player) => player.participantId === actorId
+    )!
+    const gain = sources.reduce((total, source) => {
+      const next = after.board.find((minion) => minion.instanceId === source.instanceId)
+      return total + (next ? Math.max(0, next.attack - source.attack) : 0)
+    }, 0)
+    return Math.min(2, gain) * 0.04
+  })
+}
+
+/**
  * Small root-search preference for resource setup with an executable payoff.
  * This is neither an ordering certificate nor a reason to reject a searched line:
  * the engine preserves all histories, triggers and placement-dependent effects.

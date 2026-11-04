@@ -1186,3 +1186,33 @@ describe('Public attack defense with dormant recycling', () => {
     )
   })
 })
+
+it.each([
+  ['classic_gorehowl', true],
+  ['classic_truesilver_champion', false]
+] as const)('keeps public weapon effect support narrow: %s', (cardId, supported) => {
+  const fixture = createAiFixture({
+    seed: 912,
+    aiHeroId: 'malfurion',
+    opponentHeroId: 'garrosh',
+    aiMana: 0,
+    aiHealth: 30,
+    aiHeroPowerAvailable: false,
+    aiHand: [],
+    aiBoard: [],
+    opponentBoard: [],
+    opponentWeapon: { cardId },
+    aiDeck: ['basic_murloc_raider'],
+    opponentDeck: ['basic_murloc_raider']
+  })
+  const session = new GameBoardSession({
+    setup: fixture.setup,
+    decks: fixture.decks,
+    checkpoint: fixture.checkpoint
+  })
+  const result = inspectExpertPublicThreat(
+    session.match.getCheckpoint(),
+    session.remoteParticipantId
+  )
+  expect(result.stats.supported).toBe(supported)
+})

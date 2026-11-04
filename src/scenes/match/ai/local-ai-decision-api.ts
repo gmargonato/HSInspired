@@ -67,7 +67,10 @@ import {
 import { LOCAL_AI_POLICY } from './local-ai-policy'
 import { CTHUN_ID } from '../../../game-rules/match/cthun'
 import { expertDrawPreference } from './expert-draw-preference'
-import { expertResourceSetupPreference } from './expert-resource-preference'
+import {
+  expertAttackSetupPreference,
+  expertResourceSetupPreference
+} from './expert-resource-preference'
 import { expertSingletonCleanupSeeds } from './expert-cleanup-seeds'
 import { inspectExpertPublicThreat } from './expert-public-threat'
 import { createExpertAttackOrderInspector } from './expert-action-ordering'
@@ -1744,6 +1747,12 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         preferences.set(
           canonicalCommandKey(action.command),
           expertDrawPreference(fork, rootId, action.command) +
+            expertAttackSetupPreference(
+              fork,
+              rootId,
+              action.command,
+              () => this.workBudget === undefined && performance.now() >= deadline
+            ) +
             expertResourceSetupPreference(
               fork,
               rootId,
