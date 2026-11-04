@@ -1,3 +1,4 @@
+import { LOCAL_AI_RESOURCE_PROFILES } from './local-ai-resources'
 import { AiAttentionController, type AiAttention } from './ai-attention-controller'
 import { describe, expect, it, vi } from 'vitest'
 import type {
@@ -18,13 +19,16 @@ import { aiActionIntent } from './ai-action-intent'
 import {
   EXPERT_AI_DECISION_SEARCH_BUDGET_MS,
   EXPERT_AI_SEARCH_BUDGET_MS,
-  ExpertAiDecisionApi
+  ExpertAiDecisionApi,
+  createLocalAiDecisionApi
 } from './expert-ai-decision-api'
 import { GameBoardSession } from '../game-board-session'
 import { LocalAiDecisionApi } from './local-ai-decision-api'
 import { chooseExpertConsensus } from './expert-ai-consensus'
 import {
   expertAiBudgetForTurn,
+  EXPERT_AI_DEFAULT_BUDGET,
+  EXPERT_AI_POLICY_REVISION,
   EXPERT_AI_TURN_BUDGET_MS
 } from './expert-ai-worker-protocol'
 import type {
@@ -4278,6 +4282,171 @@ describe('Expert candidate subscription', () => {
       await expect(decision).resolves.toMatchObject({ requestId: request!.requestId })
       progress(response)
       expect(listener).toHaveBeenCalledTimes(1)
+    } finally {
+      api.dispose()
+    }
+  })
+})
+
+describe('shared local difficulty resources', () => {
+  function difficultyFixture() {
+    const fixture = createAiFixture({
+      seed: 71103,
+      aiHeroId: 'garrosh',
+      opponentHeroId: 'jaina',
+      aiMana: 4,
+      aiHand: ['basic_chillwind_yeti'],
+      opponentHand: ['basic_fireball']
+    })
+    const session = new GameBoardSession({
+      setup: fixture.setup,
+      decks: fixture.decks,
+      checkpoint: fixture.checkpoint
+    })
+    const actions = aiActions(
+      session,
+      enumerateLegalCommands(
+        {
+          getState: session.match.getState,
+          getPlayInput: session.match.getPlayInput!,
+          getLegality: session.match.getLegality!
+        },
+        session.remoteParticipantId
+      )
+    )
+    const request: AiDecisionRequest = {
+      matchId: 'shared-difficulty',
+      requestId: 'shared-difficulty-request',
+      expectedRevision: session.getState().revision,
+      phase: 'plan',
+      messages: [],
+      actionIds: actions.map((action) => action.id)
+    }
+    return { session, request, actions }
+  }
+
+  it('preserves the exact Expert budget and reduces only Easy resources', () => {
+    expect(LOCAL_AI_RESOURCE_PROFILES.expert).toBe(EXPERT_AI_DEFAULT_BUDGET)
+    expect(LOCAL_AI_RESOURCE_PROFILES.expert).toEqual({
+      turnBudgetMs: 60_000,
+      searchBudgetMs: 54_500,
+      decisionSearchBudgetMs: 46_500,
+      planSearchLimitMs: 30_000,
+      replanSearchLimitMs: 4_000
+    })
+    expect(LOCAL_AI_RESOURCE_PROFILES.easy).toEqual({
+      turnBudgetMs: 10_000,
+      searchBudgetMs: 4_500,
+      decisionSearchBudgetMs: 3_000,
+      planSearchLimitMs: 2_000,
+      replanSearchLimitMs: 1_000
+    })
+  })
+
+  it('uses the same evaluator, fair hypothesis and legal selection at equal work', async () => {
+    const { session, request, actions } = difficultyFixture()
+    const before = session.match.getCheckpoint()
+    const results: { choice: AiDecisionResponse['choice']; reason: string }[] = []
+    for (const profile of ['easy', 'expert'] as const) {
+      const api = new LocalAiDecisionApi(session, undefined, {
+        profile,
+        workBudget: 32
+      })
+      const response = await api.decide(request)
+      expect(response.modelId).toBe('hardware-local-v2')
+      expect(response.usage?.policyRevision).toBe(EXPERT_AI_POLICY_REVISION)
+      expect('plan' in response.choice).toBe(true)
+      if (!('plan' in response.choice)) throw new Error('Expected local plan.')
+      const selectedId = response.choice.plan.firstActionId
+      expect(actions.some((action) => action.id === selectedId)).toBe(true)
+      results.push({ choice: response.choice, reason: response.reason })
+    }
+    expect(results[0]).toEqual(results[1])
+    expect(session.match.getCheckpoint()).toEqual(before)
+  })
+
+  it.each(['easy', 'expert'] as const)(
+    '%s uses the shared worker and cancels/disposes pending work',
+    async (difficulty) => {
+      const posted: ExpertAiWorkerRequest[] = []
+      const terminated = vi.fn()
+      vi.stubGlobal(
+        'Worker',
+        class {
+          addEventListener() {}
+          postMessage(message: ExpertAiWorkerRequest) {
+            posted.push(message)
+          }
+          terminate() {
+            terminated()
+          }
+        }
+      )
+      const { session, request } = difficultyFixture()
+      const api = createLocalAiDecisionApi(session, difficulty)
+      try {
+        expect(api).toBeInstanceOf(ExpertAiDecisionApi)
+        const decision = api.decide(request)
+        const rejection = expect(decision).rejects.toThrow('AI request cancelled.')
+        const message = posted.find((entry) => entry.type === 'decide')
+        if (!message || message.type !== 'decide')
+          throw new Error('Expected worker request.')
+        expect(message.planSearchLimitMs).toBe(
+          LOCAL_AI_RESOURCE_PROFILES[difficulty].planSearchLimitMs
+        )
+        expect(message.replanSearchLimitMs).toBe(
+          LOCAL_AI_RESOURCE_PROFILES[difficulty].replanSearchLimitMs
+        )
+        expect(message.remainingSearchBudgetMs).toBeLessThanOrEqual(
+          LOCAL_AI_RESOURCE_PROFILES[difficulty].decisionSearchBudgetMs
+        )
+        const hiddenOpponent = message.checkpoint.state.players.find(
+          (player) => player.participantId === session.localParticipantId
+        )!
+        expect(
+          hiddenOpponent.hand.every((card) =>
+            card.instanceId.startsWith('expert-hidden:')
+          )
+        ).toBe(true)
+        await api.cancel(request)
+        await rejection
+        expect(posted.some((entry) => entry.type === 'cancel')).toBe(true)
+      } finally {
+        api.dispose()
+        vi.unstubAllGlobals()
+      }
+      expect(terminated).toHaveBeenCalledOnce()
+    }
+  )
+
+  it('does not renew the Easy turn allowance for another request', async () => {
+    const { session, request } = difficultyFixture()
+    let now = 0
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now)
+    const api = createLocalAiDecisionApi(session, 'easy')
+    try {
+      now = LOCAL_AI_RESOURCE_PROFILES.easy.searchBudgetMs + 1
+      for (const requestId of ['expired-one', 'expired-two']) {
+        await expect(api.decide({ ...request, requestId })).rejects.toMatchObject({
+          details: { failureKind: 'timeout', budgetMs: 10_000 }
+        })
+      }
+    } finally {
+      api.dispose()
+      clock.mockRestore()
+    }
+  })
+
+  it('classifies worker startup failure for the common safe fallback', async () => {
+    const { session, request } = difficultyFixture()
+    const api = new ExpertAiDecisionApi(session, () => {
+      throw new Error('Worker unavailable')
+    })
+    try {
+      await expect(api.decide(request)).rejects.toMatchObject({
+        message: 'Worker unavailable',
+        details: { failureKind: 'worker-failure' }
+      })
     } finally {
       api.dispose()
     }

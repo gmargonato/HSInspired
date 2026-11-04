@@ -1,8 +1,6 @@
 import type { DialogService } from './contracts/dialog-service'
 import { PersistentDeckStore, type DeckStore } from './deck-store'
 import { createAppLogger, type AppLogger } from './logger'
-import type { AiDecisionApi } from '../desktop/contracts/ipc/ai'
-import { createAiDecisionApi } from './ai-decision-api'
 import type { MatchLogsApi } from '../desktop/contracts/ipc/match-logs'
 import type { PreferencesApi } from '../desktop/contracts/ipc/preferences'
 import type { WindowAttentionApi } from '../desktop/contracts/ipc/window-attention'
@@ -58,7 +56,6 @@ export interface AppServices {
   readonly windowAttention?: WindowAttentionApi
   readonly matchLogs?: MatchLogsApi
   readonly preferences?: PreferencesApi
-  readonly ai: AiDecisionApi
   readonly arenaStore: ArenaStore
   readonly deckStore: DeckStore
   readonly playerStatsStore: PlayerStatsStore
@@ -69,21 +66,7 @@ export interface AppServices {
 
 export function createAppServices(overrides: Partial<AppServices> = {}): AppServices {
   const logger = overrides.logger ?? createAppLogger()
-  const ai =
-    overrides.ai ??
-    (typeof window !== 'undefined' && window.api?.ai
-      ? createAiDecisionApi(window.api.ai)
-      : {
-          settings: async () => {
-            throw new Error('The AI settings bridge is unavailable.')
-          },
-          cancel: async () => {},
-          decide: async () => {
-            throw new Error('The AI decision bridge is unavailable.')
-          }
-        })
   return {
-    ai,
     windowAttention:
       overrides.windowAttention ??
       (typeof window !== 'undefined' ? window.api?.windowAttention : undefined),

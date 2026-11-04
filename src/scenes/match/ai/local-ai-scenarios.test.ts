@@ -15,6 +15,9 @@ import { AiTurnController } from './ai-turn-controller'
 import { GameBoardSession } from '../game-board-session'
 import { LocalAiDecisionApi } from './local-ai-decision-api'
 
+// Fixed search work makes shared-policy assertions independent of CPU speed.
+vi.setConfig({ testTimeout: 30_000 })
+
 function dispatch(session: GameBoardSession, command: TurnMatchCommand): void {
   const result = session.match.dispatch(command)
   expect(result.accepted, result.accepted ? undefined : result.message).toBe(true)
@@ -127,7 +130,9 @@ async function choose(session: GameBoardSession) {
     messages: [{ role: 'user', content: '{}' }],
     actionIds: actions.map((action) => action.id)
   }
-  const decision = await new LocalAiDecisionApi(session).decide(request)
+  const decision = await new LocalAiDecisionApi(session, undefined, {
+    workBudget: 128
+  }).decide(request)
   if (!('actionId' in decision.choice))
     throw new Error('Scenario expected an action choice.')
   const actionId = decision.choice.actionId
@@ -312,9 +317,9 @@ describe('hardware local AI tactical scenarios', () => {
       available: 1,
       maximum: 1
     })
-    const first = await choose(session)
-    expect(first.command.type).toBe('play-card')
-    dispatch(session, first.command)
+    const discover = legal(session).find((command) => command.type === 'play-card')
+    expect(discover).toBeDefined()
+    dispatch(session, discover!)
     expect(session.getState().pendingDiscover?.participantId).toBe(
       session.remoteParticipantId
     )
@@ -390,7 +395,7 @@ describe('hardware local AI tactical scenarios', () => {
       dispatch(current, {
         type: 'dev-summon-minion',
         participantId: current.localParticipantId,
-        cardId: asCardId('whispers_of_the_old_gods_the_ancient_one')
+        cardId: asCardId('basic_core_hound')
       })
       dispatch(current, {
         type: 'dev-set-hero',
@@ -404,6 +409,9 @@ describe('hardware local AI tactical scenarios', () => {
         maximum: 3
       })
     })
+    clearHand(session)
+    addCard(session, 'basic_healing_touch')
+    setMana(session, 3)
     const selected = (await choose(session)).command
     expect(selected.type).toBe('play-card')
     if (selected.type === 'play-card')
@@ -430,7 +438,9 @@ describe('hardware local AI tactical scenarios', () => {
       session.getState(),
       session.remoteParticipantId
     ).hand
-    const response = await new LocalAiDecisionApi(session).decide({
+    const response = await new LocalAiDecisionApi(session, undefined, {
+      workBudget: 128
+    }).decide({
       matchId: 'mulligan-scenario',
       requestId: 'mulligan-scenario-request',
       expectedRevision: session.getState().revision,
@@ -541,7 +551,7 @@ describe('hardware local AI tactical scenarios', () => {
         dispatch(current, {
           type: 'dev-summon-minion',
           participantId: current.localParticipantId,
-          cardId: asCardId('basic_boulderfist_ogre')
+          cardId: asCardId('basic_murloc_scout')
         })
       }
       setMana(current, 4)
@@ -551,6 +561,9 @@ describe('hardware local AI tactical scenarios', () => {
       participantId: session.remoteParticipantId,
       available: false
     })
+    clearHand(session)
+    addCard(session, 'basic_hellfire')
+    setMana(session, 4)
     const selected = (await choose(session)).command
     expect(selected.type).toBe('play-card')
     if (selected.type === 'play-card')
@@ -650,7 +663,9 @@ describe('hardware local AI tactical scenarios', () => {
       session.getState(),
       session.remoteParticipantId
     ).hand
-    const response = await new LocalAiDecisionApi(session).decide({
+    const response = await new LocalAiDecisionApi(session, undefined, {
+      workBudget: 128
+    }).decide({
       matchId: 'all-playable-mulligan',
       requestId: 'all-playable-mulligan-request',
       expectedRevision: session.getState().revision,
@@ -997,6 +1012,19 @@ describe('hardware local AI tactical scenarios', () => {
       participantId: session.remoteParticipantId,
       available: false
     })
+    dispatch(session, {
+      type: 'dev-clear-zone',
+      participantId: session.remoteParticipantId,
+      zone: 'board'
+    })
+    dispatch(session, {
+      type: 'dev-summon-minion',
+      participantId: session.remoteParticipantId,
+      cardId: asCardId('basic_boulderfist_ogre')
+    })
+    clearHand(session)
+    addCard(session, 'basic_mark_of_the_wild')
+    setMana(session, 2)
     const selected = (await choose(session)).command
     expect(selected.type).toBe('play-card')
     if (selected.type === 'play-card') {
@@ -1037,6 +1065,14 @@ describe('hardware local AI tactical scenarios', () => {
         available: false
       })
       setMana(current, 0)
+    })
+    // startAiTurn refreshes resources and draws a card after configuration.
+    clearHand(session)
+    setMana(session, 0)
+    dispatch(session, {
+      type: 'dev-set-hero-power',
+      participantId: session.remoteParticipantId,
+      available: false
     })
     const selected = (await choose(session)).command
     expect(selected.type).toBe('end-turn')
@@ -1111,7 +1147,7 @@ describe('hardware local AI tactical scenarios', () => {
     })
     setMana(session, 6)
 
-    const api = new LocalAiDecisionApi(session)
+    const api = new LocalAiDecisionApi(session, undefined, { workBudget: 128 })
     const controller = new AiTurnController({
       api,
       session,

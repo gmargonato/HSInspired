@@ -56,7 +56,8 @@ describe('PreferencesRepository', () => {
       expect(() => parsePreferencesUpdateRequest({ aiCheatsEnabled: value })).toThrow()
     }
     expect(
-      parsePreferences({ lastPlayedDeckId: null, aiMode: 'api' }).aiCheatsEnabled
+      parsePreferences({ lastPlayedDeckId: null, aiDifficulty: 'expert' })
+        .aiCheatsEnabled
     ).toBe(true)
   })
 
@@ -64,13 +65,13 @@ describe('PreferencesRepository', () => {
     const { repository, filePath } = await createRepository()
     await repository.set({
       lastPlayedDeckId: 'deck-123',
-      aiMode: 'hardware-v2',
+      aiDifficulty: 'expert',
       aiCheatsEnabled: true,
       cursorScale: 0.75
     })
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: 'deck-123',
-      aiMode: 'hardware-v2',
+      aiDifficulty: 'expert',
       aiCheatsEnabled: true,
       cursorScale: 0.75
     })
@@ -83,15 +84,15 @@ describe('PreferencesRepository', () => {
       await writeFile(
         filePath,
         JSON.stringify({
-          version: 2,
+          version: 3,
           lastPlayedDeckId: 'deck-123',
-          aiMode: 'hardware-v2',
+          aiDifficulty: 'expert',
           cursorScale
         })
       )
       expect(await repository.get()).toEqual({
         lastPlayedDeckId: 'deck-123',
-        aiMode: 'hardware-v2',
+        aiDifficulty: 'expert',
         aiCheatsEnabled: true,
         cursorScale: 1
       })
@@ -112,7 +113,7 @@ describe('PreferencesRepository', () => {
 
     expect(await repository.get()).toEqual({
       lastPlayedDeckId: null,
-      aiMode: 'api',
+      aiDifficulty: 'expert',
       aiCheatsEnabled: true,
       cursorScale: 1
     })
@@ -123,13 +124,13 @@ describe('PreferencesRepository', () => {
 
     await repository.set({
       lastPlayedDeckId: 'deck-123',
-      aiMode: 'api',
+      aiDifficulty: 'expert',
       aiCheatsEnabled: true,
       cursorScale: 1
     })
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: 'deck-123',
-      aiMode: 'api',
+      aiDifficulty: 'expert',
       aiCheatsEnabled: true,
       cursorScale: 1
     })
@@ -140,46 +141,46 @@ describe('PreferencesRepository', () => {
 
     await repository.set({
       lastPlayedDeckId: 'deck-123',
-      aiMode: 'hardware',
+      aiDifficulty: 'easy',
       aiCheatsEnabled: true,
       cursorScale: 1
     })
     await repository.set({
       lastPlayedDeckId: null,
-      aiMode: 'hardware',
+      aiDifficulty: 'easy',
       aiCheatsEnabled: true,
       cursorScale: 1
     })
 
     const persisted = JSON.parse(await readFile(filePath, 'utf8'))
-    expect(persisted.version).toBe(2)
+    expect(persisted.version).toBe(3)
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: null,
-      aiMode: 'hardware',
+      aiDifficulty: 'easy',
       aiCheatsEnabled: true,
       cursorScale: 1
     })
   })
 
-  it('persists Expert AI mode across repository reloads', async () => {
+  it('persists Expert AI difficulty across repository reloads', async () => {
     const { repository, filePath } = await createRepository()
 
     await repository.set({
       lastPlayedDeckId: 'deck-123',
-      aiMode: 'hardware-v2',
+      aiDifficulty: 'expert',
       aiCheatsEnabled: true,
       cursorScale: 1
     })
 
     expect(JSON.parse(await readFile(filePath, 'utf8'))).toMatchObject({
-      version: 2,
-      aiMode: 'hardware-v2',
+      version: 3,
+      aiDifficulty: 'expert',
       aiCheatsEnabled: true,
       cursorScale: 1
     })
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: 'deck-123',
-      aiMode: 'hardware-v2',
+      aiDifficulty: 'expert',
       aiCheatsEnabled: true,
       cursorScale: 1
     })
@@ -190,9 +191,9 @@ describe('PreferencesRepository', () => {
     await writeFile(
       filePath,
       JSON.stringify({
-        version: 2,
+        version: 3,
         lastPlayedDeckId: 'deck-123',
-        aiMode: 'hardware-v2',
+        aiDifficulty: 'expert',
         expertDeckStrategyEnabled: false
       }),
       'utf8'
@@ -201,7 +202,7 @@ describe('PreferencesRepository', () => {
     const preferences = await repository.get()
     expect(preferences).toEqual({
       lastPlayedDeckId: 'deck-123',
-      aiMode: 'hardware-v2',
+      aiDifficulty: 'expert',
       aiCheatsEnabled: true,
       cursorScale: 1
     })
@@ -210,7 +211,7 @@ describe('PreferencesRepository', () => {
     )
     await repository.set(preferences)
     expect(JSON.parse(await readFile(filePath, 'utf8'))).toEqual({
-      version: 2,
+      version: 3,
       ...preferences
     })
   })
@@ -219,7 +220,7 @@ describe('PreferencesRepository', () => {
     const { repository, filePath } = await createRepository()
     await repository.set({
       lastPlayedDeckId: 'deck-123',
-      aiMode: 'api',
+      aiDifficulty: 'expert',
       aiCheatsEnabled: true,
       cursorScale: 1
     })
@@ -228,7 +229,7 @@ describe('PreferencesRepository', () => {
     await expect(
       repository.set({
         lastPlayedDeckId: '',
-        aiMode: 'api',
+        aiDifficulty: 'expert',
         aiCheatsEnabled: true,
         cursorScale: 1
       })
@@ -236,14 +237,14 @@ describe('PreferencesRepository', () => {
     await expect(
       repository.set({
         lastPlayedDeckId: '   ' as string,
-        aiMode: 'api',
+        aiDifficulty: 'expert',
         aiCheatsEnabled: true,
         cursorScale: 1
       })
     ).rejects.toThrow()
     expect(await repository.get()).toEqual({
       lastPlayedDeckId: 'deck-123',
-      aiMode: 'api',
+      aiDifficulty: 'expert',
       aiCheatsEnabled: true,
       cursorScale: 1
     })
@@ -256,19 +257,19 @@ describe('PreferencesRepository', () => {
 
     expect(await repository.get()).toEqual({
       lastPlayedDeckId: null,
-      aiMode: 'api',
+      aiDifficulty: 'expert',
       aiCheatsEnabled: true,
       cursorScale: 1
     })
     await repository.set({
       lastPlayedDeckId: 'deck-123',
-      aiMode: 'api',
+      aiDifficulty: 'expert',
       aiCheatsEnabled: true,
       cursorScale: 1
     })
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: 'deck-123',
-      aiMode: 'api',
+      aiDifficulty: 'expert',
       aiCheatsEnabled: true,
       cursorScale: 1
     })
@@ -284,7 +285,7 @@ describe('PreferencesRepository', () => {
 
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: null,
-      aiMode: 'api',
+      aiDifficulty: 'expert',
       aiCheatsEnabled: true,
       cursorScale: 1
     })
@@ -300,53 +301,99 @@ describe('PreferencesRepository', () => {
 
     expect(await repository.get()).toEqual({
       lastPlayedDeckId: 'deck-123',
-      aiMode: 'api',
+      aiDifficulty: 'expert',
       aiCheatsEnabled: true,
       cursorScale: 1
     })
     await repository.set({
       lastPlayedDeckId: 'deck-123',
-      aiMode: 'hardware',
+      aiDifficulty: 'easy',
       aiCheatsEnabled: true,
       cursorScale: 1
     })
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: 'deck-123',
-      aiMode: 'hardware',
+      aiDifficulty: 'easy',
       aiCheatsEnabled: true,
       cursorScale: 1
     })
   })
 
-  it('falls back to API for an invalid saved AI mode without losing the deck id', async () => {
+  it('falls back to Expert for an invalid saved AI difficulty without losing the deck id', async () => {
     const { filePath, repository } = await createRepository()
     await writeFile(
       filePath,
-      JSON.stringify({ version: 2, lastPlayedDeckId: 'deck-123', aiMode: 'unknown' }),
+      JSON.stringify({
+        version: 3,
+        lastPlayedDeckId: 'deck-123',
+        aiDifficulty: 'unknown'
+      }),
       'utf8'
     )
 
     expect(await repository.get()).toEqual({
       lastPlayedDeckId: 'deck-123',
-      aiMode: 'api',
+      aiDifficulty: 'expert',
       aiCheatsEnabled: true,
       cursorScale: 1
     })
   })
 
-  it('accepts all AI modes in preferences requests and responses', () => {
-    for (const aiMode of ['hardware', 'hardware-v2', 'api'] as const) {
-      expect(parsePreferencesUpdateRequest({ aiMode })).toEqual({ aiMode })
-      expect(parsePreferences({ lastPlayedDeckId: null, aiMode })).toEqual({
+  it.each([
+    ['hardware', 'easy'],
+    ['hardware-v2', 'expert'],
+    ['api', 'expert'],
+    ['unknown', 'expert'],
+    [undefined, 'expert']
+  ] as const)(
+    'migrates legacy mode %s to %s without losing preferences',
+    async (aiMode, aiDifficulty) => {
+      const { filePath, directory, repository } = await createRepository()
+      const legacy = {
+        version: 2,
+        lastPlayedDeckId: 'deck-123',
+        cursorScale: 0.75,
+        aiCheatsEnabled: false,
+        aiMode
+      }
+      const keyPath = join(directory, 'ai-key.local.txt')
+      const otherKeyPath = join(directory, 'openrouter-key.local.txt')
+      await writeFile(filePath, JSON.stringify(legacy))
+      await writeFile(keyPath, 'user-owned-placeholder')
+      await writeFile(otherKeyPath, 'other-user-owned-placeholder')
+      const preferences = await repository.get()
+      expect(preferences).toEqual({
+        lastPlayedDeckId: 'deck-123',
+        cursorScale: 0.75,
+        aiCheatsEnabled: false,
+        aiDifficulty
+      })
+      await repository.set(preferences)
+      expect(JSON.parse(await readFile(filePath, 'utf8'))).toEqual({
+        version: 3,
+        ...preferences
+      })
+      expect(await new PreferencesRepository(filePath).get()).toEqual(preferences)
+      expect(await readFile(keyPath, 'utf8')).toBe('user-owned-placeholder')
+      expect(await readFile(otherKeyPath, 'utf8')).toBe('other-user-owned-placeholder')
+    }
+  )
+
+  it('accepts all AI difficulties in preferences requests and responses', () => {
+    for (const aiDifficulty of ['easy', 'expert'] as const) {
+      expect(parsePreferencesUpdateRequest({ aiDifficulty })).toEqual({ aiDifficulty })
+      expect(parsePreferences({ lastPlayedDeckId: null, aiDifficulty })).toEqual({
         lastPlayedDeckId: null,
-        aiMode,
+        aiDifficulty,
         aiCheatsEnabled: true,
         cursorScale: 1
       })
     }
-    expect(() => parsePreferencesUpdateRequest({ aiMode: 'unknown' })).toThrow()
+    for (const aiDifficulty of ['unknown', 'hardware', 'hardware-v2', 'api']) {
+      expect(() => parsePreferencesUpdateRequest({ aiDifficulty })).toThrow()
+    }
     expect(() =>
-      parsePreferences({ lastPlayedDeckId: null, aiMode: 'unknown' })
+      parsePreferences({ lastPlayedDeckId: null, aiDifficulty: 'unknown' })
     ).toThrow()
   })
 })

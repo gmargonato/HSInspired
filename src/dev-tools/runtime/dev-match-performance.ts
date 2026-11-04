@@ -483,14 +483,15 @@ export async function runMatchPerformanceBenchmark(options: {
       options.services.arenaStore,
       options.services.logger,
       options.navigator,
-      ai,
       options.services.matchLogs,
       (message) => {
         fixtureError = new Error(message)
       },
       options.services.progressionStore,
       options.services.dialogs,
-      options.services.preferences
+      options.services.preferences,
+      options.services.windowAttention,
+      ai
     )
     await options.sceneManager.transitionTo(next, {
       inset: { x: 0, y: 0, width: GAME_WIDTH, height: GAME_HEIGHT },

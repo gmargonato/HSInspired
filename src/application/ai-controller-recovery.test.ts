@@ -1,14 +1,10 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  AI_IPC_CHANNELS,
   AiRequestError,
-  aiIpcFailure,
-  aiIpcSuccess,
-  type AiDecisionBridge,
+  type AiDecisionApi,
   type AiDecisionRequest,
   type JsonObject
 } from '../desktop/contracts/ipc/ai'
-import { createAiDecisionApi } from './ai-decision-api'
 import { AiTurnController } from '../scenes/match/ai/ai-turn-controller'
 import type { GameBoardSession } from '../scenes/match/game-board-session'
 import { aiActionIntent } from '../scenes/match/ai/ai-action-intent'
@@ -16,7 +12,16 @@ import type { AiDecisionChoice } from '../desktop/contracts/ipc/ai-deliberation'
 import type { OpeningMatchPublicEvent } from '../game-rules/match'
 import { asPlayerId } from '../game-rules/match/match-types'
 
-const electron = vi.hoisted(() => ({ invoke: vi.fn(), expose: vi.fn() }))
+const engine = vi.hoisted(() => vi.fn())
+const timeoutFallback = vi.hoisted(() => vi.fn())
+vi.mock('../scenes/match/ai/expert-ai-timeout-fallback', () => ({
+  selectExpertTimeoutFallbackAction: timeoutFallback
+}))
+const electron = vi.hoisted(() => ({ expose: vi.fn(), invoke: vi.fn() }))
+vi.mock('electron', () => ({
+  contextBridge: { exposeInMainWorld: electron.expose },
+  ipcRenderer: { invoke: electron.invoke, on: vi.fn(), removeListener: vi.fn() }
+}))
 const modelSnapshot = vi.hoisted(() => ({ value: { mana: 7 } as JsonObject }))
 const legal = vi.hoisted(() => {
   const defaultLegalCommands = (): Record<string, unknown>[] => [
@@ -34,10 +39,6 @@ const legal = vi.hoisted(() => {
     defaultLegalCommands
   }
 })
-vi.mock('electron', () => ({
-  contextBridge: { exposeInMainWorld: electron.expose },
-  ipcRenderer: { invoke: electron.invoke, on: vi.fn(), removeListener: vi.fn() }
-}))
 vi.mock('../game-rules/match/ai', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../game-rules/match/ai')>()
   return {
@@ -67,49 +68,32 @@ vi.mock('../scenes/match/ai/ai-context', () => ({
   aiJson: (value) => JSON.parse(JSON.stringify(value))
 }))
 
-let preload: AiDecisionBridge
-beforeAll(async () => {
-  const previous = Object.getOwnPropertyDescriptor(process, 'contextIsolated')
-  Object.defineProperty(process, 'contextIsolated', { value: true, configurable: true })
-  try {
-    await import('../desktop/preload/index')
-    preload = electron.expose.mock.calls[0][1].ai
-  } finally {
-    if (previous) Object.defineProperty(process, 'contextIsolated', previous)
-    else delete (process as unknown as Record<string, unknown>).contextIsolated
-  }
-})
 afterEach(() => {
   modelSnapshot.value = { mana: 7 }
-  electron.invoke.mockReset()
+  engine.mockReset()
+  timeoutFallback.mockReset()
   legal.commands = legal.defaultLegalCommands()
 })
 
-// Use the actual preload, with a bridge double that strips Error custom fields.
-// A direct mocked AiRequestError would conceal the original integration failure.
-function bridge(): AiDecisionBridge {
-  const cross = async <T>(call: () => Promise<T>): Promise<T> => {
-    try {
-      return structuredClone(await call())
-    } catch (error) {
-      throw new Error(error instanceof Error ? error.message : String(error), {
-        cause: error
-      })
-    }
-  }
+function localApi(): AiDecisionApi {
   return {
-    settings: () => cross(() => preload.settings()),
-    decide: (request) => cross(() => preload.decide(structuredClone(request))),
-    cancel: (identity) => preload.cancel(identity)
+    settings: () => engine('settings'),
+    decide: (request) => engine('decide', request),
+    cancel: (identity) => engine('cancel', identity)
   }
 }
+const success = <T>(value: T): T => value
+function failure(error: Error): never {
+  throw error
+}
+
 const details = {
   repairable: true,
   failureKind: 'invalid-structure',
   rejectedContent: '{"actionId":"a0"}',
   contentTruncated: false
 }
-const reject = () => aiIpcFailure(new AiRequestError('Invalid structure.', details))
+const reject = () => failure(new AiRequestError('Invalid structure.', details))
 const commitChoice = () => ({
   actionId: 'a0',
   intent: { type: 'end-turn', source: null, targets: [], position: null, option: null },
@@ -153,24 +137,32 @@ function setup(
   choose?: (request: AiDecisionRequest, count: number) => AiDecisionChoice,
   handInstanceIds: readonly string[] = ['c1', 'c2']
 ) {
+  // The controller fixture has no simulation checkpoint. The real deterministic
+  // selector is covered by the Expert lifecycle/scenario suites.
+  timeoutFallback.mockImplementation((_session, commands) => ({
+    id: 'a0',
+    command: commands[0],
+    description: 'Deterministic fixture fallback',
+    intent: aiActionIntent(commands[0], 'human')
+  }))
   const requests: AiDecisionRequest[] = []
   const publicEvents: OpeningMatchPublicEvent[] = []
-  electron.invoke.mockImplementation(async (channel, request) => {
-    if (channel === AI_IPC_CHANNELS.settings)
-      return aiIpcSuccess({
+  engine.mockImplementation(async (channel, request) => {
+    if (channel === 'settings')
+      return success({
         enabled: true,
-        provider: 'openrouter',
+        provider: 'none',
         modelId: 'test',
         reasoningEffort: 'low',
         maxCompletionTokens: 1000
       })
-    if (channel === AI_IPC_CHANNELS.decide) {
+    if (channel === 'decide') {
       const priorActionRequests = requests.filter((entry) => entry.phase === 'action')
       requests.push(structuredClone(request))
       if (mode === 'pending') return new Promise(() => {})
       if (mode === 'stale-timeout') state.revision++
       if (mode === 'timeout' || mode === 'plan-timeout' || mode === 'stale-timeout')
-        return aiIpcFailure(
+        return failure(
           new AiRequestError('Deadline exceeded.', {
             failureKind: 'timeout',
             repairable: false
@@ -179,7 +171,7 @@ function setup(
       if (mode === 'plan-repair' && (requests.length === 1 || requests.length === 3))
         return reject()
       if (request.phase === 'mulligan')
-        return aiIpcSuccess({
+        return success({
           ...request,
           reason: 'Keep the curve.',
           choice: choose
@@ -190,7 +182,7 @@ function setup(
           finishReason: 'stop'
         })
       if (mode === 'plan' || mode === 'plan-repair' || request.phase === 'plan')
-        return aiIpcSuccess({
+        return success({
           ...request,
           reason: 'Objective',
           choice: choose
@@ -204,7 +196,7 @@ function setup(
         })
       if (mode === 'provider') {
         if (request.phase === 'plan') {
-          return aiIpcSuccess({
+          return success({
             ...request,
             reason: 'Objective',
             choice: planChoice(),
@@ -213,13 +205,11 @@ function setup(
             finishReason: 'stop'
           })
         }
-        return aiIpcFailure(
-          new AiRequestError('Provider failure.', { repairable: false })
-        )
+        return failure(new AiRequestError('Provider failure.', { repairable: false }))
       }
       if (mode === 'recover') {
         if (request.phase === 'plan') {
-          return aiIpcSuccess({
+          return success({
             ...request,
             reason: 'Objective',
             choice: planChoice(),
@@ -230,7 +220,7 @@ function setup(
         }
         if (request.phase === 'action' && priorActionRequests.length === 0)
           return reject()
-        return aiIpcSuccess({
+        return success({
           ...request,
           reason: 'Choose.',
           choice: commitChoice(),
@@ -240,7 +230,7 @@ function setup(
         })
       }
       if (mode === 'reject' || requests.length === 1) return reject()
-      return aiIpcSuccess({
+      return success({
         ...request,
         reason: 'Choose.',
         choice: commitChoice(),
@@ -275,13 +265,13 @@ function setup(
   } as unknown as GameBoardSession
   const controller = new AiTurnController({
     session,
-    api: createAiDecisionApi(bridge()),
+    api: localApi(),
     logger,
     onAbandoned
   })
   return { controller, requests, logger, onAbandoned, state, publicEvents }
 }
-describe('preload to renderer recovery', () => {
+describe('local decision controller recovery', () => {
   it.each([true, false])(
     'reviews an unused-resource pass once and permits a strategic pass (change=%s)',
     async (change) => {
@@ -781,16 +771,16 @@ describe('preload to renderer recovery', () => {
       }
     }
   )
-  it('falls back on a planning timeout and retries the provider on the next decision', async () => {
+  it('falls back on a planning timeout and retries the engine on the next decision', async () => {
     const { controller, requests, onAbandoned } = setup('plan-timeout')
     try {
       expect(await controller.chooseTurnAction()).toMatchObject({
-        source: 'random-timeout'
+        source: 'safe-fallback'
       })
       expect(requests).toHaveLength(1)
       expect(requests[0].phase).toBe('plan')
       expect(await controller.chooseTurnAction()).toMatchObject({
-        source: 'random-timeout'
+        source: 'safe-fallback'
       })
       expect(requests).toHaveLength(2)
       expect(onAbandoned).not.toHaveBeenCalled()
@@ -814,19 +804,19 @@ describe('preload to renderer recovery', () => {
     vi.useFakeTimers()
     let actionFailures = 0
     const { controller, requests, onAbandoned } = setup('provider')
-    electron.invoke.mockImplementation(async (channel, request) => {
-      if (channel === AI_IPC_CHANNELS.settings)
-        return aiIpcSuccess({
+    engine.mockImplementation(async (channel, request) => {
+      if (channel === 'settings')
+        return success({
           enabled: true,
-          provider: 'openrouter',
+          provider: 'none',
           modelId: 'test',
           reasoningEffort: 'low',
           maxCompletionTokens: 1000
         })
-      if (channel === AI_IPC_CHANNELS.decide) {
+      if (channel === 'decide') {
         requests.push(structuredClone(request))
         if (request.phase === 'plan') {
-          return aiIpcSuccess({
+          return success({
             ...request,
             reason: 'Objective',
             choice: planChoice(),
@@ -837,10 +827,8 @@ describe('preload to renderer recovery', () => {
         }
         actionFailures++
         if (actionFailures === 1)
-          return aiIpcFailure(
-            new AiRequestError('Provider failure.', { repairable: false })
-          )
-        return aiIpcSuccess({
+          return failure(new AiRequestError('Provider failure.', { repairable: false }))
+        return success({
           ...request,
           reason: 'Choose.',
           choice: commitChoice(),
@@ -862,12 +850,13 @@ describe('preload to renderer recovery', () => {
       vi.useRealTimers()
     }
   })
-  it('selects a legal random input on the first timeout without pausing or retrying', async () => {
+  it('selects a deterministic legal input on the first timeout without pausing or retrying', async () => {
     const { controller, requests, logger, onAbandoned } = setup('timeout')
     try {
       const decision = await controller.chooseTurnAction()
-      expect(decision?.source).toBe('random-timeout')
-      expect(['a0', 'a1', 'a2']).toContain(decision?.actionId)
+      expect(decision?.source).toBe('safe-fallback')
+      expect(decision?.actionId).toBe('a0')
+      expect(timeoutFallback).toHaveBeenCalledWith(expect.anything(), legal.commands)
       expect(
         legal.commands.find((_command, index) => decision?.actionId === 'a' + index)
           ?.type
@@ -877,7 +866,7 @@ describe('preload to renderer recovery', () => {
       expect(controller.isAbandoned).toBe(false)
       expect(logger.info).toHaveBeenCalledWith(
         '[Game AI] timeout-fallback',
-        expect.objectContaining({ source: 'random-timeout' })
+        expect.objectContaining({ source: 'safe-fallback' })
       )
     } finally {
       controller.dispose()
@@ -1028,22 +1017,6 @@ describe('preload to renderer recovery', () => {
       controller.dispose()
     }
   })
-  it('preserves rejection data and reconstructs a renderer-local error', async () => {
-    electron.invoke.mockResolvedValue(reject())
-    const request = {
-      matchId: 'm',
-      requestId: 'r',
-      expectedRevision: 1,
-      actionIds: ['a0'],
-      messages: [{ role: 'user' as const, content: 'Choose' }]
-    }
-    await expect(bridge().decide(request)).resolves.toEqual(reject())
-    const error = await createAiDecisionApi(bridge())
-      .decide(request)
-      .catch((error) => error)
-    expect(error).toBeInstanceOf(AiRequestError)
-    expect(error.details).toEqual(details)
-  })
   it('corrects once using the same facts and logs successful recovery', async () => {
     const { controller, requests, logger, onAbandoned } = setup()
     try {
@@ -1097,27 +1070,24 @@ describe('preload to renderer recovery', () => {
     controller.dispose()
     await expect(pending).resolves.toBeNull()
     expect(onAbandoned).not.toHaveBeenCalled()
-    expect(electron.invoke).toHaveBeenCalledWith(
-      AI_IPC_CHANNELS.cancel,
-      expect.any(Object)
-    )
+    expect(engine).toHaveBeenCalledWith('cancel', expect.any(Object))
   })
   it('does not abandon while legal inputs remain after a logged retry failure', async () => {
     vi.useFakeTimers()
     let actionFailures = 0
     const { controller, onAbandoned, logger } = setup('provider')
-    electron.invoke.mockImplementation(async (channel, request) => {
-      if (channel === AI_IPC_CHANNELS.settings)
-        return aiIpcSuccess({
+    engine.mockImplementation(async (channel, request) => {
+      if (channel === 'settings')
+        return success({
           enabled: true,
-          provider: 'openrouter',
+          provider: 'none',
           modelId: 'test',
           reasoningEffort: 'low',
           maxCompletionTokens: 1000
         })
-      if (channel === AI_IPC_CHANNELS.decide) {
+      if (channel === 'decide') {
         if (request.phase === 'plan') {
-          return aiIpcSuccess({
+          return success({
             ...request,
             reason: 'Objective',
             choice: planChoice(),
@@ -1128,10 +1098,8 @@ describe('preload to renderer recovery', () => {
         }
         actionFailures++
         if (actionFailures <= 2)
-          return aiIpcFailure(
-            new AiRequestError('Provider failure.', { repairable: false })
-          )
-        return aiIpcSuccess({
+          return failure(new AiRequestError('Provider failure.', { repairable: false }))
+        return success({
           ...request,
           reason: 'Choose.',
           choice: commitChoice(),
@@ -1153,6 +1121,36 @@ describe('preload to renderer recovery', () => {
     } finally {
       controller.dispose()
       vi.useRealTimers()
+    }
+  })
+})
+
+describe('local-only desktop bridge', () => {
+  it('retains game services without exposing an external AI bridge', async () => {
+    const previous = Object.getOwnPropertyDescriptor(process, 'contextIsolated')
+    Object.defineProperty(process, 'contextIsolated', {
+      value: true,
+      configurable: true
+    })
+    try {
+      await import('../desktop/preload/index')
+      const api = electron.expose.mock.calls[0][1]
+      expect(api).not.toHaveProperty('ai')
+      for (const service of [
+        'preferences',
+        'decks',
+        'matchLogs',
+        'arena',
+        'progression',
+        'playerStats',
+        'windowSettings'
+      ]) {
+        expect(api).toHaveProperty(service)
+      }
+      expect(electron.invoke).not.toHaveBeenCalled()
+    } finally {
+      if (previous) Object.defineProperty(process, 'contextIsolated', previous)
+      else delete (process as unknown as Record<string, unknown>).contextIsolated
     }
   })
 })
