@@ -1,7 +1,9 @@
-import { Rectangle, Sprite, type Texture } from 'pixi.js'
+import { Graphics, Rectangle, Sprite, type Texture } from 'pixi.js'
 import { SETTINGS_LAYOUT } from './settings-layout'
+import { GraphicsToggle } from './graphics-toggle'
+import { AiCheatsToggle } from './ai-cheats-toggle'
 import { CursorSizeSlider } from './cursor-size-slider'
-import { AiModeSelector } from './ai-mode-selector'
+import { AiDifficultySelector } from './ai-difficulty-selector'
 import { ResolutionSelector } from './resolution-selector'
 import { BoardCornerSelector, type BoardCornerSelection } from './board-corner-selector'
 import { applyAnchoredPlacement, applyPlacement } from '../../visual-components/layout'
@@ -61,7 +63,7 @@ abstract class SettingsScene extends Scene {
 
   protected async waitForFonts(): Promise<void> {
     if (typeof document === 'undefined' || !document.fonts) return
-    await document.fonts.load('700 42px Belwe')
+    await document.fonts.load('400 36px "Franklin Gothic Condensed"')
   }
 
   protected override onExit(): void {
@@ -72,15 +74,34 @@ abstract class SettingsScene extends Scene {
 
 /** Settings overlay used throughout the non-match menu flow. */
 export class MenuSettingsScene extends SettingsScene {
+  private readonly graphicsToggles: GraphicsToggle[] = []
+  private aiCheatsToggle: AiCheatsToggle | null = null
   private cursorSizeSlider: CursorSizeSlider | null = null
-  private aiModeSelector: AiModeSelector | null = null
+  private aiDifficultySelector: AiDifficultySelector | null = null
 
   async init(): Promise<void> {
     const assets = await this.assetScope.acquire<MenuSettingsAssets>(
       ASSET_BUNDLE_IDS.menuSettings
     )
+    this.root.sortableChildren = true
     this.createBackground(assets.background, 'menu-settings-background')
     await this.waitForFonts()
+    const cheats = new AiCheatsToggle(assets, window.api.preferences, () => {
+      this.aiDifficultySelector?.closeOptions()
+      this.resolutionSelector?.closeOptions()
+    })
+    await cheats.init()
+    this.aiCheatsToggle = cheats
+    this.root.addChild(cheats)
+    for (const setting of ['enable3dElements', 'enableShadows'] as const) {
+      const toggle = new GraphicsToggle(assets, window.api.preferences, setting, () => {
+        this.aiDifficultySelector?.closeOptions()
+        this.resolutionSelector?.closeOptions()
+      })
+      await toggle.init()
+      this.graphicsToggles.push(toggle)
+      this.root.addChild(toggle)
+    }
     const cursor = this.sceneManager.cursor
     if (cursor) {
       const shared = await this.assetScope.acquire<SharedUIAssets>(
@@ -94,24 +115,24 @@ export class MenuSettingsScene extends SettingsScene {
         cursor,
         window.api.preferences,
         () => {
-          this.aiModeSelector?.closeOptions()
+          this.aiDifficultySelector?.closeOptions()
           this.resolutionSelector?.closeOptions()
         },
         (error) => console.error('Could not save cursor size.', error)
       )
       this.root.addChild(this.cursorSizeSlider)
     }
-    const aiModeSelector = new AiModeSelector(
+    const aiDifficultySelector = new AiDifficultySelector(
       assets,
       window.api.preferences,
       console.error,
       () => this.resolutionSelector?.closeOptions()
     )
-    await aiModeSelector.init()
-    this.aiModeSelector = aiModeSelector
-    this.root.addChild(aiModeSelector)
+    await aiDifficultySelector.init()
+    this.aiDifficultySelector = aiDifficultySelector
+    this.root.addChild(aiDifficultySelector)
     await this.createResolutionSelector(assets, () =>
-      this.aiModeSelector?.closeOptions()
+      this.aiDifficultySelector?.closeOptions()
     )
   }
 
@@ -119,10 +140,14 @@ export class MenuSettingsScene extends SettingsScene {
 
   protected override onExit(): void {
     super.onExit()
+    for (const toggle of this.graphicsToggles) toggle.removeAllListeners()
+    this.graphicsToggles.length = 0
+    this.aiCheatsToggle?.removeAllListeners()
+    this.aiCheatsToggle = null
     this.cursorSizeSlider?.dispose()
     this.cursorSizeSlider = null
-    this.aiModeSelector?.dispose()
-    this.aiModeSelector = null
+    this.aiDifficultySelector?.dispose()
+    this.aiDifficultySelector = null
   }
 }
 
@@ -159,6 +184,14 @@ export class GameSettingsScene extends SettingsScene {
       this.callbacks.onQuit
     )
     if (this.callbacks.boardCorners?.options.length) {
+      const dividerLayout = SETTINGS_LAYOUT.gameDivider
+      const divider = new Graphics()
+        .rect(0, 0, dividerLayout.size.width, dividerLayout.size.height)
+        .fill(SETTINGS_LAYOUT.gameDividerColor)
+      divider.label = 'game-settings.divider'
+      divider.eventMode = 'none'
+      applyPlacement(divider, dividerLayout)
+      this.root.addChild(divider)
       await this.waitForFonts()
       this.boardCornerSelector = new BoardCornerSelector(
         assets,

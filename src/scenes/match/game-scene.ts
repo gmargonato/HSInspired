@@ -5,6 +5,7 @@ import { prewarmWindfury } from './loading/windfury-warmup'
 import { prewarmCardPlay } from './loading/card-play-warmup'
 import { prewarmCombatImpact } from './loading/combat-impact-warmup'
 import { prewarmMatchResult } from './loading/match-result-warmup'
+import { prewarmHealing, prewarmProjectiles } from './loading/spell-vfx-warmup'
 import {
   MatchVisualResources,
   matchVisualTextures
@@ -45,7 +46,6 @@ import type {
   DevMatchTarget
 } from '../../desktop/contracts/dev-menu'
 import { Scene } from '../../visual-components/lifecycle/scene'
-import type { AiDecisionApi } from '../../desktop/contracts/ipc/ai'
 import type { MatchEndedEvent } from '../../game-rules/match'
 import type { ConstructedMatchResult } from '../../game-rules/ranking/constructed-ranking'
 import { isArenaRunComplete } from '../../game-rules/arena'
@@ -64,11 +64,11 @@ import type {
   Preferences
 } from '../../desktop/contracts/ipc/preferences'
 import type { ExpertDeckStrategyBinding } from '../../game-rules/decks/expert-deck-strategy'
-import { ExpertAiDecisionApi } from './ai/expert-ai-decision-api'
-import { LocalAiDecisionApi } from './ai/local-ai-decision-api'
-
-/** Set true to restore the AI's randomized startup Hero Power bonus. */
-const AI_HERO_POWER_BONUS_ENABLED = true
+import type { ExpertAiDecisionApi } from './ai/expert-ai-decision-api'
+import { createLocalAiDecisionApi } from './ai/expert-ai-decision-api'
+import { LOCAL_AI_RESOURCE_PROFILES } from './ai/local-ai-resources'
+import { EXPERT_AI_POLICY_REVISION } from './ai/expert-ai-worker-protocol'
+import type { AiDecisionApi } from '../../desktop/contracts/ipc/ai'
 
 /** Full-screen route adapter for the first playable opening sequence. */
 export class GameScene extends Scene {
@@ -84,6 +84,12 @@ export class GameScene extends Scene {
   private expertAiApi: ExpertAiDecisionApi | null = null
   private recorder?: MatchRecorder
   private readonly rewardMatchId = crypto.randomUUID()
+  private matchEnded = false
+
+  get hasMatchEnded(): boolean {
+    return this.matchEnded
+  }
+
   private statisticsAttempted = false
   private opponentLeftShown = false
   private readonly recordWindowFocus = (): void => this.recordWindowState('focus')
@@ -111,7 +117,6 @@ export class GameScene extends Scene {
     private readonly arenaStore: ArenaStore,
     logger?: AppLogger,
     private readonly router?: SceneRouter,
-    private readonly ai?: AiDecisionApi,
     private readonly matchLogs?: MatchLogsApi,
     private readonly reportLogError: (
       message: string,
@@ -120,7 +125,9 @@ export class GameScene extends Scene {
     private readonly progression?: ProgressionStore,
     private readonly dialogs?: DialogService,
     private readonly preferences?: PreferencesApi,
-    private readonly windowAttention?: WindowAttentionApi
+    private readonly windowAttention?: WindowAttentionApi,
+    /** Local-only fixture injection used by the rendering performance harness. */
+    private readonly localAiOverride?: AiDecisionApi
   ) {
     super()
     this.route = route
@@ -164,7 +171,13 @@ export class GameScene extends Scene {
     options: readonly { id: string; label: string }[]
     selected: string | null
   } {
-    return { options: TABLE_CORNERS, selected: this.selectedCorner }
+    return {
+      options: TABLE_CORNERS.map((corner) => ({
+        ...corner,
+        label: `Board #${corner.label}`
+      })),
+      selected: this.selectedCorner
+    }
   }
 
   setBoardCorner(id: string): void {
@@ -225,24 +238,24 @@ export class GameScene extends Scene {
     })
     this.logger?.info(
       '[GameScene] decks resolved',
-      decks.map((d) => `${d.id} — ${d.heroId}`)
+      decks.map((d) => `${d.id} â€” ${d.heroId}`)
     )
 
-    const aiPreferences = await this.readAiPreferences()
-    const aiMode = aiPreferences.aiMode
+    const aiPreferences = await this.readMatchPreferences()
+    const aiDifficulty = aiPreferences.aiDifficulty
     const profileId = this.route.curatedOpponent?.expertStrategyProfileId
     const aiParticipantId = this.route.setup.participants.find(
       (participant) => participant.controllerKind === 'ai'
     )?.participantId
     const deckStrategy: ExpertDeckStrategyBinding | undefined =
-      aiMode === 'hardware-v2' && !this.route.mode && profileId && aiParticipantId
+      !this.route.mode && profileId && aiParticipantId
         ? { participantId: aiParticipantId, profileId, version: 1 }
         : undefined
     const matchRoute: GameRoute = {
       ...this.route,
       setup: {
         ...this.route.setup,
-        aiHeroPowerBonusEnabled: AI_HERO_POWER_BONUS_ENABLED
+        aiHeroPowerBonusEnabled: aiPreferences.aiCheatsEnabled
       }
     }
     this.recorder = new MatchRecorder(
@@ -253,7 +266,12 @@ export class GameScene extends Scene {
           ? { curatedOpponent: this.route.curatedOpponent }
           : {}),
         aiRuntimeSettings: { ...AI_CONVERSATION_LIMITS },
-        aiMode,
+        aiDifficulty,
+        aiResources: LOCAL_AI_RESOURCE_PROFILES[aiDifficulty],
+        aiEngine: {
+          modelId: 'hardware-local-v2',
+          policyRevision: EXPERT_AI_POLICY_REVISION
+        },
         expertDeckStrategy: {
           enabled: true,
           applied: Boolean(deckStrategy),
@@ -283,25 +301,15 @@ export class GameScene extends Scene {
       opponentDeckStrategy: deckStrategy,
       recorder: this.recorder
     })
-    let aiApi: AiDecisionApi | undefined
-    if (aiMode === 'hardware') {
-      aiApi = new LocalAiDecisionApi(aiSession)
-    } else if (aiMode === 'hardware-v2') {
-      this.expertAiApi = new ExpertAiDecisionApi(aiSession)
-      aiApi = this.expertAiApi
-    } else {
-      aiApi = this.ai
-    }
+    const aiApi =
+      this.localAiOverride ??
+      (this.expertAiApi = createLocalAiDecisionApi(aiSession, aiDifficulty))
     const aiController = new AiTurnController({
       api: aiApi,
       candidates: this.expertAiApi ?? undefined,
       session: aiSession,
       logger: aiLogger,
-      recorder: this.recorder,
-      // Local hardware modes have no transport dependency and remain playable offline.
-      ...(aiMode === 'hardware' || aiMode === 'hardware-v2'
-        ? { online: () => true }
-        : {})
+      recorder: this.recorder
     })
 
     await this.reportLoading(0.08, 'Loading game assets')
@@ -309,9 +317,12 @@ export class GameScene extends Scene {
     const healingAssets = await this.assetScope.acquire<HealingAssets>(
       ASSET_BUNDLE_IDS.healingVfx
     )
-    const controlAssets = await this.assetScope.acquire<MatchControlAssets>(
-      ASSET_BUNDLE_IDS.gameControls
-    )
+    const controlAssets =
+      aiPreferences.enable3dElements !== false
+        ? await this.assetScope.acquire<MatchControlAssets>(
+            ASSET_BUNDLE_IDS.gameControls
+          )
+        : undefined
     this.logger?.info('[GameScene] game assets acquired')
     await this.reportLoading(0.2, 'Loading hero assets')
     const deckPresentationAssets =
@@ -339,6 +350,7 @@ export class GameScene extends Scene {
       Object.values(cardAssets),
       [
         ...matchVisualTextures(heroAssets, this.tableAssets!.board),
+        ...Object.values(healingAssets),
         ...Object.values(this.tableAssets!)
       ],
       (progress) =>
@@ -398,6 +410,16 @@ export class GameScene extends Scene {
       this.logger?.warn('[GameScene] match result warm-up failed', error)
     }
 
+    try {
+      prewarmHealing(this.appInstance.renderer, healingAssets)
+    } catch (error) {
+      this.logger?.warn('[GameScene] healing warm-up failed', error)
+    }
+    try {
+      prewarmProjectiles(this.appInstance.renderer, gameAssets)
+    } catch (error) {
+      this.logger?.warn('[GameScene] projectile warm-up failed', error)
+    }
     await this.reportLoading(0.46, 'Building game board')
     this.view = new GameBoardView({
       controlAssets,
@@ -438,16 +460,34 @@ export class GameScene extends Scene {
     }
   }
 
-  private async readAiPreferences(): Promise<Preferences> {
+  private async readMatchPreferences(): Promise<Preferences> {
     const preferences =
       this.preferences ??
       (typeof window !== 'undefined' ? window.api?.preferences : undefined)
-    if (!preferences) return { lastPlayedDeckId: null, aiMode: 'api', cursorScale: 1 }
+    if (!preferences)
+      return {
+        lastPlayedDeckId: null,
+        aiDifficulty: 'expert',
+        cursorScale: 1,
+        enable3dElements: true,
+        enableShadows: true,
+        aiCheatsEnabled: true
+      }
     try {
       return await preferences.get()
     } catch (error) {
-      this.logger?.warn('[GameScene] AI mode preference unavailable; using API.', error)
-      return { lastPlayedDeckId: null, aiMode: 'api', cursorScale: 1 }
+      this.logger?.warn(
+        '[GameScene] AI difficulty preference unavailable; using Expert.',
+        error
+      )
+      return {
+        lastPlayedDeckId: null,
+        aiDifficulty: 'expert',
+        cursorScale: 1,
+        enable3dElements: true,
+        enableShadows: true,
+        aiCheatsEnabled: true
+      }
     }
   }
 
@@ -494,6 +534,8 @@ export class GameScene extends Scene {
   }
 
   private async recordMatchResult(event: MatchEndedEvent): Promise<number> {
+    this.matchEnded = true
+    await this.sceneManager.dismissOverlaysAbove?.(this)
     const human = this.route.setup.participants.find(
       (participant) => participant.controllerKind === 'human'
     )
@@ -558,6 +600,10 @@ export class GameScene extends Scene {
     } catch (error) {
       this.logger?.warn('Failed to save the match result.', error)
     }
+  }
+
+  protected override onInputBlocked(blocked: boolean): void {
+    this.view?.setInputBlocked(blocked)
   }
 
   update(deltaMS: number): void {

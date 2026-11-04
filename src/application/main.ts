@@ -14,6 +14,10 @@ import { prepareMainMenuEffects } from './prepare-main-menu-effects'
 import { MenuStartupResources } from './prepare-menu-resources'
 import { prepareMenuData } from './prepare-menu-data'
 import { StartupSplash } from './startup-splash'
+import {
+  observeShadows,
+  setShadowsEnabled
+} from '../visual-components/effects/shadow-visibility'
 
 export { GAME_HEIGHT, GAME_WIDTH }
 
@@ -219,7 +223,6 @@ async function bootstrap(): Promise<void> {
   let unsubscribeDevSceneSync = (): void => undefined
   let unsubscribeDevCommandHandler = (): void => undefined
   let removeFpsCounter = (): void => undefined
-  let removeDevFilterToggle = (): void => undefined
   const menuResources = new MenuStartupResources()
 
   const directInspectorStart =
@@ -244,9 +247,15 @@ async function bootstrap(): Promise<void> {
 
   try {
     app.ticker.maxFPS = 60
+    observeShadows(app.stage, (enabled) => {
+      document.documentElement.classList.toggle('shadows-disabled', !enabled)
+    })
     await services.preferences?.get().then(
-      (preferences) => cursor.setScale(preferences.cursorScale),
-      (error: unknown) => services.logger.warn('Could not restore cursor size.', error)
+      (preferences) => {
+        cursor.setScale(preferences.cursorScale)
+        setShadowsEnabled(preferences.enableShadows)
+      },
+      (error: unknown) => services.logger.warn('Could not restore preferences.', error)
     )
     if (directStart) {
       await prepareMainMenuEffects(app.renderer)
@@ -255,11 +264,6 @@ async function bootstrap(): Promise<void> {
         menuResources.prepare(app.renderer),
         prepareMenuData(services)
       ])
-    }
-    if (import.meta.env.DEV) {
-      const { installDevFilterToggle } =
-        await import('../dev-tools/runtime/dev-filter-toggle')
-      removeDevFilterToggle = installDevFilterToggle(app)
     }
 
     const game = new SceneManager(app, {
@@ -341,19 +345,6 @@ async function bootstrap(): Promise<void> {
     removeSettingsShortcut = () =>
       window.removeEventListener('keydown', handleSettingsShortcut)
 
-    if (import.meta.env.DEV) {
-      const { createLayoutInspector } = await import('@dev-layout-inspector')
-      const layoutInspector = createLayoutInspector(app, {
-        getRoot: () => (game.current ? game.current.root : null)
-      })
-      const toggleLayoutInspector = (event: KeyboardEvent): void => {
-        if (event.key !== 'F2' || event.repeat) return
-        event.preventDefault()
-        layoutInspector.toggle()
-      }
-      window.addEventListener('keydown', toggleLayoutInspector)
-    }
-
     sceneManagerReady = true
     for (const request of pendingSceneRequests.splice(0)) {
       navigateSceneRequest(request)
@@ -367,7 +358,6 @@ async function bootstrap(): Promise<void> {
       'pagehide',
       () => {
         removeFpsCounter()
-        removeDevFilterToggle()
         removeSettingsShortcut()
         unsubscribeFromSceneMenu()
         unsubscribeDevSceneSync()
@@ -385,7 +375,6 @@ async function bootstrap(): Promise<void> {
   } catch (error) {
     app.stop()
     removeFpsCounter()
-    removeDevFilterToggle()
     removeSettingsShortcut()
     unsubscribeFromSceneMenu()
     unsubscribeDevSceneSync()

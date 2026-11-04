@@ -1,3 +1,4 @@
+import { LOCAL_AI_RESOURCE_PROFILES } from './local-ai-resources'
 import { AiAttentionController, type AiAttention } from './ai-attention-controller'
 import { describe, expect, it, vi } from 'vitest'
 import type {
@@ -18,13 +19,16 @@ import { aiActionIntent } from './ai-action-intent'
 import {
   EXPERT_AI_DECISION_SEARCH_BUDGET_MS,
   EXPERT_AI_SEARCH_BUDGET_MS,
-  ExpertAiDecisionApi
+  ExpertAiDecisionApi,
+  createLocalAiDecisionApi
 } from './expert-ai-decision-api'
 import { GameBoardSession } from '../game-board-session'
 import { LocalAiDecisionApi } from './local-ai-decision-api'
 import { chooseExpertConsensus } from './expert-ai-consensus'
 import {
   expertAiBudgetForTurn,
+  EXPERT_AI_DEFAULT_BUDGET,
+  EXPERT_AI_POLICY_REVISION,
   EXPERT_AI_TURN_BUDGET_MS
 } from './expert-ai-worker-protocol'
 import type {
@@ -117,6 +121,99 @@ describe('Expert hidden-world consensus', () => {
       const response = await api.decide(request('second'))
       expect(calls).toBe(2)
       expect(response.usage?.continuationRejection).toBe('no-payoff')
+      expect(response.finishReason).not.toBe('expert-continuation')
+    } finally {
+      api.dispose()
+    }
+  })
+  it('replans cached opposing Healing Wave despite its random healing amount', async () => {
+    const fixture = createAiFixture({
+      seed: 100506,
+      aiHeroId: 'thrall',
+      opponentHeroId: 'garrosh',
+      aiMana: 10,
+      aiHealth: 20,
+      opponentHealth: 18,
+      aiHand: ['basic_chillwind_yeti', 'the_grand_tournament_healing_wave']
+    })
+    const session = new GameBoardSession({
+      setup: fixture.setup,
+      decks: fixture.decks,
+      checkpoint: fixture.checkpoint
+    })
+    const actions = () =>
+      aiActions(
+        session,
+        enumerateLegalCommands(
+          {
+            getState: session.match.getState,
+            getPlayInput: session.match.getPlayInput!,
+            getLegality: session.match.getLegality!
+          },
+          session.remoteParticipantId
+        )
+      )
+    const play = actions().find(
+      (a) => a.command.type === 'play-card' && !a.command.targets?.length
+    )!
+    const heal = actions().find(
+      (a) =>
+        a.command.type === 'play-card' &&
+        a.command.targets?.[0]?.kind === 'hero' &&
+        a.command.targets[0].participantId === session.localParticipantId
+    )!
+    let receive: ((event: MessageEvent<ExpertAiWorkerResponse>) => void) | undefined
+    let calls = 0
+    const worker = {
+      addEventListener(type: string, listener: unknown) {
+        if (type === 'message') receive = listener as typeof receive
+      },
+      postMessage(message: ExpertAiWorkerRequest) {
+        if (message.type !== 'decide') return
+        const selected =
+          calls++ === 0 ? play : actions().find((a) => a.command.type === 'end-turn')!
+        const response: AiDecisionResponse = {
+          matchId: message.request.matchId,
+          requestId: message.request.requestId,
+          expectedRevision: message.request.expectedRevision,
+          modelId: 'hardware-local-v2',
+          reason: 'Fixture line.',
+          durationMs: 0,
+          finishReason: 'fixture',
+          choice: {
+            actionId: selected.id,
+            intent: aiActionIntent(selected.command, session.localParticipantId),
+            expectedResult: 'Fixture.',
+            planUpdate: null
+          },
+          usage: {
+            plannedActionIntents: [play, heal].map((a) =>
+              aiActionIntent(a.command, session.localParticipantId)
+            )
+          } as unknown as JsonObject
+        }
+        receive?.({
+          data: { type: 'decision', requestId: message.request.requestId, response }
+        } as MessageEvent<ExpertAiWorkerResponse>)
+      },
+      terminate() {}
+    } as unknown as Worker
+    const api = new ExpertAiDecisionApi(session, () => worker)
+    const request = (id: string): AiDecisionRequest => ({
+      matchId: 'october',
+      requestId: id,
+      phase: 'action',
+      expectedRevision: session.getState().revision,
+      allowInspection: false,
+      messages: [],
+      actionIds: actions().map((a) => a.id)
+    })
+    try {
+      await api.decide(request('first'))
+      expect(session.match.dispatch(play.command).accepted).toBe(true)
+      const response = await api.decide(request('second'))
+      expect(calls).toBe(2)
+      expect(response.usage?.continuationRejection).toBe('opponent-heal')
       expect(response.finishReason).not.toBe('expert-continuation')
     } finally {
       api.dispose()
@@ -3411,28 +3508,169 @@ describe('Expert fresh friendly-target repair', () => {
     }
   }
 
-  it('repairs authored opponent healing to the useful same-card self-heal', () => {
+  it.each([true, false])(
+    'rejects a pure own sacrifice without discarding a ready attack (%s)',
+    (ready) => {
+      const h = harness({
+        seed: 913,
+        aiHeroId: 'anduin',
+        opponentHeroId: 'jaina',
+        aiMana: 2,
+        aiHeroPowerAvailable: false,
+        aiHand: ['basic_shadow_word_pain'],
+        aiBoard: [{ cardId: 'basic_murloc_raider', ready }],
+        opponentBoard: []
+      })
+      const selected = h.target('self', 'minion')
+      const end = h.actions.find((action) => action.command.type === 'end-turn')!
+      const before = h.session.match.getCheckpoint()
+      try {
+        const result = h.guard(h.request, h.responseFor(selected, [end]))
+        const action = h.actions.find(
+          (entry) => 'actionId' in result.choice && entry.id === result.choice.actionId
+        )!
+        expect(action.command.type).toBe(ready ? 'attack-character' : 'end-turn')
+        expect(result.usage?.actionOutcomeReason).toBe('unpaid-friendly-target')
+        expect(h.session.match.getCheckpoint()).toEqual(before)
+      } finally {
+        h.api.dispose()
+      }
+    }
+  )
+
+  it('retains a validated already-planned attack suffix after rejecting a pure sacrifice', () => {
     const h = harness({
-      seed: 2026102010,
-      aiHeroId: 'uther',
-      opponentHeroId: 'guldan',
-      aiMana: 1,
-      aiHealth: 27,
-      opponentHealth: 20,
-      aiHand: ['whispers_of_the_old_gods_forbidden_healing']
+      seed: 914,
+      aiHeroId: 'anduin',
+      opponentHeroId: 'jaina',
+      aiMana: 2,
+      aiHeroPowerAvailable: false,
+      aiHand: ['basic_shadow_word_pain'],
+      aiBoard: [
+        { cardId: 'basic_murloc_raider', ready: false },
+        { cardId: 'basic_chillwind_yeti', ready: true },
+        { cardId: 'basic_goldshire_footman', ready: true }
+      ],
+      opponentBoard: []
     })
-    const selected = h.target('enemy', 'hero')
-    const self = h.target('self', 'hero')
+    const selected = h.target('self', 'minion')
+    const attacks = h.actions.filter(
+      (action) =>
+        action.command.type === 'attack-character' &&
+        action.command.defender.kind === 'hero'
+    )
+    const response: AiDecisionResponse = {
+      ...h.responseFor(selected),
+      usage: {
+        plannedActionIntents: [selected, ...attacks].map((action) => ({
+          ...aiActionIntent(action.command, h.session.localParticipantId),
+          targets: [
+            ...aiActionIntent(action.command, h.session.localParticipantId).targets
+          ]
+        }))
+      }
+    }
     const before = h.session.match.getCheckpoint()
     try {
-      const result = h.guard(h.request, h.responseFor(selected, [self]))
-      expect(result.choice).toMatchObject({ actionId: self.id })
-      expect(result.usage?.actionOutcomeReason).toBe('opponent-heal')
+      const result = h.guard(h.request, response)
+      expect(result.choice).toMatchObject({ actionId: attacks[0]!.id })
+      expect(result.usage?.plannedActionIntents).toEqual(
+        attacks.map((action) =>
+          aiActionIntent(action.command, h.session.localParticipantId)
+        )
+      )
       expect(h.session.match.getCheckpoint()).toEqual(before)
     } finally {
       h.api.dispose()
     }
   })
+
+  it.each([
+    'information boundary',
+    'random boundary',
+    'duplicate',
+    'stale',
+    'over-cap'
+  ] as const)('does not cache repaired suffix across %s', (kind) => {
+    const cardId =
+      kind === 'information boundary'
+        ? 'mean_streets_of_gadgetzan_genzo_the_shark'
+        : kind === 'random boundary'
+          ? 'mean_streets_of_gadgetzan_shaku_the_collector'
+          : 'basic_chillwind_yeti'
+    const h = harness({
+      seed: 914,
+      aiHeroId: 'anduin',
+      opponentHeroId: 'jaina',
+      aiMana: 2,
+      aiHeroPowerAvailable: false,
+      aiHand: ['basic_shadow_word_pain'],
+      aiBoard: [
+        { cardId: 'basic_murloc_raider', ready: false },
+        { cardId, ready: true },
+        { cardId: 'basic_goldshire_footman', ready: true }
+      ],
+      opponentBoard: []
+    })
+    const selected = h.target('self', 'minion')
+    const attacks = h.actions.filter(
+      (action) =>
+        action.command.type === 'attack-character' &&
+        action.command.defender.kind === 'hero'
+    )
+    const chosen =
+      kind === 'duplicate'
+        ? [attacks[0]!, attacks[0]!]
+        : kind === 'over-cap'
+          ? Array.from({ length: 6 }, () => attacks[0]!)
+          : attacks
+    const intents = [selected, ...chosen].map((action) => {
+      const intent = aiActionIntent(action.command, h.session.localParticipantId)
+      return { ...intent, targets: [...intent.targets] }
+    })
+    if (kind === 'stale') intents[1] = { ...intents[1]!, source: 'missing-attacker' }
+    const response: AiDecisionResponse = {
+      ...h.responseFor(selected),
+      usage: { plannedActionIntents: intents }
+    }
+    const before = h.session.match.getCheckpoint()
+    try {
+      const result = h.guard(h.request, response)
+      expect(result.usage?.plannedActionIntents).toHaveLength(1)
+      expect(h.session.match.getCheckpoint()).toEqual(before)
+    } finally {
+      h.api.dispose()
+    }
+  })
+
+  it.each([
+    ['whispers_of_the_old_gods_forbidden_healing', 1],
+    ['the_grand_tournament_healing_wave', 3]
+  ] as const)(
+    'repairs %s enemy healing to the useful same-card self-heal',
+    (card, mana) => {
+      const h = harness({
+        seed: 2026102010,
+        aiHeroId: 'uther',
+        opponentHeroId: 'guldan',
+        aiMana: mana,
+        aiHealth: 27,
+        opponentHealth: 20,
+        aiHand: [card]
+      })
+      const selected = h.target('enemy', 'hero')
+      const self = h.target('self', 'hero')
+      const before = h.session.match.getCheckpoint()
+      try {
+        const result = h.guard(h.request, h.responseFor(selected, [self]))
+        expect(result.choice).toMatchObject({ actionId: self.id })
+        expect(result.usage?.actionOutcomeReason).toBe('opponent-heal')
+        expect(h.session.match.getCheckpoint()).toEqual(before)
+      } finally {
+        h.api.dispose()
+      }
+    }
+  )
 
   it('keeps enemy Attack gifts as soft search advice rather than a blanket target ban', () => {
     const h = harness({
@@ -4044,6 +4282,171 @@ describe('Expert candidate subscription', () => {
       await expect(decision).resolves.toMatchObject({ requestId: request!.requestId })
       progress(response)
       expect(listener).toHaveBeenCalledTimes(1)
+    } finally {
+      api.dispose()
+    }
+  })
+})
+
+describe('shared local difficulty resources', () => {
+  function difficultyFixture() {
+    const fixture = createAiFixture({
+      seed: 71103,
+      aiHeroId: 'garrosh',
+      opponentHeroId: 'jaina',
+      aiMana: 4,
+      aiHand: ['basic_chillwind_yeti'],
+      opponentHand: ['basic_fireball']
+    })
+    const session = new GameBoardSession({
+      setup: fixture.setup,
+      decks: fixture.decks,
+      checkpoint: fixture.checkpoint
+    })
+    const actions = aiActions(
+      session,
+      enumerateLegalCommands(
+        {
+          getState: session.match.getState,
+          getPlayInput: session.match.getPlayInput!,
+          getLegality: session.match.getLegality!
+        },
+        session.remoteParticipantId
+      )
+    )
+    const request: AiDecisionRequest = {
+      matchId: 'shared-difficulty',
+      requestId: 'shared-difficulty-request',
+      expectedRevision: session.getState().revision,
+      phase: 'plan',
+      messages: [],
+      actionIds: actions.map((action) => action.id)
+    }
+    return { session, request, actions }
+  }
+
+  it('preserves the exact Expert budget and reduces only Easy resources', () => {
+    expect(LOCAL_AI_RESOURCE_PROFILES.expert).toBe(EXPERT_AI_DEFAULT_BUDGET)
+    expect(LOCAL_AI_RESOURCE_PROFILES.expert).toEqual({
+      turnBudgetMs: 60_000,
+      searchBudgetMs: 54_500,
+      decisionSearchBudgetMs: 46_500,
+      planSearchLimitMs: 30_000,
+      replanSearchLimitMs: 4_000
+    })
+    expect(LOCAL_AI_RESOURCE_PROFILES.easy).toEqual({
+      turnBudgetMs: 10_000,
+      searchBudgetMs: 4_500,
+      decisionSearchBudgetMs: 3_000,
+      planSearchLimitMs: 2_000,
+      replanSearchLimitMs: 1_000
+    })
+  })
+
+  it('uses the same evaluator, fair hypothesis and legal selection at equal work', async () => {
+    const { session, request, actions } = difficultyFixture()
+    const before = session.match.getCheckpoint()
+    const results: { choice: AiDecisionResponse['choice']; reason: string }[] = []
+    for (const profile of ['easy', 'expert'] as const) {
+      const api = new LocalAiDecisionApi(session, undefined, {
+        profile,
+        workBudget: 32
+      })
+      const response = await api.decide(request)
+      expect(response.modelId).toBe('hardware-local-v2')
+      expect(response.usage?.policyRevision).toBe(EXPERT_AI_POLICY_REVISION)
+      expect('plan' in response.choice).toBe(true)
+      if (!('plan' in response.choice)) throw new Error('Expected local plan.')
+      const selectedId = response.choice.plan.firstActionId
+      expect(actions.some((action) => action.id === selectedId)).toBe(true)
+      results.push({ choice: response.choice, reason: response.reason })
+    }
+    expect(results[0]).toEqual(results[1])
+    expect(session.match.getCheckpoint()).toEqual(before)
+  })
+
+  it.each(['easy', 'expert'] as const)(
+    '%s uses the shared worker and cancels/disposes pending work',
+    async (difficulty) => {
+      const posted: ExpertAiWorkerRequest[] = []
+      const terminated = vi.fn()
+      vi.stubGlobal(
+        'Worker',
+        class {
+          addEventListener() {}
+          postMessage(message: ExpertAiWorkerRequest) {
+            posted.push(message)
+          }
+          terminate() {
+            terminated()
+          }
+        }
+      )
+      const { session, request } = difficultyFixture()
+      const api = createLocalAiDecisionApi(session, difficulty)
+      try {
+        expect(api).toBeInstanceOf(ExpertAiDecisionApi)
+        const decision = api.decide(request)
+        const rejection = expect(decision).rejects.toThrow('AI request cancelled.')
+        const message = posted.find((entry) => entry.type === 'decide')
+        if (!message || message.type !== 'decide')
+          throw new Error('Expected worker request.')
+        expect(message.planSearchLimitMs).toBe(
+          LOCAL_AI_RESOURCE_PROFILES[difficulty].planSearchLimitMs
+        )
+        expect(message.replanSearchLimitMs).toBe(
+          LOCAL_AI_RESOURCE_PROFILES[difficulty].replanSearchLimitMs
+        )
+        expect(message.remainingSearchBudgetMs).toBeLessThanOrEqual(
+          LOCAL_AI_RESOURCE_PROFILES[difficulty].decisionSearchBudgetMs
+        )
+        const hiddenOpponent = message.checkpoint.state.players.find(
+          (player) => player.participantId === session.localParticipantId
+        )!
+        expect(
+          hiddenOpponent.hand.every((card) =>
+            card.instanceId.startsWith('expert-hidden:')
+          )
+        ).toBe(true)
+        await api.cancel(request)
+        await rejection
+        expect(posted.some((entry) => entry.type === 'cancel')).toBe(true)
+      } finally {
+        api.dispose()
+        vi.unstubAllGlobals()
+      }
+      expect(terminated).toHaveBeenCalledOnce()
+    }
+  )
+
+  it('does not renew the Easy turn allowance for another request', async () => {
+    const { session, request } = difficultyFixture()
+    let now = 0
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now)
+    const api = createLocalAiDecisionApi(session, 'easy')
+    try {
+      now = LOCAL_AI_RESOURCE_PROFILES.easy.searchBudgetMs + 1
+      for (const requestId of ['expired-one', 'expired-two']) {
+        await expect(api.decide({ ...request, requestId })).rejects.toMatchObject({
+          details: { failureKind: 'timeout', budgetMs: 10_000 }
+        })
+      }
+    } finally {
+      api.dispose()
+      clock.mockRestore()
+    }
+  })
+
+  it('classifies worker startup failure for the common safe fallback', async () => {
+    const { session, request } = difficultyFixture()
+    const api = new ExpertAiDecisionApi(session, () => {
+      throw new Error('Worker unavailable')
+    })
+    try {
+      await expect(api.decide(request)).rejects.toMatchObject({
+        message: 'Worker unavailable',
+        details: { failureKind: 'worker-failure' }
+      })
     } finally {
       api.dispose()
     }

@@ -5,6 +5,33 @@ import { describe, expect, it } from 'vitest'
 import { MatchLogRepository } from './match-log-repository'
 
 describe('match log model attribution', () => {
+  it.each(['easy', 'expert'])(
+    'records %s difficulty, engine revision and resolved resources',
+    async (aiDifficulty) => {
+      const root = await mkdtemp(join(tmpdir(), 'hsinspired-match-logs-'))
+      try {
+        const repository = new MatchLogRepository(root)
+        await repository.initialize()
+        const metadata = {
+          aiDifficulty,
+          aiResources: { turnBudgetMs: 60_000, planBudgetMs: 30_000 },
+          aiEngine: { modelId: 'hardware-local-v2', policyRevision: 'test-policy' }
+        }
+        const matchId = await repository.start(7, metadata)
+        await repository.finish(matchId, 'abandoned')
+        const directoryName = (await readdir(root))[0]!
+        const summary = JSON.parse(
+          await readFile(join(root, directoryName, 'ai.json'), 'utf8')
+        )
+        expect(summary).toMatchObject(metadata)
+        expect(summary).not.toHaveProperty('configuredModel')
+        expect(summary).not.toHaveProperty('aiMode')
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    }
+  )
+
   it('records the responding model, not the configured API model', async () => {
     const root = await mkdtemp(join(tmpdir(), 'hsinspired-match-logs-'))
     try {

@@ -151,6 +151,8 @@ import uiCancelButtonImage from '@assets/images/ui/common/ui-cancel-button.png'
 import settingsHorizontalSliderImage from '@assets/images/ui/settings/setting-horizontal-slider.png'
 import horizontalSliderImage from '@assets/images/ui/common/horizontal-slider.png'
 import verticalSliderImage from '@assets/images/ui/common/vertical-slider.png'
+import checkboxOffImage from '@assets/images/ui/settings/checkbox-off.png'
+import checkboxOnImage from '@assets/images/ui/settings/checkbox-on.png'
 import menuSettingsBackgroundImage from '@assets/images/ui/settings/menu-settings-background.png'
 import gameSettingsBackgroundImage from '@assets/images/ui/settings/game-settings-background.png'
 import settingsDropDownListImage from '@assets/images/ui/settings/settings-drop-down-list.png'
@@ -252,6 +254,8 @@ import weaponImage from '@assets/images/board/weapon.png'
 import premiumWeaponImage from '@assets/images/board/premium-weapon.png'
 import searchClearImage from '@assets/images/cards/silence.png'
 import searchNoResultsImage from '@assets/images/ui/collection/search-no-results.png'
+import cardDeckLimitFrameImage from '@assets/images/ui/collection/card-deck-limit-frame.png'
+import cardDeckLabelImage from '@assets/images/ui/collection/card-deck-label.png'
 import expansionButtonToggleImage from '@assets/images/ui/collection/expansion-button-toggle.png'
 import expansionTrayImage from '@assets/images/ui/collection/expansion-tray.png'
 import expansionCollectionOnImage from '@assets/images/ui/collection/expansion-collection-on.png'
@@ -1125,6 +1129,24 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'shared-ui'
   ),
   asset(
+    'scene.menu-settings.checkbox-off',
+    ASSET_BUNDLE_IDS.menuSettings,
+    'checkboxOff',
+    checkboxOffImage,
+    39,
+    36,
+    'menu-settings'
+  ),
+  asset(
+    'scene.menu-settings.checkbox-on',
+    ASSET_BUNDLE_IDS.menuSettings,
+    'checkboxOn',
+    checkboxOnImage,
+    39,
+    36,
+    'menu-settings'
+  ),
+  asset(
     'scene.menu-settings.background',
     ASSET_BUNDLE_IDS.menuSettings,
     'background',
@@ -1138,8 +1160,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.menuSettings,
     'resolutionField',
     settingsDropDownListImage,
-    344,
-    76,
+    377,
+    80,
     'menu-settings'
   ),
   asset(
@@ -1147,8 +1169,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.menuSettings,
     'resolutionButton',
     settingsDropDownButtonImage,
-    62,
-    42,
+    69,
+    51,
     'menu-settings'
   ),
   asset(
@@ -1156,8 +1178,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.gameSettings,
     'resolutionField',
     settingsDropDownListImage,
-    344,
-    76,
+    377,
+    80,
     'game-settings'
   ),
   asset(
@@ -1165,8 +1187,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.gameSettings,
     'resolutionButton',
     settingsDropDownButtonImage,
-    62,
-    42,
+    69,
+    51,
     'game-settings'
   ),
   asset(
@@ -2613,6 +2635,24 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'collection'
   ),
   asset(
+    'scene.collection.card-deck-limit-frame',
+    ASSET_BUNDLE_IDS.collection,
+    'cardDeckLimitFrame',
+    cardDeckLimitFrameImage,
+    268,
+    401,
+    'collection'
+  ),
+  asset(
+    'scene.collection.card-deck-label',
+    ASSET_BUNDLE_IDS.collection,
+    'cardDeckLabel',
+    cardDeckLabelImage,
+    257,
+    50,
+    'collection'
+  ),
+  asset(
     'scene.collection.expansion-toggle',
     ASSET_BUNDLE_IDS.collection,
     'expansionToggle',
@@ -3381,6 +3421,8 @@ export interface GameAssets extends Record<
 }
 
 export interface MenuSettingsAssets {
+  checkboxOff: Texture
+  checkboxOn: Texture
   cursorSlider: Texture
   background: Texture
   resolutionField: Texture
@@ -3405,6 +3447,8 @@ export interface SharedUIAssets {
 }
 
 export interface CollectionAssets {
+  cardDeckLimitFrame: Texture
+  cardDeckLabel: Texture
   background: Texture
   cover: Texture
   coverLock: Texture

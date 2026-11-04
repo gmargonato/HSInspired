@@ -11,6 +11,10 @@ import {
 } from 'pixi.js'
 import { MATCH_SHADOW_CONFIG as config } from './match-shadow-config'
 import {
+  areShadowsEnabled,
+  observeShadows
+} from '../../../visual-components/effects/shadow-visibility'
+import {
   shadowBodyCorners,
   shadowCasters,
   type ShadowBounds,
@@ -89,6 +93,9 @@ export class BoardShadowLayer extends Container {
     super()
     this.label = 'game.ground-shadows'
     this.eventMode = 'none'
+    observeShadows(this, (enabled) => {
+      this.renderable = enabled
+    })
   }
 
   /** Modal previews can reuse physical visuals without casting onto the board. */
@@ -189,6 +196,7 @@ export class BoardShadowLayer extends Container {
   }
 
   update(deltaMS: number): void {
+    if (!areShadowsEnabled()) return
     this.visible = config.enabled && config.depth > 0
     for (const [caster, shadow] of this.shadows) {
       if (

@@ -523,6 +523,7 @@ export interface PlayerHeroPower {
   readonly id: HeroPowerId
   readonly creationOrdinal?: number
   readonly cost: number
+  /** Power readiness; phase, turn ownership, mana and targets separately govern legality. */
   readonly available: boolean
   /** Activations made with the current power this turn; reset when an effect replaces it. */
   readonly usesThisTurn?: number

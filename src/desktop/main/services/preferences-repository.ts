@@ -2,20 +2,25 @@ import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import {
-  parseAiMode,
+  parseGraphicsEnabled,
+  parseAiDifficulty,
+  parseAiCheatsEnabled,
   parseCursorScale,
   parseLastPlayedDeckId,
-  type AiMode,
+  type AiDifficulty,
   type Preferences
 } from '../../contracts/ipc/preferences'
 
-const PREFERENCES_FILE_VERSION = 2
+const PREFERENCES_FILE_VERSION = 3
 
 interface PersistedPreferences {
   readonly version: typeof PREFERENCES_FILE_VERSION
   readonly lastPlayedDeckId: string | null
   readonly cursorScale: number
-  readonly aiMode: AiMode
+  readonly enable3dElements: boolean
+  readonly enableShadows: boolean
+  readonly aiDifficulty: AiDifficulty
+  readonly aiCheatsEnabled: boolean
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -28,9 +33,12 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
 
 function clonePreferences(preferences: Preferences): Preferences {
   return {
+    enable3dElements: preferences.enable3dElements,
+    enableShadows: preferences.enableShadows,
     lastPlayedDeckId: preferences.lastPlayedDeckId,
     cursorScale: preferences.cursorScale,
-    aiMode: preferences.aiMode
+    aiCheatsEnabled: preferences.aiCheatsEnabled,
+    aiDifficulty: preferences.aiDifficulty
   }
 }
 
@@ -46,13 +54,23 @@ export class PreferencesRepository {
   async get(): Promise<Preferences> {
     await this.ensureLoaded()
     return clonePreferences(
-      this.preferences ?? { lastPlayedDeckId: null, aiMode: 'api', cursorScale: 1 }
+      this.preferences ?? {
+        lastPlayedDeckId: null,
+        aiDifficulty: 'expert',
+        cursorScale: 1,
+        enable3dElements: true,
+        enableShadows: true,
+        aiCheatsEnabled: true
+      }
     )
   }
 
   async set(preferences: Preferences): Promise<void> {
     parseLastPlayedDeckId(preferences.lastPlayedDeckId)
-    parseAiMode(preferences.aiMode)
+    parseGraphicsEnabled(preferences.enable3dElements)
+    parseGraphicsEnabled(preferences.enableShadows)
+    parseAiDifficulty(preferences.aiDifficulty)
+    parseAiCheatsEnabled(preferences.aiCheatsEnabled)
     parseCursorScale(preferences.cursorScale)
     await this.ensureLoaded()
     await this.persist(preferences)
@@ -84,11 +102,21 @@ export class PreferencesRepository {
 
     if (
       isRecord(parsed) &&
-      (parsed.version === 1 || parsed.version === PREFERENCES_FILE_VERSION)
+      (parsed.version === 1 ||
+        parsed.version === 2 ||
+        parsed.version === PREFERENCES_FILE_VERSION)
     ) {
       try {
         this.preferences = {
+          enable3dElements:
+            typeof parsed.enable3dElements === 'boolean'
+              ? parsed.enable3dElements
+              : true,
+          enableShadows:
+            typeof parsed.enableShadows === 'boolean' ? parsed.enableShadows : true,
           lastPlayedDeckId: parseLastPlayedDeckId(parsed.lastPlayedDeckId),
+          aiCheatsEnabled:
+            typeof parsed.aiCheatsEnabled === 'boolean' ? parsed.aiCheatsEnabled : true,
           cursorScale:
             typeof parsed.cursorScale === 'number' &&
             Number.isFinite(parsed.cursorScale) &&
@@ -96,14 +124,14 @@ export class PreferencesRepository {
             parsed.cursorScale <= 1
               ? parsed.cursorScale
               : 1,
-          aiMode:
-            parsed.version === 1
-              ? 'api'
-              : parsed.aiMode === 'hardware' ||
-                  parsed.aiMode === 'hardware-v2' ||
-                  parsed.aiMode === 'api'
-                ? parsed.aiMode
-                : 'api'
+          aiDifficulty:
+            parsed.version === PREFERENCES_FILE_VERSION
+              ? parsed.aiDifficulty === 'easy'
+                ? 'easy'
+                : 'expert'
+              : parsed.version === 2 && parsed.aiMode === 'hardware'
+                ? 'easy'
+                : 'expert'
         }
       } catch {
         console.warn('Saved preferences were invalid; using safe defaults.')
@@ -117,9 +145,12 @@ export class PreferencesRepository {
   private async persist(preferences: Preferences): Promise<void> {
     const payload: PersistedPreferences = {
       version: PREFERENCES_FILE_VERSION,
+      enable3dElements: preferences.enable3dElements,
+      enableShadows: preferences.enableShadows,
       lastPlayedDeckId: preferences.lastPlayedDeckId,
       cursorScale: preferences.cursorScale,
-      aiMode: preferences.aiMode
+      aiCheatsEnabled: preferences.aiCheatsEnabled,
+      aiDifficulty: preferences.aiDifficulty
     }
     const temporaryPath = `${this.filePath}.${randomUUID()}.tmp`
     const write = this.writeQueue

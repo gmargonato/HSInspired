@@ -39,7 +39,7 @@ export class BoardCornerSelector extends Container {
     this.dismiss.on('pointertap', () => this.closeOptions())
     this.dismiss.visible = false
     this.addChild(this.dismiss)
-    const title = this.text('Board', 38, 0xffffff)
+    const title = this.text('Board', 36, 0xf5e3b6)
     title.label = 'settings.board-corners-title'
     applyAnchoredPlacement(title, L.title)
     const field = new Sprite(assets.resolutionField)
@@ -107,7 +107,10 @@ export class BoardCornerSelector extends Container {
   }
 
   private text(text: string, fontSize: number, fill: number): Text {
-    const label = new Text({ text, style: { fontFamily: 'Belwe', fontSize, fill } })
+    const label = new Text({
+      text,
+      style: { fontFamily: 'Franklin Gothic Condensed', fontSize, fill }
+    })
     label.eventMode = 'none'
     return label
   }

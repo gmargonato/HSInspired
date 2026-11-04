@@ -30,8 +30,11 @@ import {
 } from '../../../desktop/contracts/ipc/ai'
 import {
   expertAiBudgetForTurn,
-  EXPERT_AI_TURN_BUDGET_MS
+  EXPERT_AI_TURN_BUDGET_MS,
+  EXPERT_AI_POLICY_REVISION,
+  type ExpertAiBudget
 } from './expert-ai-worker-protocol'
+import { LOCAL_AI_RESOURCE_PROFILES } from './local-ai-resources'
 import { aiActions } from './ai-context'
 import { selectExpertTimeoutFallbackAction } from './expert-ai-timeout-fallback'
 import { forcedLegalCommand } from './ai-forced-command'
@@ -55,7 +58,6 @@ const ENABLED = process.env.RUN_LOCAL_AI_BENCHMARK === '1'
 const FIRST_ID = asPlayerId('benchmark-player-one')
 const SECOND_ID = asPlayerId('benchmark-player-two')
 const DEFAULT_TURN_BUDGET_MS = EXPERT_AI_TURN_BUDGET_MS
-const EXPERT_MULLIGAN_BUDGET_MS = 3_000
 // The headless benchmark evaluates three concurrent production worlds serially.
 const SERIAL_BENCHMARK_WORKER_TIMEOUT_MULTIPLIER = 3
 
@@ -328,12 +330,10 @@ interface DecisionRequestOptions {
   readonly request: AiDecisionRequest
   readonly profile: LocalProfile
   readonly participantId: PlayerId
-  readonly checkpoint: OpeningMatchCheckpoint
-  readonly workBudget?: number
   readonly phase: 'action' | 'mulligan'
   readonly liveLegalCommands?: readonly TurnMatchCommand[]
   readonly liveSession?: GameBoardSession
-  readonly expertRuntime?: ExpertBenchmarkRuntime
+  readonly localRuntime?: LocalBenchmarkRuntime
   readonly planBeforeAction?: boolean
 }
 
@@ -429,7 +429,7 @@ class InlineExpertWorker {
   }
 }
 
-interface ExpertBenchmarkRuntime {
+interface LocalBenchmarkRuntime {
   readonly api: ExpertAiDecisionApi
   readonly takeTraces: () => LocalAiDecisionTrace[]
   readonly now: () => number
@@ -445,12 +445,12 @@ class BenchmarkWorkerClock {
   }
 }
 
-function createExpertBenchmarkRuntime(
+function createLocalBenchmarkRuntime(
   session: GameBoardSession,
   perspectiveParticipantId: PlayerId,
-  turnBudgetMs: number,
+  budget: ExpertAiBudget,
   workBudget?: number
-): ExpertBenchmarkRuntime {
+): LocalBenchmarkRuntime {
   let worker: InlineExpertWorker | null = null
   const clock = new BenchmarkWorkerClock()
   const api = new ExpertAiDecisionApi(
@@ -462,7 +462,7 @@ function createExpertBenchmarkRuntime(
     clock.now,
     perspectiveParticipantId,
     SERIAL_BENCHMARK_WORKER_TIMEOUT_MULTIPLIER,
-    expertAiBudgetForTurn(turnBudgetMs)
+    budget
   )
   return { api, takeTraces: () => worker?.takeTraces() ?? [], now: clock.now }
 }
@@ -808,13 +808,13 @@ function legalCommands(session: GameBoardSession, participantId: PlayerId) {
   )
 }
 
-async function decideExpertProfile(
+async function decideWorkerProfile(
   options: DecisionRequestOptions
 ): Promise<DecisionOutcome> {
-  const runtime = options.expertRuntime
+  const runtime = options.localRuntime
   const session = options.liveSession
   if (!runtime || !session)
-    throw new Error('Expert benchmark requires the live worker/API runtime.')
+    throw new Error('Local AI benchmark requires the live worker/API runtime.')
 
   if (options.phase === 'action') {
     const legal = options.liveLegalCommands ?? []
@@ -961,8 +961,7 @@ async function decideExpertProfile(
 async function decideProfile(
   options: DecisionRequestOptions
 ): Promise<DecisionOutcome> {
-  const { request, profile, participantId, checkpoint, phase, liveLegalCommands } =
-    options
+  const { request, profile, participantId, phase, liveLegalCommands } = options
   if (phase === 'action') {
     const forced = forcedLegalCommand(liveLegalCommands ?? [])
     if (forced)
@@ -974,7 +973,7 @@ async function decideProfile(
         actionSource: 'forced'
       }
   }
-  if (profile === 'expert') return decideExpertProfile(options)
+  if (profile !== 'random') return decideWorkerProfile(options)
   if (profile === 'random') {
     if (phase === 'mulligan')
       return {
@@ -1000,78 +999,7 @@ async function decideProfile(
       selectedDescription: canonicalCommandKey(command)
     }
   }
-  // V1 is measured in its historical live-information mode; its known fairness
-  // limitation is the reason to retire it, not something to repair here.
-  const session = createPerspectiveSession(checkpoint, participantId)
-  const legal = legalCommands(session, participantId)
-  const actions = aiActions(session, legal)
-  const budgetMs = phase === 'mulligan' ? EXPERT_MULLIGAN_BUDGET_MS - 500 : 2_850
-  const api = new LocalAiDecisionApi(session, undefined, {
-    profile: 'easy',
-    budgetMs,
-    ...(options.workBudget !== undefined ? { workBudget: options.workBudget } : {}),
-    fairHypothesis: false
-  })
-  const response = await api.decide({
-    ...request,
-    actionIds: actions.map((action) => action.id)
-  })
-  const trace = api.getLastTrace()
-  const traces = trace ? [trace] : []
-  let selectedCommand: TurnMatchCommand | null = null
-
-  if (phase === 'mulligan') {
-    const choice = response.choice
-    if (choice && 'replace' in choice) {
-      const currentHand = checkpoint.state.players.find(
-        (player) => player.participantId === participantId
-      )?.hand
-      const handIds = new Set(currentHand?.map((card) => card.instanceId) ?? [])
-      const replace = new Set(choice.replace.filter((id) => handIds.has(id)))
-      selectedCommand = {
-        type: 'confirm-mulligan',
-        participantId,
-        replaceInstanceIds: [...replace]
-      }
-    }
-    return {
-      command: selectedCommand,
-      traces,
-      worlds: 1,
-      timedOut: false
-    }
-  }
-
-  if (!actions.length) {
-    return {
-      command: null,
-      traces,
-      worlds: 1,
-      timedOut: false
-    }
-  }
-  const selectedId = 'actionId' in response.choice ? response.choice.actionId : null
-  const selectedAction = actions.find((action) => action.id === selectedId)
-  selectedCommand = selectedAction?.command ?? null
-
-  if (
-    selectedCommand &&
-    liveLegalCommands &&
-    !liveLegalCommands.some(
-      (command) =>
-        canonicalCommandKey(command) === canonicalCommandKey(selectedCommand!)
-    )
-  )
-    selectedCommand = null
-
-  return {
-    command: selectedCommand,
-    traces,
-    worlds: 1,
-    timedOut: false,
-    workerDurationMs: trace?.durationMs ?? 0,
-    selectedDescription: selectedAction?.description ?? null
-  }
+  throw new Error(`Unknown benchmark profile: ${profile}`)
 }
 
 function recordDecision(
@@ -1446,6 +1374,13 @@ function publicActionDiagnostic(
 async function runBenchmark(options: BenchmarkOptions) {
   const benchmarkStartedAt = performance.now()
   const provenance = sourceProvenance()
+  const resources = {
+    easy: LOCAL_AI_RESOURCE_PROFILES.easy,
+    expert:
+      options.turnBudgetMs === LOCAL_AI_RESOURCE_PROFILES.expert.turnBudgetMs
+        ? LOCAL_AI_RESOURCE_PROFILES.expert
+        : expertAiBudgetForTurn(options.turnBudgetMs)
+  }
   const initialMemory = process.memoryUsage()
   let peakRssBytes = initialMemory.rss
   let peakHeapUsedBytes = initialMemory.heapUsed
@@ -1559,20 +1494,25 @@ async function runBenchmark(options: BenchmarkOptions) {
       decks: [firstDeck, secondDeck],
       ...(curatedCandidate ? { opponentStrategy: curatedCandidate.strategy } : {})
     })
-    const expertRuntime = expertPlayerId
-      ? createExpertBenchmarkRuntime(
+    const runtimes = new Map<string, LocalBenchmarkRuntime>()
+    for (const [participantId, profile] of profileByParticipant) {
+      if (profile === 'random') continue
+      runtimes.set(
+        participantId,
+        createLocalBenchmarkRuntime(
           liveSession,
-          expertPlayerId,
-          options.turnBudgetMs,
+          asPlayerId(participantId),
+          resources[profile],
           options.workBudget
         )
-      : null
+      )
+    }
     const decisionCoverageByParticipant = new Map<string, MutableDecisionCoverage>([
       [FIRST_ID, createMutableDecisionCoverage()],
       [SECOND_ID, createMutableDecisionCoverage()]
     ])
-    const decisionClock = (profile: LocalProfile): number =>
-      profile === 'expert' ? expertRuntime!.now() : performance.now()
+    const decisionClock = (participantId: PlayerId): number =>
+      runtimes.get(participantId)?.now() ?? performance.now()
     const profileById = profileByParticipant as ReadonlyMap<string, LocalProfile>
     const currentTurnStart = new Map<string, number>()
     const currentTurnKey = new Map<string, string>()
@@ -1582,7 +1522,7 @@ async function runBenchmark(options: BenchmarkOptions) {
     const recentPublicActions: PublicActionDiagnostic[] = []
     let actions = 0
     let capped = false
-    let expertPlannedTurn: number | null = null
+    const plannedTurns = new Map<string, number>()
     const gameInvalidSelectionDiagnostics: InvalidSelectionDiagnostic[] = []
     const recordInvalidSelection = (diagnostic: InvalidSelectionDiagnostic): void => {
       invalidSelectionDiagnostics.push(diagnostic)
@@ -1600,7 +1540,10 @@ async function runBenchmark(options: BenchmarkOptions) {
       const profile = profileByParticipant.get(participantId)
       if (!profile) return
       profileMetrics[profile].turnMs.push(elapsedMs)
-      if (elapsedMs > options.turnBudgetMs)
+      if (
+        elapsedMs >
+        (profile === 'random' ? options.turnBudgetMs : resources[profile].turnBudgetMs)
+      )
         profileMetrics[profile].turnBudgetMisses.push({
           participantId,
           turn: turnNumber,
@@ -1646,11 +1589,9 @@ async function runBenchmark(options: BenchmarkOptions) {
             request,
             profile,
             participantId: player.participantId,
-            checkpoint: liveSession.match.getCheckpoint(),
-            workBudget: options.workBudget,
             phase: 'mulligan',
             liveSession,
-            expertRuntime: expertRuntime ?? undefined
+            localRuntime: runtimes.get(player.participantId)
           })
         } catch {
           outcome = {
@@ -1735,7 +1676,7 @@ async function runBenchmark(options: BenchmarkOptions) {
       const turnKey = String(participantId) + ':' + state.turnNumber
       if (currentTurnKey.get(participantId) !== turnKey) {
         currentTurnKey.set(participantId, turnKey)
-        currentTurnStart.set(participantId, decisionClock(profile))
+        currentTurnStart.set(participantId, decisionClock(participantId))
         currentTurnActions.set(participantId, 0)
         currentTurnWorkerMs.set(participantId, 0)
       }
@@ -1776,19 +1717,18 @@ async function runBenchmark(options: BenchmarkOptions) {
         messages: [],
         actionIds
       }
-      const decisionStarted = decisionClock(profile)
+      const decisionStarted = decisionClock(participantId)
       let outcome: DecisionOutcome
       try {
         outcome = await decideProfile({
           request,
           profile,
           participantId,
-          checkpoint: liveSession.match.getCheckpoint(),
-          workBudget: options.workBudget,
           liveSession,
-          expertRuntime: expertRuntime ?? undefined,
+          localRuntime: runtimes.get(participantId),
           planBeforeAction:
-            profile === 'expert' && expertPlannedTurn !== state.turnNumber,
+            profile !== 'random' &&
+            plannedTurns.get(participantId) !== state.turnNumber,
           phase: 'action',
           liveLegalCommands: liveLegal
         })
@@ -1801,7 +1741,7 @@ async function runBenchmark(options: BenchmarkOptions) {
           failed: true
         }
       }
-      const decisionElapsedMs = decisionClock(profile) - decisionStarted
+      const decisionElapsedMs = decisionClock(participantId) - decisionStarted
       if (outcome.actionSource !== 'forced') {
         recordDecision(profileMetrics[profile], decisionElapsedMs, outcome)
         currentTurnWorkerMs.set(
@@ -1810,8 +1750,8 @@ async function runBenchmark(options: BenchmarkOptions) {
             (outcome.workerDurationMs ?? 0)
         )
       }
-      if (profile === 'expert' && outcome.actionSource !== 'forced')
-        expertPlannedTurn = state.turnNumber
+      if (profile !== 'random' && outcome.actionSource !== 'forced')
+        plannedTurns.set(participantId, state.turnNumber)
 
       let command = outcome.command
       let actionSource = outcome.actionSource ?? 'search'
@@ -1843,8 +1783,14 @@ async function runBenchmark(options: BenchmarkOptions) {
           })
         }
         command =
-          (profile === 'expert' && outcome.timedOut
-            ? selectExpertTimeoutFallbackAction(liveSession, liveLegal)?.command
+          (profile !== 'random' && outcome.timedOut
+            ? selectExpertTimeoutFallbackAction(
+                createPerspectiveSession(
+                  liveSession.match.getCheckpoint(),
+                  participantId
+                ),
+                liveLegal
+              )?.command
             : undefined) ??
           liveLegal.find((entry) => entry.type === 'end-turn') ??
           liveLegal[0]!
@@ -1889,8 +1835,8 @@ async function runBenchmark(options: BenchmarkOptions) {
         if (card) decisionCoverage.playedCardIds.push(card.cardId)
       }
       recordActionSource(profileMetrics[profile], actionSource, fallbackKind)
-      if (profile === 'expert' && invalidatesExpertContinuation(result.events))
-        profileMetrics.expert.continuationInvalidations++
+      if (profile !== 'random' && invalidatesExpertContinuation(result.events))
+        profileMetrics[profile].continuationInvalidations++
       if (options.traceLosses) {
         recentPublicActions.push(
           publicActionDiagnostic(state, result.state, participantId, profile, command)
@@ -1912,18 +1858,18 @@ async function runBenchmark(options: BenchmarkOptions) {
         finishTurn(
           participantId,
           state.turnNumber,
-          decisionClock(profile) - turnStarted
+          decisionClock(participantId) - turnStarted
         )
       } else if (result.state.phase === 'ended') {
         finishTurn(
           participantId,
           state.turnNumber,
-          decisionClock(profile) - turnStarted
+          decisionClock(participantId) - turnStarted
         )
       }
     }
 
-    expertRuntime?.api.dispose()
+    for (const runtime of runtimes.values()) runtime.api.dispose()
 
     const finalState = liveSession.getState()
     const complete = finalState.phase === 'ended'
@@ -2039,7 +1985,7 @@ async function runBenchmark(options: BenchmarkOptions) {
       )
   }
 
-  const summarize = (metrics: MutableProfileMetrics) => {
+  const summarize = (metrics: MutableProfileMetrics, profile: LocalProfile) => {
     const actionDecisionCount =
       metrics.searchedActionCommands +
       metrics.continuedActionCommands +
@@ -2083,7 +2029,11 @@ async function runBenchmark(options: BenchmarkOptions) {
       rejectedCommands: metrics.rejectedCommands,
       timedOutSearches: metrics.timedOutSearches,
       turnBudgetViolations: metrics.turnMs.filter(
-        (durationMs) => durationMs > options.turnBudgetMs
+        (durationMs) =>
+          durationMs >
+          (profile === 'random'
+            ? options.turnBudgetMs
+            : resources[profile].turnBudgetMs)
       ).length,
       turnBudgetMisses: metrics.turnBudgetMisses,
       evaluatedCandidates: metrics.evaluatedCandidates,
@@ -2202,7 +2152,18 @@ async function runBenchmark(options: BenchmarkOptions) {
       : options.curated
         ? 'local-ai-curated-deck-mirror-screen'
         : 'local-ai-midrange-vs-baseline',
-    benchmarkVersion: 8,
+    benchmarkVersion: 9,
+    engine: {
+      id: 'shared-expert-worker-resource-profiles',
+      policyRevision: EXPERT_AI_POLICY_REVISION,
+      informationPolicy: 'fair-hidden-worlds',
+      coordinator: 'ExpertAiDecisionApi',
+      deckStrategyPolicy:
+        'Both profiles preserve the existing benchmark without explicit deck strategy bindings. Production applies the same curated strategy eligibility to Easy and Expert.',
+      resources,
+      workBudgetOverride: options.workBudget ?? null,
+      historicalEasyBaselineCompatible: false
+    },
     generatorVersion: options.curated ? null : OPPONENT_GENERATOR_VERSION,
     catalogVersion: options.curated ? CURATED_OPPONENT_CATALOG_VERSION : null,
     configuration: options,
@@ -2210,8 +2171,8 @@ async function runBenchmark(options: BenchmarkOptions) {
     pairedWinRate: options.curated ? null : pairedWinRate(matches),
     deckScores,
     measurement: options.easyMirror
-      ? 'Headless domain simulation with two Easy decision agents and curated AI hero-power bonuses disabled. Per-player action coverage records legal choices offered, distinct hand cards seen, playable cards offered, and cards played. Includes actual benchmark wall time; excludes Pixi rendering and animations.'
-      : 'Headless domain simulation. Expert hidden-world searches run serially in Vitest, while their turn-time budget models concurrent workers using the slowest world duration. Includes actual benchmark wall time; excludes nested worker startup, Pixi rendering, and animations.',
+      ? 'Headless domain simulation with two Easy production worker coordinators and curated AI hero-power bonuses disabled. Per-player action coverage records legal choices offered, distinct hand cards seen, playable cards offered, and cards played. Includes actual benchmark wall time; excludes Pixi rendering and animations.'
+      : 'Headless domain simulation. Easy and Expert share the production worker coordinator; hidden-world searches run serially in Vitest, while their turn-time budget models concurrent workers using the slowest world duration. Includes actual benchmark wall time; excludes nested worker startup, Pixi rendering, and animations.',
     runtime: {
       benchmarkWallTimeMs: Math.round(performance.now() - benchmarkStartedAt),
       nodeVersion: process.version,
@@ -2231,8 +2192,8 @@ async function runBenchmark(options: BenchmarkOptions) {
     },
     profiles: {
       baseline: options.baseline,
-      matchup: summarize(profileMetrics[options.baseline]),
-      expert: summarize(profileMetrics.expert)
+      matchup: summarize(profileMetrics[options.baseline], options.baseline),
+      expert: summarize(profileMetrics.expert, 'expert')
     },
     matches,
     invalidSelectionDiagnostics
@@ -2243,7 +2204,7 @@ describe.skipIf(!ENABLED)('local AI matchup benchmark', () => {
   it(
     process.env.LOCAL_AI_BENCHMARK_EASY_MIRROR === '1'
       ? 'checks curated deck capability with Easy mirror matches'
-      : 'compares seeded local Expert matches against the Easy remote baseline',
+      : 'compares seeded local Expert matches against the selected resource-profile baseline',
     async () => {
       const options = readOptions()
       const result = await runBenchmark(options)
@@ -2251,6 +2212,8 @@ describe.skipIf(!ENABLED)('local AI matchup benchmark', () => {
       console.log(
         'LOCAL_AI_BENCHMARK_SUMMARY ' +
           JSON.stringify({
+            benchmarkVersion: result.benchmarkVersion,
+            engine: result.engine,
             configuration: result.configuration,
             pairedWinRate: result.pairedWinRate,
             runtimeMs: result.runtime.benchmarkWallTimeMs,

@@ -20,13 +20,19 @@ export function registerPreferencesIpc(repository: PreferencesRepository): void 
         const current = await repository.get()
         const next = {
           ...current,
+          ...update,
+          ...(update.aiCheatsEnabled === undefined
+            ? {}
+            : { aiCheatsEnabled: update.aiCheatsEnabled }),
           ...(update.lastPlayedDeckId === undefined
             ? {}
             : { lastPlayedDeckId: update.lastPlayedDeckId }),
           ...(update.cursorScale === undefined
             ? {}
             : { cursorScale: update.cursorScale }),
-          ...(update.aiMode === undefined ? {} : { aiMode: update.aiMode })
+          ...(update.aiDifficulty === undefined
+            ? {}
+            : { aiDifficulty: update.aiDifficulty })
         }
         await repository.set(next)
         return parsePreferences(next)

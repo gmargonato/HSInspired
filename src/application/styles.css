@@ -1,3 +1,8 @@
+.shadows-disabled {
+  --ui-text-shadow: none;
+  --ui-box-shadow: none;
+}
+
 html,
 body {
   margin: 0;
@@ -129,7 +134,7 @@ body {
   font-weight: 700;
   line-height: 1;
   text-align: left;
-  text-shadow: 0 1px 0 rgba(30, 5, 5, 0.22);
+  text-shadow: var(--ui-text-shadow, 0 1px 0 rgba(30, 5, 5, 0.22));
 }
 
 .collection-search-input::selection {
@@ -468,8 +473,11 @@ body {
   border: calc(2px * var(--add-card-picker-scale)) solid #765238;
   border-radius: calc(8px * var(--add-card-picker-scale));
   background: #151c2c;
-  box-shadow: 0 calc(14px * var(--add-card-picker-scale))
-    calc(30px * var(--add-card-picker-scale)) rgba(0, 0, 0, 0.5);
+  box-shadow: var(
+    --ui-box-shadow,
+    0 calc(14px * var(--add-card-picker-scale))
+      calc(30px * var(--add-card-picker-scale)) rgba(0, 0, 0, 0.5)
+  );
 }
 
 .add-card-picker__title {
@@ -481,8 +489,11 @@ body {
   font-size: calc(32px * var(--add-card-picker-scale));
   font-weight: 700;
   line-height: 1;
-  text-shadow: 0 calc(2px * var(--add-card-picker-scale))
-    calc(2px * var(--add-card-picker-scale)) rgba(0, 0, 0, 0.6);
+  text-shadow: var(
+    --ui-text-shadow,
+    0 calc(2px * var(--add-card-picker-scale)) calc(2px * var(--add-card-picker-scale))
+      rgba(0, 0, 0, 0.6)
+  );
 }
 
 .add-card-picker__close {

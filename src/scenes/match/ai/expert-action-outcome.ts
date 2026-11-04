@@ -122,6 +122,7 @@ export interface ExpertActionOutcome {
   readonly reason?:
     | 'no-payoff'
     | 'unpaid-sacrifice'
+    | 'unpaid-friendly-target'
     | 'unpaid-friendly-damage'
     | 'wasted-healing-target'
     | 'opponent-heal'
@@ -446,6 +447,155 @@ function enablesHeldDamagePayoff(
     return Object.values(entry).some(inspect)
   }
   return after.hand.some((card) => inspect(CARD_CATALOG.get(card.cardId)?.effects))
+}
+
+/** A public death-history payoff can justify sacrificing an otherwise useful body. */
+function hasKnownDeathPayoff(root: OpeningMatchAnalysis, actorId: PlayerId): boolean {
+  const observation = root.getAiObservation?.(actorId, 'fair')
+  const self = observation?.players.find((player) => player.participantId === actorId)
+  if (!self || !observation) return true
+  const dependsOnDeath = (value: unknown): boolean => {
+    if (typeof value === 'string')
+      return /resurrect|graveyard|died|deathrattle/.test(value)
+    return (
+      !!value && typeof value === 'object' && Object.values(value).some(dependsOnDeath)
+    )
+  }
+  return [...self.hand, ...self.board, ...observation.selfOriginalDeck.cards].some(
+    (card) => dependsOnDeath(CARD_CATALOG.get(card.cardId)?.effects)
+  )
+}
+
+/**
+ * A damaging battlecry's new body is ordinary development, not payment for an
+ * unnecessary friendly target. Compare the actual effects, preserving triggers,
+ * death/health setups and board-space uses rather than banning self-targeting.
+ */
+function unpaidFriendlyTarget(
+  root: OpeningMatchAnalysis,
+  actorId: PlayerId,
+  command: Extract<TurnMatchCommand, { type: 'play-card' }>,
+  shouldStop: () => boolean
+): ExpertActionOutcome {
+  const state = root.getState()
+  const self = state.players.find((player) => player.participantId === actorId)
+  const card = self?.hand.find((entry) => entry.instanceId === command.cardInstanceId)
+  const definition = card && CARD_CATALOG.get(card.cardId)
+  const target = command.targets?.[0]
+  const targetMinion =
+    target?.kind === 'minion'
+      ? self?.board.find((entry) => entry.instanceId === target.instanceId)
+      : undefined
+  const changesFutureResolution = (value: unknown): boolean => {
+    if (!value || typeof value !== 'object') return false
+    const entry = value as Record<string, unknown>
+    return (
+      (typeof entry.action === 'string' &&
+        ['replace-event', 'destroy', 'damage', 'silence', 'transform'].includes(
+          entry.action
+        )) ||
+      Object.values(entry).some(changesFutureResolution)
+    )
+  }
+  if (
+    !self ||
+    !definition ||
+    command.targets?.length !== 1 ||
+    target?.kind !== 'minion' ||
+    target.participantId !== actorId ||
+    self.hand.length >= 10 ||
+    self.board.length >= (definition.type === 'Minion' ? 6 : 7) ||
+    state.players.some((player) => player.secrets?.length) ||
+    !definition.effects.length ||
+    !definition.effects.every(
+      (effect) =>
+        ['cast', 'battlecry'].includes(effect.trigger) &&
+        !!effect.actions?.length &&
+        effect.actions.every((action) => ['damage', 'destroy'].includes(action.action))
+    ) ||
+    // Removing an ongoing replacement or harmful trigger can be the payoff
+    // (for example, restoring healing or preventing a future friendly wipe).
+    (targetMinion &&
+      !targetMinion.silenced &&
+      CARD_CATALOG.get(targetMinion.cardId)?.effects.some(
+        (effect) =>
+          ['start-of-turn', 'end-of-turn'].includes(effect.trigger) ||
+          (!['battlecry', 'on-play'].includes(effect.trigger) &&
+            changesFutureResolution(effect.actions))
+      )) ||
+    hasKnownDeathPayoff(root, actorId) ||
+    shouldStop()
+  )
+    return { penalty: 0 }
+  // Development can justify an otherwise awkward mandatory battlecry. Only
+  // warn on minions when the same play has a legal nonfriendly target instead.
+  if (
+    definition.type === 'Minion' &&
+    !enumerateLegalCommands(root, actorId).some(
+      (alternative) =>
+        alternative.type === 'play-card' &&
+        alternative.cardInstanceId === command.cardInstanceId &&
+        alternative.targets?.some((entry) => entry.participantId !== actorId)
+    )
+  )
+    return { penalty: 0 }
+  return root.analyze((fork) => {
+    const before = fork.getAiObservation?.(actorId, 'fair')
+    const player = before?.players.find((entry) => entry.participantId === actorId)
+    const original = player?.board.find(
+      (entry) => entry.instanceId === target.instanceId
+    )
+    if (!before || !player || !original || !fork.getRandomState) return { penalty: 0 }
+    const rng = JSON.stringify(fork.getRandomState())
+    const result = fork.dispatch(command)
+    const after = fork.getAiObservation?.(actorId, 'fair')
+    const next = after?.players.find((entry) => entry.participantId === actorId)
+    if (
+      !result.accepted ||
+      result.state.phase !== 'turns' ||
+      !after ||
+      !next ||
+      shouldStop() ||
+      revealsTacticalInformation(result.events) ||
+      rng !== JSON.stringify(fork.getRandomState()) ||
+      hasDeferredCastPayoff(next) ||
+      enablesHeldDamagePayoff(player, next)
+    )
+      return { penalty: 0 }
+    const damaged = next.board.find((entry) => entry.instanceId === target.instanceId)
+    if (damaged && damaged.health >= original.health) return { penalty: 0 }
+    const ignored = definition.type === 'Minion' ? [command.cardInstanceId] : []
+    const restored = {
+      ...next,
+      board: damaged
+        ? next.board.map((entry) =>
+            entry.instanceId === target.instanceId
+              ? { ...entry, health: original.health, damageTaken: original.damageTaken }
+              : entry
+          )
+        : [...next.board, original].sort(
+            (a, b) =>
+              player.board.findIndex((entry) => entry.instanceId === a.instanceId) -
+              player.board.findIndex((entry) => entry.instanceId === b.instanceId)
+          )
+    }
+    const unpaid = before.players.every((entry) =>
+      entry.participantId === actorId
+        ? position(entry, command.cardInstanceId, ignored) ===
+          position(restored, command.cardInstanceId, ignored)
+        : position(entry) ===
+          position(after.players.find((p) => p.participantId === entry.participantId)!)
+    )
+    // A mandatory battlecry can still be preferable to benefiting an enemy
+    // damage/death trigger. Keep it below the continuation-veto threshold.
+    return unpaid
+      ? {
+          penalty: definition.type === 'Minion' ? 0.2 : 0.25,
+          reason:
+            definition.type === 'Minion' ? 'unpaid-sacrifice' : 'unpaid-friendly-target'
+        }
+      : { penalty: 0 }
+  })
 }
 
 /** A soft warning, not a ban: pure enemy Attack gifts need a known payoff. */
@@ -779,6 +929,62 @@ function wastedHealingTarget(
     : { penalty: 0 }
 }
 
+/** Both public joust outcomes must only restore the chosen character's Health.
+ * The sampled amount is not a certainty claim; either branch has the same sign.
+ * Extra instructions (draws, returns or unknown branches) remain search decisions.
+ */
+function isHealingJoust(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  const action = value as Record<string, unknown>
+  const heals = (branch: unknown): boolean =>
+    Array.isArray(branch) &&
+    branch.length > 0 &&
+    branch.every((value) => {
+      if (!value || typeof value !== 'object') return false
+      const restore = value as Record<string, unknown>
+      const target = restore.target as Record<string, unknown> | undefined
+      return (
+        restore.action === 'restore' &&
+        Object.keys(restore).every((key) =>
+          ['action', 'target', 'amount', 'vfx'].includes(key)
+        ) &&
+        (restore.amount === 'full' ||
+          (typeof restore.amount === 'number' &&
+            Number.isFinite(restore.amount) &&
+            restore.amount > 0)) &&
+        target?.selection === 'chosen' &&
+        target.controller === 'any' &&
+        target.type === 'character' &&
+        Object.keys(target).every((key) =>
+          ['selection', 'controller', 'type'].includes(key)
+        )
+      )
+    })
+  return (
+    action.action === 'joust' &&
+    Object.keys(action).every((key) =>
+      ['action', 'winActions', 'loseActions'].includes(key)
+    ) &&
+    heals(action.winActions) &&
+    heals(action.loseActions)
+  )
+}
+
+/** Either healing branch can change a visible trigger, threshold or follow-up target. */
+function hasHealingDependentEffect(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  const entry = value as Record<string, unknown>
+  return (
+    entry.trigger === 'on-heal' ||
+    entry.event === 'health-restored' ||
+    (typeof entry.type === 'string' && /health|damaged/.test(entry.type)) ||
+    typeof entry.damaged === 'boolean' ||
+    (typeof entry.reference === 'string' &&
+      /health|damage|healing/.test(entry.reference)) ||
+    Object.values(entry).some(hasHealingDependentEffect)
+  )
+}
+
 /** One reversible simulation on an already fair search fork, never a live dispatch. */
 export function inspectExpertAction(
   root: OpeningMatchAnalysis,
@@ -847,6 +1053,35 @@ export function inspectExpertAction(
     const card = self.hand.find((c) => c.instanceId === spentCard)
     const definition = card ? CARD_CATALOG.get(card.cardId) : undefined
     const isSpell = !card || definition?.type === 'Spell'
+    const healingJoust =
+      definition?.effects.some((effect) => effect.actions?.some(isHealingJoust)) ===
+      true
+    // Different healing amounts can remove damaged/enrage minion benefits.
+    // This bounded review only extends to hero targets; minions stay in search.
+    if (
+      healingJoust &&
+      (command.type !== 'play-card' ||
+        command.targets?.length !== 1 ||
+        command.targets[0]?.kind !== 'hero' ||
+        before!.players.some((player) =>
+          hasHealingDependentEffect([
+            player.hero.enchantments,
+            player.heroPower.enchantments,
+            ...player.hand.map((held) => CARD_CATALOG.get(held.cardId)?.effects),
+            player.weapon && CARD_CATALOG.get(player.weapon.cardId)?.effects,
+            player.weapon?.enchantments,
+            ...player.board
+              .filter((minion) => !minion.dormant && !minion.silenced)
+              .map((minion) => [
+                CARD_CATALOG.get(minion.cardId)?.effects,
+                minion.enchantments,
+                minion.grantedTriggers,
+                minion.attachedEffects
+              ])
+          ])
+        ))
+    )
+      return { penalty: 0 }
     // Only immediate effects whose payoff is represented below. Deck replacement,
     // delayed effects and future-turn enchantments must not be mistaken for no-ops.
     if (
@@ -854,14 +1089,15 @@ export function inspectExpertAction(
       !definition.effects.every(
         (effect) =>
           effect.trigger === 'cast' &&
-          effect.actions?.every((action) =>
-            [
-              'damage',
-              'restore',
-              'spend-all-mana',
-              'summon-random',
-              'sacrifice-and-damage'
-            ].includes(action.action)
+          effect.actions?.every(
+            (action) =>
+              [
+                'damage',
+                'restore',
+                'spend-all-mana',
+                'summon-random',
+                'sacrifice-and-damage'
+              ].includes(action.action) || isHealingJoust(action)
           )
       )
     )
@@ -988,24 +1224,51 @@ export function inspectExpertAction(
     // combo activation or making room before a draw into a full hand.
     if (spentCard && (hasDeferredCastPayoff(nextSelf) || self.handSize >= 10))
       return { penalty: 0 }
-    if (
-      before!.players.some((player) => {
-        if (player.participantId === actorId) return false
+    let opponentHealing = 0
+    const onlyOpponentHealing = before!.players
+      .filter((player) => player.participantId !== actorId)
+      .every((player) => {
         const next = after.players.find(
           (entry) => entry.participantId === player.participantId
         )!
-        return (
-          next.hero.health > player.hero.health ||
-          player.board.some(
-            (minion) =>
-              (next.board.find((entry) => entry.instanceId === minion.instanceId)
-                ?.health ?? 0) > minion.health
-          )
+        if (
+          next.hero.health < player.hero.health ||
+          enablesHeldDamagePayoff(next, player)
         )
-      }) &&
+          return false
+        opponentHealing += next.hero.health - player.hero.health
+        const board = next.board.map((minion) => {
+          const old = player.board.find(
+            (entry) => entry.instanceId === minion.instanceId
+          )
+          if (!old || minion.health <= old.health) return minion
+          opponentHealing += minion.health - old.health
+          return { ...minion, health: old.health, damageTaken: old.damageTaken }
+        })
+        // Healing can remove an enemy's damaged/enrage benefit. Keep those
+        // stat, keyword, trigger and cost changes rather than banning the target.
+        return (
+          position(player) ===
+          position({
+            ...next,
+            board,
+            hero: {
+              ...next.hero,
+              health: player.hero.health,
+              damageTaken: player.hero.damageTaken
+            }
+          })
+        )
+      })
+    if (
+      onlyOpponentHealing &&
+      opponentHealing > 0 &&
       payoffPosition(self, spentCard) === payoffPosition(nextSelf, spentCard)
     )
       return { penalty: 0.25, reason: 'opponent-heal' }
+    // The public reveal is information even when no Health changes. This new
+    // grammar only reviews adverse healing, not the value of paying to reveal.
+    if (healingJoust) return { penalty: 0 }
     const enemyUnchanged = before!.players
       .filter((p) => p.participantId !== actorId)
       .every((p) => {
@@ -1053,15 +1316,17 @@ export function createExpertActionInspector(
     match ??= createOpeningMatchFromCheckpoint(
       createFairHypothesisCheckpoint(checkpoint, actorId, 0x71ac71c)
     )
-    return match.analyze((fork) =>
-      inspectExpertAction(
-        fork,
-        actorId,
-        command,
-        () => hasPublicSecrets || stopResourceProbe(),
-        measureResourceProbe
-      )
-    )
+    return match.analyze((fork) => {
+      const stop = () => hasPublicSecrets || stopResourceProbe()
+      // Review the selected real action, not every hypothetical rollout suffix.
+      // Penalizing sampled suffixes discarded useful attacks along with a later
+      // sacrifice; execution-time review preserves the already-chosen progress.
+      if (command.type === 'play-card') {
+        const friendly = unpaidFriendlyTarget(fork, actorId, command, stop)
+        if (friendly.penalty > 0) return friendly
+      }
+      return inspectExpertAction(fork, actorId, command, stop, measureResourceProbe)
+    })
   }
 }
 

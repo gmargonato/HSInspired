@@ -1846,10 +1846,12 @@ describe('AI startup bonuses', () => {
   function createAiMatch(
     roll: number,
     aiHeroId = 'jaina',
-    humanHeroId = 'jaina'
+    humanHeroId = 'jaina',
+    aiHeroPowerBonusEnabled = true
   ): OpeningMatchInstance {
     const setup: MatchSetup = {
       seed: 1,
+      aiHeroPowerBonusEnabled,
       startingParticipantId: HUMAN_ID,
       participants: [
         {
@@ -1873,10 +1875,31 @@ describe('AI startup bonuses', () => {
     )
   }
 
+  it('disables both startup cheats while preserving the ordinary AI hero power', () => {
+    for (const roll of [0.1, 0.7]) {
+      const match = createAiMatch(roll, 'jaina', 'jaina', false)
+      const ai = match.getState().players.find((p) => p.participantId === OPPONENT_ID)!
+      expect(ai.heroPower.id).toBe('mage-fireblast')
+      expect(ai.heroPower.cost).toBe(2)
+      expect(ai.heroPowerCostOverride).toBeUndefined()
+    }
+  })
+
+  it('does not roll a bonus without an AI participant', () => {
+    const rng = {
+      ...fixedRng(0),
+      next: () => {
+        throw new Error('Unexpected roll')
+      }
+    }
+    expect(selectAiHeroPowerBonus([], rng)).toBe('none')
+  })
+
   it.each([
-    [0.1, 'none'],
+    [0.1, 'upgraded'],
     [1 / 3, 'upgraded'],
-    [0.6, 'upgraded'],
+    [0.5, 'cost-one'],
+    [0.6, 'cost-one'],
     [2 / 3, 'cost-one'],
     [0.9, 'cost-one']
   ] as const)('maps roll %s to the expected startup bonus', (roll, expected) => {
@@ -1919,7 +1942,7 @@ describe('AI startup bonuses', () => {
   })
 
   it.each([
-    [0.1, 'mage-fireblast', 2, undefined],
+    [0.1, 'mage-fireblast-rank-2', 2, undefined],
     [0.4, 'mage-fireblast-rank-2', 2, undefined],
     [0.7, 'mage-fireblast', 1, 1]
   ] as const)(
@@ -2183,6 +2206,8 @@ describe('mulligan confirmation', () => {
     expect(playerTwo.hand).toHaveLength(5)
     expect(playerOne.mana).toMatchObject({ available: 1, maximum: 1 })
     expect(playerOne.heroPower.available).toBe(true)
+    expect(playerTwo.heroPower.available).toBe(true)
+    expect(match.getLegality!(playerTwo.participantId).legalHeroPower).toBe(false)
     expect(
       match.dispatch({
         type: 'confirm-mulligan',
@@ -2270,6 +2295,85 @@ describe('effect trace retention', () => {
     usePower(match)
     expect(match.getState()).not.toHaveProperty('effectTrace')
     expect(match.getEffectTrace?.()).toEqual([])
+  })
+})
+
+describe('hero power opening readiness', () => {
+  it.each([
+    [HUMAN_ID, HUMAN_ID],
+    [HUMAN_ID, OPPONENT_ID],
+    [OPPONENT_ID, HUMAN_ID],
+    [OPPONENT_ID, OPPONENT_ID]
+  ])('stays ready with starter %s and first confirmation %s', (starter, confirmer) => {
+    const match = createOpeningMatch(
+      {
+        seed: 1,
+        startingParticipantId: starter,
+        participants: [
+          {
+            participantId: HUMAN_ID,
+            controllerKind: 'human',
+            heroId: asHeroId('rexxar'),
+            deckId: HUMAN_ID
+          },
+          {
+            participantId: OPPONENT_ID,
+            controllerKind: 'human',
+            heroId: asHeroId('rexxar'),
+            deckId: OPPONENT_ID
+          }
+        ]
+      },
+      [deck(HUMAN_ID, 'rexxar'), deck(OPPONENT_ID, 'rexxar')]
+    )
+    const expectReadyButUnplayable = () => {
+      for (const player of match.getState().players) {
+        expect(player.heroPower.available).toBe(true)
+        expect(match.getLegality!(player.participantId).legalHeroPower).toBe(false)
+        expect(
+          match.dispatch({
+            type: 'use-hero-power',
+            participantId: player.participantId
+          })
+        ).toMatchObject({ accepted: false })
+      }
+    }
+    expectReadyButUnplayable()
+    for (const participantId of [
+      confirmer,
+      confirmer === HUMAN_ID ? OPPONENT_ID : HUMAN_ID
+    ]) {
+      accept(
+        match.dispatch({
+          type: 'confirm-mulligan',
+          participantId,
+          replaceInstanceIds: []
+        })
+      )
+      expectReadyButUnplayable()
+    }
+    const second = starter === HUMAN_ID ? OPPONENT_ID : HUMAN_ID
+    setMana(match, second)
+    expect(match.getLegality!(second).legalHeroPower).toBe(false)
+    expect(
+      match.dispatch({ type: 'use-hero-power', participantId: second })
+    ).toMatchObject({ accepted: false })
+    accept(match.dispatch({ type: 'end-turn', participantId: starter }))
+    expect(match.getState().players.every((player) => player.heroPower.available)).toBe(
+      true
+    )
+    expect(match.getLegality!(second).legalHeroPower).toBe(true)
+  })
+
+  it('stays exhausted through the opponent turn and refreshes on its next turn', () => {
+    const match = startMatch('rexxar')
+    usePower(match)
+    expect(match.getState().players[0].heroPower.available).toBe(false)
+    accept(match.dispatch({ type: 'end-turn', participantId: HUMAN_ID }))
+    expect(match.getState().players[0].heroPower.available).toBe(false)
+    accept(match.dispatch({ type: 'end-turn', participantId: OPPONENT_ID }))
+    expect(match.getState().players[0].heroPower.available).toBe(true)
+    expect(match.getLegality!(HUMAN_ID).legalHeroPower).toBe(true)
   })
 })
 

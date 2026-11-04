@@ -165,6 +165,22 @@ export const CARD_RACE_LAYOUT = {
   text: placement({ x: 310, y: 826 }, { width: 410, height: 62 }, { anchor: CENTER }),
   style: RACE_STYLE
 } as const
+export const CARD_SPELL_RACE_LAYOUT = {
+  standard: assetPlacement('card.race-banner.spell', { x: 310, y: 816.5 }),
+  premium: assetPlacement('card.race-banner.spell.premium', { x: 312, y: 823 }),
+  text: {
+    standard: placement(
+      { x: 310, y: 836.5 },
+      { width: 300, height: 62 },
+      { anchor: CENTER }
+    ),
+    premium: placement(
+      { x: 310, y: 838 },
+      { width: 300, height: 62 },
+      { anchor: CENTER }
+    )
+  }
+} as const
 export const CARD_SILENCE_LAYOUT = assetPlacement('card.overlay.silence', {
   x: 310,
   y: 695
@@ -350,7 +366,7 @@ export const CARD_PROFILES: Readonly<Record<CardVisualTemplate, CardProfile>> = 
       },
       premium: {
         position: { x: 310, y: 544.2126361655774 },
-        gem: assetPlacement('card.rarity.common', { x: 0, y: 21 }),
+        gem: assetPlacement('card.rarity.common', { x: 0, y: 28 }),
         slot: assetPlacement('card.rarity-frame.weapon.premium', { x: 2, y: 0 })
       }
     },
@@ -390,12 +406,12 @@ export const CARD_PROFILES: Readonly<Record<CardVisualTemplate, CardProfile>> = 
     rarity: {
       standard: {
         position: { x: 310, y: 572.8759521218717 },
-        gem: assetPlacement('card.rarity.common', { x: 0, y: -5 }),
+        gem: assetPlacement('card.rarity.common', { x: -5, y: -10 }),
         slot: assetPlacement('card.rarity-frame.hero', { x: -9, y: -10 })
       },
       premium: {
         position: { x: 310, y: 557.8759521218717 },
-        gem: assetPlacement('card.rarity.common', { x: 0, y: -5 }),
+        gem: assetPlacement('card.rarity.common', { x: -5, y: -10 }),
         slot: assetPlacement('card.rarity-frame.hero', { x: -4, y: -10 }),
         slotVisible: false
       }
@@ -435,6 +451,7 @@ const FRAME_SHADOW_ALIGNMENT = {
 
 // Final placement adjustment in card-canvas pixels; keep native shadow sizes.
 const FRAME_SHADOW_OFFSET = { x: -2, y: -5 } as const
+const PREMIUM_SPELL_SHADOW_OFFSET_Y = -12
 
 export function cardFrameShadowKey(
   template: CardVisualTemplate,
@@ -465,7 +482,8 @@ export function cardFrameShadowPlacement(
         transform.position.y +
         aperture.y * transform.scale.y -
         ridge.y +
-        FRAME_SHADOW_OFFSET.y
+        FRAME_SHADOW_OFFSET.y +
+        (template === 'spell' && premium ? PREMIUM_SPELL_SHADOW_OFFSET_Y : 0)
     },
     assetSize(cardFrameShadowKey(template, premium)),
     { anchor: TOP_LEFT }
@@ -516,6 +534,16 @@ export function cardFrameTransform(template: CardVisualTemplate, premium = false
     position: { x: CARD_BODY_BOUNDS.x, y: CARD_BODY_BOUNDS.y - body.top * scale.y },
     scale
   }
+}
+/** Match the banner's authored rails to the frame's source-image transform. */
+export function cardSpellRaceBannerPlacement(premium: boolean): LayoutPlacement {
+  const banner = CARD_SPELL_RACE_LAYOUT[premium ? 'premium' : 'standard']
+  const { scale } = cardFrameTransform('spell', premium)
+  return placement(
+    banner.position,
+    { width: banner.size.width * scale.x, height: banner.size.height * scale.y },
+    { anchor: CENTER }
+  )
 }
 /** Source-image geometry is confined here; ordinary placements use card pixels. */
 export function cardFramePlacement(

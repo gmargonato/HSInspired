@@ -1,3 +1,8 @@
+import {
+  LOCAL_AI_RESOURCE_PROFILES,
+  type LocalAiDifficulty
+} from './local-ai-resources'
+import { createOpeningMatchFromCheckpoint } from '../../../game-rules/match/opening-match'
 import type { AiCandidateUpdate } from './ai-attention-controller'
 import {
   AiRequestError,
@@ -28,6 +33,7 @@ import { aiActions } from './ai-context'
 import { canonicalCommandKey } from '../../../game-rules/match/ai/legal-commands'
 import {
   tacticalStateKey,
+  revealsTacticalInformation,
   type TacticalOutcome
 } from '../../../game-rules/match/ai/tactical-search'
 import { immediateExpertWin } from './expert-tactics'
@@ -38,8 +44,13 @@ import {
   EXPERT_ORDERING_MAX_DISPATCHES
 } from './expert-action-ordering'
 import { reviewCommittedActionOrder } from './expert-committed-order'
+import { reviewEquivalentTrade } from './expert-equivalent-trade'
 import { reviewCompletedAttackOrder } from './expert-completed-attack-order'
 import { reviewRedundantHealingPrefix } from './expert-redundant-healing'
+import {
+  isRedundantAttackPrefixCandidate,
+  reviewRedundantAttackPrefix
+} from './expert-redundant-attack'
 import {
   isRedundantSpellPrefixCandidate,
   reviewRedundantSpellPrefix
@@ -235,8 +246,8 @@ export function invalidatesExpertContinuation(
 }
 
 /**
- * Expert local AI runs only on a redacted match checkpoint in a disposable
- * module worker. The easy local opponent remains the in-renderer default.
+ * Shared local AI for both difficulties. Search runs only on a redacted match
+ * checkpoint in a disposable module worker; resource limits select difficulty.
  */
 export class ExpertAiDecisionApi implements AiDecisionApi {
   private readonly candidateListeners = new Set<
@@ -351,7 +362,10 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
             durationMs: Math.max(retained.durationMs, this.now() - startedAt)
           }
       }
-      throw error
+      throw new AiRequestError(
+        error instanceof Error ? error.message : 'Local AI worker could not start.',
+        { failureKind: 'worker-failure' }
+      )
     }
     remainingBudgetMs = this.remainingBudget(request)
     if (remainingBudgetMs <= 100) {
@@ -435,7 +449,15 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         if (!pending) return
         const continuedAction = this.takeApplicableContinuation(pending.request)
         if (continuedAction) pending.resolve(continuedAction)
-        else pending.reject(error)
+        else
+          pending.reject(
+            new AiRequestError(
+              error instanceof Error
+                ? error.message
+                : 'Local AI worker could not receive the request.',
+              { failureKind: 'worker-failure' }
+            )
+          )
       }
     })
   }
@@ -804,6 +826,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         'no-payoff',
         'opponent-heal',
         'unpaid-friendly-damage',
+        'unpaid-friendly-target',
         'wasted-healing-target'
       ].includes(inspect(action.command).reason ?? '')
     if (
@@ -847,11 +870,95 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     // A local healing comparison authorizes only the alternative it checked.
     if (selectedOutcome.reason === 'wasted-healing-target' && !healingAlternative)
       return response
+    const rawRecovery = response.usage?.plannedActionIntents
+    const recoveryActions: typeof legal = []
+    if (
+      selectedOutcome.reason === 'unpaid-friendly-target' &&
+      Array.isArray(rawRecovery) &&
+      rawRecovery.length > 1 &&
+      rawRecovery.length <= 6 &&
+      rawRecovery.every(isAiActionIntent) &&
+      sameAiIntent(
+        rawRecovery[0]!,
+        aiActionIntent(selected.command, this.opponentParticipantId())
+      )
+    ) {
+      const suffix =
+        rawRecovery.at(-1)?.type === 'end-turn'
+          ? rawRecovery.slice(1, -1)
+          : rawRecovery.slice(1)
+      const proposed = suffix.map((intent) =>
+        legal.find((action) =>
+          sameAiIntent(
+            intent,
+            aiActionIntent(action.command, this.opponentParticipantId())
+          )
+        )
+      )
+      if (
+        proposed.length &&
+        proposed.every(
+          (action) =>
+            action &&
+            action.command.type === 'attack-character' &&
+            action.command.attacker.kind === 'minion' &&
+            action.command.defender.kind === 'hero' &&
+            !unsafe(action)
+        )
+      ) {
+        const recoveryMatch = createOpeningMatchFromCheckpoint(
+          createFairHypothesisCheckpoint(
+            this.session.match.getCheckpoint(),
+            this.perspectiveParticipantId,
+            0x71ac71c
+          )
+        )
+        const preserves = recoveryMatch.analyze((fork) => {
+          if (!fork.getRandomState) return false
+          const rng = JSON.stringify(fork.getRandomState())
+          const recoveryDeadline = performance.now() + EXPERT_TERMINAL_SAFETY_MAX_MS
+          for (const action of proposed) {
+            if (performance.now() >= recoveryDeadline) return false
+            const result = fork.dispatch(action!.command)
+            if (
+              !result.accepted ||
+              (result.state.phase === 'ended' &&
+                result.state.winnerId !== this.perspectiveParticipantId) ||
+              revealsTacticalInformation(result.events) ||
+              rng !== JSON.stringify(fork.getRandomState())
+            )
+              return false
+          }
+          return true
+        })
+        if (preserves) recoveryActions.push(...(proposed as typeof legal))
+      }
+    }
+    // Replacing an unpaid sacrifice must not throw away the rest of the turn.
+    // Reuse the existing public-state fallback ranking over safe legal choices;
+    // this is not an unconditional attack-over-pass rule.
+    const unpaidReplacement =
+      selectedOutcome.reason === 'unpaid-friendly-target'
+        ? selectExpertTimeoutFallbackAction(
+            this.session,
+            legal
+              .filter((action) => action.id !== selected.id && !unsafe(action))
+              .map((action) => action.command)
+          )?.command
+        : undefined
+    const fallbackReplacement =
+      unpaidReplacement &&
+      legal.find(
+        (action) =>
+          canonicalCommandKey(action.command) === canonicalCommandKey(unpaidReplacement)
+      )
     const alternatives = healingAlternative
       ? [healingAlternative]
       : [
           // Repair a target before discarding a useful minion or the whole selected play.
           ...[...ranked, ...legal].filter(samePlay),
+          ...recoveryActions,
+          fallbackReplacement,
           ...ranked,
           legal.find((action) => action.command.type === 'end-turn'),
           ...legal
@@ -913,15 +1020,18 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         actionOutcomeReason: terminalLoss
           ? 'immediate-terminal-loss'
           : (inspect(selected.command).reason ?? 'unpaid-friendly-damage'),
-        plannedActionIntents: [
-          {
-            type: intent.type,
-            source: intent.source,
-            targets: [...intent.targets],
-            position: intent.position,
-            option: intent.option
-          }
-        ]
+        plannedActionIntents: (recoveryActions[0]?.id === replacement.id
+          ? recoveryActions.map((action) =>
+              aiActionIntent(action.command, this.opponentParticipantId())
+            )
+          : [intent]
+        ).map((action) => ({
+          type: action.type,
+          source: action.source,
+          targets: [...action.targets],
+          position: action.position,
+          option: action.option
+        }))
       }
     }
   }
@@ -1076,15 +1186,111 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     return true
   }
 
+  private guardEquivalentTrade(
+    request: AiDecisionRequest,
+    response: AiDecisionResponse
+  ): AiDecisionResponse {
+    if (
+      request.phase === 'mulligan' ||
+      response.usage?.decisionPriority === 'verified-win' ||
+      this.session.getState().revision !== request.expectedRevision
+    )
+      return response
+    const intents = response.usage?.plannedActionIntents
+    if (
+      !Array.isArray(intents) ||
+      !intents.length ||
+      intents.length > 6 ||
+      !intents.every(isAiActionIntent) ||
+      intents[0]!.type !== 'attack-character' ||
+      !this.session
+        .getState()
+        .players.find((p) => p.participantId === this.perspectiveParticipantId)
+        ?.board.some((m) => m.instanceId === intents[0]!.source) ||
+      !this.session
+        .getState()
+        .players.find((p) => p.participantId !== this.perspectiveParticipantId)
+        ?.board.some((m) => m.instanceId === intents[0]!.targets[0])
+    )
+      return response
+    const id =
+      'plan' in response.choice
+        ? response.choice.plan.firstActionId
+        : 'actionId' in response.choice
+          ? response.choice.actionId
+          : null
+    const legal = this.currentLegalActions().filter((a) =>
+      request.actionIds.includes(a.id)
+    )
+    const selected = legal.find((a) => a.id === id)
+    const opponentId = this.opponentParticipantId()
+    if (
+      !selected ||
+      !sameAiIntent(intents[0]!, aiActionIntent(selected.command, opponentId))
+    )
+      return response
+    const started = this.now(),
+      remaining = this.remainingBudget(request)
+    if (!Number.isFinite(remaining) || remaining <= 0) return response
+    const reviewed = reviewEquivalentTrade(
+      this.session.match.getCheckpoint(),
+      this.perspectiveParticipantId,
+      selected.command,
+      intents.slice(1),
+      () => this.now() >= started + remaining,
+      this.now
+    )
+    const elapsed = Math.max(0, this.now() - started)
+    this.searchUsedMs += elapsed
+    if (!reviewed.command) return response
+    const next = legal.find(
+      (a) => canonicalCommandKey(a.command) === canonicalCommandKey(reviewed.command!)
+    )
+    if (!next) return response
+    const sequence = [aiActionIntent(next.command, opponentId), ...intents.slice(1)]
+    const reason =
+      'Finish an equivalent plain target with the same attack and retaliation, preserving the selected continuation.'
+    return {
+      ...response,
+      reason,
+      durationMs: response.durationMs + elapsed,
+      choice: {
+        actionId: next.id,
+        intent: sequence[0]!,
+        expectedResult: reason,
+        planUpdate: null
+      },
+      usage: {
+        ...response.usage,
+        decisionPriority:
+          response.usage?.decisionPriority === 'tactical-safety'
+            ? 'tactical-safety'
+            : 'tactical-preference',
+        tacticalOverride: true,
+        actionOutcomeReason: 'equivalent-target-trade',
+        plannedActionIntents: sequence.map((intent) => ({
+          ...intent,
+          targets: [...intent.targets]
+        })),
+        equivalentTradeReview: reviewed.stats
+      }
+    }
+  }
+
   private guardCommittedOrder(
     request: AiDecisionRequest,
     response: AiDecisionResponse,
     resourceReviewCheckpoint?: OpeningMatchCheckpoint
   ): AiDecisionResponse {
-    response = this.guardRedundantSpell(request, response, resourceReviewCheckpoint)
+    response = this.guardEquivalentTrade(request, response)
+    response = this.guardRedundantResourcePrefix(
+      request,
+      response,
+      resourceReviewCheckpoint
+    )
     // A successful omission can expose a healing prefix; do not stack a second
     // resource review onto the same decision's bounded review allowance.
-    if (!response.usage?.redundantSpellReview)
+    if (!response.usage?.redundantSpellReview && !response.usage?.redundantAttackReview)
       response = this.guardRedundantHealing(request, response)
     response = this.guardSingletonAttackOrder(request, response)
     if (response.usage?.actionOutcomeReason === 'committed-singleton-attack-order')
@@ -1212,7 +1418,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     }
   }
 
-  private guardRedundantSpell(
+  private guardRedundantResourcePrefix(
     request: AiDecisionRequest,
     response: AiDecisionResponse,
     resourceReviewCheckpoint?: OpeningMatchCheckpoint
@@ -1233,11 +1439,16 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       !planned.every(isAiActionIntent) ||
       planned.length > intents.length ||
       !planned.every((intent, index) => sameAiIntent(intent, intents[index]!)) ||
-      !isRedundantSpellPrefixCandidate(
+      (!isRedundantSpellPrefixCandidate(
         this.session.getState(),
         this.perspectiveParticipantId,
         intents
-      )
+      ) &&
+        !isRedundantAttackPrefixCandidate(
+          this.session.getState(),
+          this.perspectiveParticipantId,
+          intents
+        ))
     )
       return response
     const selectedId =
@@ -1264,7 +1475,15 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       this.searchUsedMs += elapsed
       return { ...response, durationMs: response.durationMs + elapsed }
     }
-    const review = reviewRedundantSpellPrefix(
+    const attackPrefix = isRedundantAttackPrefixCandidate(
+      this.session.getState(),
+      this.perspectiveParticipantId,
+      intents
+    )
+    const reviewKey = attackPrefix ? 'redundantAttackReview' : 'redundantSpellReview'
+    const review = (
+      attackPrefix ? reviewRedundantAttackPrefix : reviewRedundantSpellPrefix
+    )(
       this.session.match.getCheckpoint(),
       this.perspectiveParticipantId,
       intents,
@@ -1287,14 +1506,15 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         durationMs: response.durationMs + elapsed,
         usage: {
           ...response.usage,
-          redundantSpellReview: {
+          [reviewKey]: {
             ...review.stats,
             abstained: review.stats.abstained || expired
           }
         }
       }
-    const reason =
-      'The reviewed continuation reaches the same board while retaining this spell.'
+    const reason = attackPrefix
+      ? 'The reviewed bounce preserves a friendly minion instead of sacrificing it first.'
+      : 'The reviewed continuation reaches the same board while retaining this spell.'
     const sequence = commands.map((command) => aiActionIntent(command, opponent))
     const plan = 'plan' in response.choice ? response.choice.plan : null
     return {
@@ -1330,13 +1550,15 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
             ? 'tactical-safety'
             : 'tactical-preference',
         tacticalOverride: true,
-        actionOutcomeReason: 'redundant-spell-prefix',
+        actionOutcomeReason: attackPrefix
+          ? 'redundant-attack-prefix'
+          : 'redundant-spell-prefix',
         resourceReviewIntents: null,
         plannedActionIntents: sequence.map((intent) => ({
           ...intent,
           targets: [...intent.targets]
         })),
-        redundantSpellReview: {
+        [reviewKey]: {
           ...review.stats,
           fromActionId: selected.id,
           toActionId: replacement.id
@@ -2575,4 +2797,19 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     }
     return pending
   }
+}
+
+/** Both difficulties share the Expert engine and differ only in search resources. */
+export function createLocalAiDecisionApi(
+  session: GameBoardSession,
+  difficulty: LocalAiDifficulty
+): ExpertAiDecisionApi {
+  return new ExpertAiDecisionApi(
+    session,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    LOCAL_AI_RESOURCE_PROFILES[difficulty]
+  )
 }

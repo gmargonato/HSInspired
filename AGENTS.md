@@ -152,9 +152,8 @@ export const MY_FEATURE_LAYOUT = {
 4. **Fixed Placements vs. Parameterized Spreads**:
    - Use `placement()` for fixed elements (backgrounds, buttons, frames, portraits).
    - Dynamic spreads (mulligan hand of 3 or 4 cards, hand fan, mana crystals, deck stacks) are **parameterized** (`centerX`, `baselineY`, `gap`, `scale`, `anchor`) and driven by pure math. Never place cards individually to solve count differences.
-5. **Object Labels & Dev Inspector (F2)**:
+5. **Object Labels**:
    - Set `.label` on every placed Pixi object using the `zone.element` format (e.g. `'game.board'`, `'chest.box'`).
-   - Pressing **F2** in `npm run dev` toggles the live layout overlay that visualizes bounding boxes, anchors, and labels for all active objects.
 
 ---
 

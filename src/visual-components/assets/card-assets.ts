@@ -20,6 +20,8 @@ import legendarySpellImage from '@assets/images/cards/legendary-spell.png'
 import manaImage from '@assets/images/cards/MANA.png'
 import lifeCostImage from '@assets/images/cards/LIFE-COST.png'
 import premiumLegendarySpellImage from '@assets/images/cards/premium-legendary-spell.png'
+import spellRaceBannerImage from '@assets/images/cards/race-banner-spell.png'
+import premiumSpellRaceBannerImage from '@assets/images/cards/premium-race-banner-spell.png'
 import raceBannerImage from '@assets/images/cards/race-banner.png'
 import premiumRaceBannerImage from '@assets/images/cards/premium-race-banner.png'
 import rarityCommonImage from '@assets/images/cards/rarity-common.png'
@@ -106,11 +108,7 @@ function cardAsset(
 }
 
 export const CARD_ASSET_DEFINITIONS = [
-  cardAsset('card.frame-shadow.minion.standard', 'shadow-frame-minion-non-premium.png', frameShadow0, 465, 610),
-  cardAsset('card.frame-shadow.minion.premium', 'shadow-frame-minion-premium.png', frameShadow1, 457, 595),
-  cardAsset('card.frame-shadow.spell', 'shadow-frame-spell.png', frameShadow2, 565, 482),
-  cardAsset('card.frame-shadow.weapon', 'shadow-frame-weapon.png', frameShadow3, 505, 500),
-  cardAsset('card.frame-shadow.hero', 'shadow-frame-hero.png', frameShadow4, 433, 490),
+  cardAsset('card.frame-shadow.minion.standard', 'shadow-frame-minion-non-premium.png', frameShadow0, 465, 610),  cardAsset('card.frame-shadow.minion.premium', 'shadow-frame-minion-premium.png', frameShadow1, 457, 595),  cardAsset('card.frame-shadow.spell', 'shadow-frame-spell.png', frameShadow2, 565, 482),  cardAsset('card.frame-shadow.weapon', 'shadow-frame-weapon.png', frameShadow3, 505, 500),  cardAsset('card.frame-shadow.hero', 'shadow-frame-hero.png', frameShadow4, 433, 490),
   cardAsset(
     'card.effect.premium-scroll',
     'premium-scroll-texture.png',
@@ -137,11 +135,7 @@ export const CARD_ASSET_DEFINITIONS = [
   cardAsset('card.name.minion', 'minion-name.png', minionNameImage, 606, 142),
   cardAsset('card.name.spell', 'spell-name.png', spellNameImage, 628, 193),
   cardAsset('card.name.hero', 'hero-name.png', heroNameImage, 606, 152),
-  cardAsset('card.name.minion.premium', 'minion-name-premium.png', minionNamePremiumImage, 606, 144),
-  cardAsset('card.name.spell.premium', 'spell-name-premium.png', spellNamePremiumImage, 627, 188),
-  cardAsset('card.name.hero.premium', 'hero-name-premium.png', heroNamePremiumImage, 606, 152),
-  cardAsset('card.name.weapon.premium', 'weapon-name-premium.png', weaponNamePremiumImage, 622, 134),
-  cardAsset('card.stat.health', 'health.png', healthImage, 136, 192),
+  cardAsset('card.name.minion.premium', 'minion-name-premium.png', minionNamePremiumImage, 606, 144),  cardAsset('card.name.spell.premium', 'spell-name-premium.png', spellNamePremiumImage, 627, 188),  cardAsset('card.name.hero.premium', 'hero-name-premium.png', heroNamePremiumImage, 606, 152),  cardAsset('card.name.weapon.premium', 'weapon-name-premium.png', weaponNamePremiumImage, 622, 134),  cardAsset('card.stat.health', 'health.png', healthImage, 136, 192),
   cardAsset('card.frame.legendary', 'legendary.png', legendaryImage, 436, 317),
   cardAsset(
     'card.frame.legendary.spell',
@@ -152,6 +146,20 @@ export const CARD_ASSET_DEFINITIONS = [
   ),
   cardAsset('card.stat.mana', 'mana.png', manaImage, 174, 165),
   cardAsset('card.stat.life-cost', 'LIFE-COST.png', lifeCostImage, 143, 210),
+  cardAsset(
+    'card.race-banner.spell',
+    'race-banner-spell.png',
+    spellRaceBannerImage,
+    569,
+    104
+  ),
+  cardAsset(
+    'card.race-banner.spell.premium',
+    'premium-race-banner-spell.png',
+    premiumSpellRaceBannerImage,
+    568,
+    109
+  ),
   cardAsset('card.race-banner', 'race-banner.png', raceBannerImage, 408, 69),
   cardAsset(
     'card.race-banner.premium',
@@ -527,7 +535,7 @@ export const CARD_ASSET_DEFINITIONS = [
     'card.rarity-frame.hero',
     'rarity-frame-hero.png',
     rarityFrameHeroImage,
-    147,
+    132,
     113
   ),
   cardAsset(
@@ -563,7 +571,7 @@ export const CARD_ASSET_DEFINITIONS = [
     'rarity-frame-weapon-premium.png',
     rarityFrameWeaponPremiumImage,
     140,
-    112
+    128
   ),
   cardAsset(
     'card.rarity-frame.weapon',

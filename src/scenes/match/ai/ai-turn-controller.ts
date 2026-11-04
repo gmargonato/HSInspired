@@ -62,7 +62,7 @@ const AI_OPPONENT_RESTORE_MESSAGE =
 export interface AiActionDecision extends AiDecisionIdentity {
   readonly actionId: string
   readonly command: TurnMatchCommand
-  readonly source: 'model' | 'forced' | 'safe-fallback' | 'random-timeout'
+  readonly source: 'model' | 'forced' | 'safe-fallback'
   readonly reason?: string
   readonly expectedResult?: string
 }
@@ -73,7 +73,6 @@ export interface AiTurnControllerOptions {
   readonly session: GameBoardSession
   readonly logger: RendererLogger
   readonly onAbandoned?: () => void
-  readonly online?: () => boolean
 }
 export class AiTurnController {
   private readonly candidateCommands = new Map<string, TurnMatchCommand>()
@@ -642,17 +641,11 @@ export class AiTurnController {
         cancelled = () => resolve(null)
       })
       this.active = { identity, cancel: cancelled }
-      let settings: AiSettings | null = null
       try {
-        if (!this.options.api) throw new Error('AI API bridge unavailable.')
-        if (!(
-          this.options.online?.() ??
-          (typeof navigator === 'undefined' || navigator.onLine !== false)
-        ))
-          throw new Error('Network is known offline.')
-        settings = await Promise.race([this.options.api.settings(), cancellation])
+        if (!this.options.api) throw new Error('Local AI engine unavailable.')
+        const settings = await Promise.race([this.options.api.settings(), cancellation])
         if (!settings || !this.current(identity)) return null
-        if (!settings.enabled) throw new Error('External game AI is disabled.')
+        if (!settings.enabled) throw new Error('Local game AI is disabled.')
         this.maxMessageBytes =
           settings.maxContextBytes ?? AI_REQUEST_LIMITS.maxContextBytes
         if (session.getState().phase === 'mulligan') {
@@ -1085,28 +1078,20 @@ export class AiTurnController {
           const expertFailureKind = error.details.failureKind
           const legal = this.legalCommands()
           if (!legal.length) return null
-          if (settings?.modelId === 'hardware-local-v2') {
-            const fallbackAction =
-              selectExpertTimeoutFallbackAction(session, legal) ??
-              aiActions(session, legal).find(
-                (action) => action.command.type === 'end-turn'
-              ) ??
-              aiActions(session, legal)[0]
-            if (!fallbackAction) return null
-            selected = fallbackAction.command
-            actionId = fallbackAction.id
-            source = 'safe-fallback'
-            reason =
-              expertFailureKind === 'timeout'
-                ? `Hardware Expert reached its whole-turn search budget; used the deterministic fair-state fallback: ${fallbackAction.description}`
-                : `Hardware Expert's search worker failed; used the deterministic fair-state fallback: ${fallbackAction.description}`
-          } else {
-            const index = Math.floor(Math.random() * legal.length)
-            selected = legal[index]!
-            actionId = 'a' + index
-            source = 'random-timeout'
-            reason = 'Provider timed out; selected a current legal input at random.'
-          }
+          const fallbackAction =
+            selectExpertTimeoutFallbackAction(session, legal) ??
+            aiActions(session, legal).find(
+              (action) => action.command.type === 'end-turn'
+            ) ??
+            aiActions(session, legal)[0]
+          if (!fallbackAction) return null
+          selected = fallbackAction.command
+          actionId = fallbackAction.id
+          source = 'safe-fallback'
+          reason =
+            expertFailureKind === 'timeout'
+              ? `Local AI reached its whole-turn search budget; used the deterministic fair-state fallback: ${fallbackAction.description}`
+              : `Local AI's search worker failed; used the deterministic fair-state fallback: ${fallbackAction.description}`
           this.turnPlan = undefined
           this.plannedTurn = undefined
           this.log(

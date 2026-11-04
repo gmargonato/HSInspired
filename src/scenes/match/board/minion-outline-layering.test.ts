@@ -97,6 +97,88 @@ const tauntMinion: MinionViewModel = {
 }
 
 describe('MinionView dormant overlay', () => {
+  it.each([false, true])(
+    'updates decorations and shadows through dormancy (premium=%s)',
+    async (premium) => {
+      const view = await MinionView.create(
+        { ...tauntMinion, legendary: true, premium },
+        textures,
+        undefined
+      )
+      try {
+        const taunt = view.getChildByLabel('minion.taunt') as Sprite
+        const legendary = view.getChildByLabel('minion.frame-legendary') as Sprite
+        const trigger = view.getChildByLabel('minion.trigger')!
+        expect(taunt.visible && legendary.visible).toBe(true)
+        expect(trigger.visible).toBe(false)
+        expect(legendary.texture).toBe(
+          premium ? textures.premiumLegendaryFrame : textures.legendaryFrame
+        )
+        for (let cycle = 0; cycle < 2; cycle++) {
+          const revision = view.shadow.silhouette!.revision
+          view.setDormant(true)
+          view.setTaunt(true)
+          view.setLegendary(true)
+          view.setTrigger(false)
+          expect(taunt.visible || legendary.visible).toBe(false)
+          expect(trigger.visible).toBe(true)
+          expect(view.shadow.silhouette!.revision).toBeGreaterThan(revision)
+          const silhouette = view.shadow.silhouette!.create()
+          expect(silhouette.getChildByLabel('minion.taunt.shadow-surface')).toBeNull()
+          expect(
+            silhouette.getChildByLabel('minion.frame-legendary.shadow-surface')
+          ).toBeNull()
+          expect(
+            silhouette.getChildByLabel('minion.trigger.shadow-surface')
+          ).not.toBeNull()
+          silhouette.destroy({ children: true })
+          const hiddenRevision = view.shadow.silhouette!.revision
+          view.setDormant(true)
+          expect(view.shadow.silhouette!.revision).toBe(hiddenRevision)
+          view.setDormant(false)
+          expect(taunt.visible && legendary.visible).toBe(true)
+          expect(trigger.visible).toBe(false)
+          expect(view.shadow.silhouette!.revision).toBeGreaterThan(hiddenRevision)
+        }
+      } finally {
+        view.destroy({ children: true })
+      }
+    }
+  )
+
+  it('uses current decorations when a minion transforms while dormant', async () => {
+    const view = await MinionView.create(
+      { ...tauntMinion, legendary: true, dormant: true },
+      textures,
+      undefined
+    )
+    try {
+      const taunt = view.getChildByLabel('minion.taunt')!
+      const legendary = view.getChildByLabel('minion.frame-legendary')!
+      const trigger = view.getChildByLabel('minion.trigger')!
+      expect(taunt.visible || legendary.visible).toBe(false)
+      expect(trigger.visible).toBe(true)
+      view.setLegendary(false)
+      view.setTaunt(false)
+      view.setTrigger(false)
+      view.setDormant(false)
+      expect(taunt.visible || legendary.visible || trigger.visible).toBe(false)
+      view.setDormant(true)
+      view.setLegendary(true)
+      view.setTaunt(true)
+      view.setTrigger(true)
+      expect(taunt.visible || legendary.visible).toBe(false)
+      view.setDormant(false)
+      expect(taunt.visible && legendary.visible && trigger.visible).toBe(true)
+      const revision = view.shadow.silhouette!.revision
+      view.setLegendary(false)
+      expect(legendary.visible).toBe(false)
+      expect(view.shadow.silhouette!.revision).toBeGreaterThan(revision)
+    } finally {
+      view.destroy({ children: true })
+    }
+  })
+
   it('shows progress briefly, ignores refreshes, and cancels timers on disposal', async () => {
     const view = await MinionView.create(
       { ...tauntMinion, dormant: true },
@@ -172,7 +254,7 @@ describe('MinionView dormant overlay', () => {
       first.setDormant(false)
       first.showDormantProgress(2, 2, 6)
       expect(cancel).toHaveBeenCalled()
-      const newTimer = timers.mock.results[2]!.value as ReturnType<
+      const newTimer = timers.mock.results.at(-1)!.value as ReturnType<
         AnimationScope['timeline']
       >
       newTimer.pause().seek(2, false)

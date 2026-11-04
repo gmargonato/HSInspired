@@ -169,10 +169,8 @@ import { HERO_POWER_CARD_CANVAS, HeroPowerCardView } from './hero-power-presenta
 import { WeaponView } from './weapon-view'
 import { prebuildWeaponOutlineShape } from './weapon-outline-shape'
 import { MatchArtworkWarmup, matchArtworkIds } from '../loading/match-artwork-warmup'
-import {
-  prewarmCardRenderPaths,
-  prewarmOpeningCard
-} from '../loading/card-render-warmup'
+import { prewarmCardRenderPaths } from '../../../visual-components/cards/card-render-warmup'
+import { prewarmOpeningCard } from '../loading/card-render-warmup'
 import { AddCardPickerView } from '../tools/add-card-picker-view'
 import { CardSelectionOverlay } from '../presentation/card-selection-overlay'
 import {
@@ -615,6 +613,7 @@ export class GameBoardView extends Actor {
   private openingRevealStarted = false
   /** Current insertion gap preview, or null when no gap is previewed. */
   private readonly handleWindowPointerDown = (event: PointerEvent): void => {
+    if (this.settingsInputBlocked) return
     if (event.button === 2) {
       this.hand.drag.end()
       const pointer = this.toRendererPoint(event.clientX, event.clientY)
@@ -683,6 +682,7 @@ export class GameBoardView extends Actor {
     }
   }
   private readonly handleWindowPointerUp = (event: PointerEvent): void => {
+    if (this.settingsInputBlocked) return
     if (this.cardPlacementTapGuard.matches(event.pointerId)) {
       window.setTimeout(() => {
         this.cardPlacementTapGuard.release(event.pointerId)
@@ -739,6 +739,7 @@ export class GameBoardView extends Actor {
     }
   }
   private readonly handleBoardPointerUp = (event: FederatedPointerEvent): void => {
+    if (this.settingsInputBlocked) return
     if (event.button !== 0) return
     if (
       this.hand.drag.index !== null &&
@@ -792,6 +793,7 @@ export class GameBoardView extends Actor {
     this.cardPlay.cancelCardTargeting()
   }
   private readonly handleWindowKeyDown = (event: KeyboardEvent): void => {
+    if (this.settingsInputBlocked) return
     if (event.key === 'Escape' && this.selectedBoardObjectInstanceId) {
       event.preventDefault()
       this.cancelBoardObjectSelection()
@@ -1439,12 +1441,23 @@ export class GameBoardView extends Actor {
     this.gameplayLayer.sortChildren()
   }
 
+  private settingsInputBlocked = false
+
+  setInputBlocked(blocked: boolean): void {
+    this.settingsInputBlocked = blocked
+    if (blocked) {
+      this.handleWindowBlur()
+      this.hand.clearHover()
+    }
+  }
+
   private inspectionPaused = false
   private inspectionSuppressed = false
 
   private isPassiveInspectionEnabled(): boolean {
     return (
       !this.inspectionPaused &&
+      !this.settingsInputBlocked &&
       !this.destroyed &&
       this.matchBackdropLayer.eventMode !== 'none' &&
       !this.matchResultOverlay.visible &&
@@ -3048,6 +3061,7 @@ export class GameBoardView extends Actor {
   }
 
   private handleBoardPointerMove(event: FederatedPointerEvent): void {
+    if (this.settingsInputBlocked) return
     if (this.matchResultShown) return
     // Pixi reuses event objects: retain only the sample, never the event itself.
     this.pendingBoardPointer = {
@@ -4594,7 +4608,6 @@ export class GameBoardView extends Actor {
         this.setWindowHighlighted(event.participantId === this.localParticipantId)
         this.syncTurnHud(this.match.getState())
         this.handleTurnStarted(event.participantId)
-        await this.heroPowerEffects.reveal()
         return
       case 'turn-started':
         this.setWindowHighlighted(event.participantId === this.localParticipantId)
@@ -5325,6 +5338,7 @@ export class GameBoardView extends Actor {
         }
         view.setStatsVisible(!isPermanentBoardObject(minion))
         view.setDormant(minion.dormant === true)
+        view.setLegendary(definition.rarity === 'Legendary')
         view.setStats(minion.attack, minion.health, minion.maxHealth)
         view.setTaunt(markers.taunt)
         view.setEnraged(markers.enraged)
@@ -7140,6 +7154,9 @@ export class GameBoardView extends Actor {
         event.minion.maxHealth
       )
       const existingState = this.presentationState()
+      existing.setLegendary(
+        CARD_CATALOG.require(event.minion.cardId).rarity === 'Legendary'
+      )
       const existingMarkers = boardMinionAbilityMarkers(
         event.minion,
         CARD_CATALOG.require(event.minion.cardId),
@@ -9119,6 +9136,9 @@ export class GameBoardView extends Actor {
       view.ownerId = minionPlayed.participantId
       view.setStatsVisible(!isPermanentBoardObject(minionPlayed.minion))
       view.setDormant(minionPlayed.minion.dormant === true)
+      view.setLegendary(
+        CARD_CATALOG.require(minionPlayed.minion.cardId).rarity === 'Legendary'
+      )
       view.setStats(
         minionPlayed.minion.attack,
         minionPlayed.minion.health,
@@ -9310,8 +9330,10 @@ export class GameBoardView extends Actor {
   updateFrame(deltaMS: number): void {
     this.updateAiAttention()
     this.syncPassiveInspection()
-    this.hand.refreshHover()
-    this.hand.drag.update(deltaMS)
+    if (!this.settingsInputBlocked) {
+      this.hand.refreshHover()
+      this.hand.drag.update(deltaMS)
+    }
     this.syncPassiveInspection()
     this.flushBoardPointerVisuals()
     this.updateShadows(deltaMS)

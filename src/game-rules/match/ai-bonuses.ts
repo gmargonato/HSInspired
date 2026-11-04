@@ -14,7 +14,6 @@ export function selectAiHeroPowerBonus(
     return 'none'
 
   const roll = rng.next()
-  if (roll < 1 / 3) return 'none'
-  if (roll < 2 / 3) return 'upgraded'
+  if (roll < 1 / 2) return 'upgraded'
   return 'cost-one'
 }

@@ -2,12 +2,6 @@ import { parseAiDecisionChoice, type AiDecisionChoice } from './ai-deliberation'
 
 export const AI_LOG_SCHEMA_VERSION = 7
 
-export const AI_IPC_CHANNELS = {
-  decide: 'ai:decide',
-  cancel: 'ai:cancel',
-  progress: 'ai:progress',
-  settings: 'ai:settings'
-} as const
 export type JsonPrimitive = string | number | boolean | null
 export type JsonValue = JsonPrimitive | JsonObject | readonly JsonValue[]
 export interface JsonObject {
@@ -18,7 +12,8 @@ export interface AiMessage {
   readonly content: string
 }
 export type AiReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh'
-export type AiProviderId = 'azure-openai' | 'openrouter' | 'none'
+// Legacy 'none' metadata identifies the in-process local engine.
+export type AiProviderId = 'none'
 export const AI_REQUEST_LIMITS = {
   timeoutMs: 45_000,
   maxContextBytes: 200_000,
@@ -94,61 +89,6 @@ export interface AiDecisionApi {
   decide(request: AiDecisionRequest): Promise<AiDecisionResponse>
   cancel(identity: AiDecisionIdentity): Promise<void>
 }
-/** Expected decision failures cross contextBridge as data, never custom Errors. */
-export interface AiDecisionBridge extends Omit<AiDecisionApi, 'decide'> {
-  decide(request: AiDecisionRequest): Promise<AiIpcResult<AiDecisionResponse>>
-}
-/** Whitelist diagnostics fields; provider headers and response bodies never cross here. */
-export function parseAiRequestProgress(value: unknown): AiRequestProgress {
-  const identity = parseAiIdentity(value)
-  const data = value as Record<string, unknown>
-  if (
-    data.recovery !== undefined &&
-    (!isRecord(data.recovery) || JSON.stringify(data.recovery).length > 24_000)
-  )
-    throw new Error('Invalid AI recovery diagnostics.')
-  if (
-    !AI_REQUEST_STAGES.includes(data.stage as AiRequestStage) ||
-    typeof data.elapsedMs !== 'number' ||
-    !Number.isFinite(data.elapsedMs) ||
-    data.elapsedMs < 0 ||
-    (data.lastStage !== undefined &&
-      !AI_REQUEST_STAGES.includes(data.lastStage as AiRequestStage))
-  )
-    throw new Error('Invalid AI request progress.')
-  for (const key of ['receivedBytes', 'httpStatus'] as const)
-    if (
-      data[key] !== undefined &&
-      (!Number.isSafeInteger(data[key]) || Number(data[key]) < 0)
-    )
-      throw new Error('Invalid AI request progress counter.')
-  if (
-    data.providerRequestId !== undefined &&
-    (typeof data.providerRequestId !== 'string' || data.providerRequestId.length > 200)
-  )
-    throw new Error('Invalid provider request ID.')
-  return {
-    ...identity,
-    ...(data.recovery === undefined
-      ? {}
-      : { recovery: JSON.parse(JSON.stringify(data.recovery)) as JsonObject }),
-    stage: data.stage as AiRequestStage,
-    elapsedMs: data.elapsedMs,
-    ...(data.lastStage === undefined
-      ? {}
-      : { lastStage: data.lastStage as AiRequestStage }),
-    ...(data.receivedBytes === undefined
-      ? {}
-      : { receivedBytes: data.receivedBytes as number }),
-    ...(data.httpStatus === undefined ? {} : { httpStatus: data.httpStatus as number }),
-    ...(data.providerRequestId === undefined
-      ? {}
-      : { providerRequestId: data.providerRequestId as string })
-  }
-}
-export type AiIpcResult<T> =
-  | { readonly ok: true; readonly value: T }
-  | { readonly ok: false; readonly error: string; readonly details?: JsonObject }
 export class AiRequestError extends Error {
   constructor(
     message: string,
@@ -177,31 +117,6 @@ export function parseAiIdentity(value: unknown): AiDecisionIdentity {
     matchId: requiredString(value.matchId, 'matchId'),
     requestId: requiredString(value.requestId, 'requestId'),
     expectedRevision: value.expectedRevision as number
-  }
-}
-export function parseAiSettings(value: unknown): AiSettings {
-  if (
-    !isRecord(value) ||
-    typeof value.enabled !== 'boolean' ||
-    !['azure-openai', 'openrouter', 'none'].includes(String(value.provider)) ||
-    !isAiReasoningEffort(value.reasoningEffort) ||
-    !Number.isSafeInteger(value.maxCompletionTokens) ||
-    Number(value.maxCompletionTokens) < 1 ||
-    Number(value.maxCompletionTokens) > 128000 ||
-    (value.maxContextBytes !== undefined &&
-      (!Number.isSafeInteger(value.maxContextBytes) ||
-        Number(value.maxContextBytes) < 1000 ||
-        Number(value.maxContextBytes) > 200_000))
-  )
-    throw new Error('Invalid AI settings.')
-  return {
-    enabled: value.enabled,
-    provider: value.provider as AiProviderId,
-    reasoningEffort: value.reasoningEffort,
-    modelId: requiredString(value.modelId, 'modelId'),
-    maxCompletionTokens: value.maxCompletionTokens as number,
-    maxContextBytes:
-      (value.maxContextBytes as number | undefined) ?? AI_REQUEST_LIMITS.maxContextBytes
   }
 }
 export function parseAiDecisionRequest(value: unknown): AiDecisionRequest {
@@ -272,46 +187,4 @@ export function parseAiDecisionResponse(value: unknown): AiDecisionResponse {
       ? {}
       : { usage: JSON.parse(JSON.stringify(data.usage)) as JsonObject })
   }
-}
-
-export function aiIpcSuccess<T>(value: T): AiIpcResult<T> {
-  return { ok: true, value }
-}
-
-export function aiIpcFailure(error: unknown): AiIpcResult<never> {
-  return {
-    ok: false,
-    error: error instanceof Error ? error.message : String(error),
-    ...(error instanceof AiRequestError && error.details
-      ? { details: error.details }
-      : {})
-  }
-}
-
-export function parseAiIpcResult<T>(
-  value: unknown,
-  parse: (candidate: unknown) => T
-): AiIpcResult<T> {
-  if (!isRecord(value) || typeof value['ok'] !== 'boolean') {
-    throw new Error('AI IPC returned an invalid envelope.')
-  }
-  if (!value['ok']) {
-    return {
-      ok: false,
-      error: requiredString(value['error'], 'AI IPC error'),
-      ...(isRecord(value['details'])
-        ? { details: JSON.parse(JSON.stringify(value['details'])) as JsonObject }
-        : {})
-    }
-  }
-  return aiIpcSuccess(parse(value['value']))
-}
-
-export function unwrapAiIpcResult<T>(
-  value: unknown,
-  parse: (candidate: unknown) => T
-): T {
-  const result = parseAiIpcResult(value, parse)
-  if (!result.ok) throw new AiRequestError(result.error, result.details)
-  return result.value
 }

@@ -977,7 +977,6 @@ describe('Expert timeout plain-combat rescue', () => {
     const controller = new AiTurnController({
       session,
       api,
-      online: () => true,
       logger: { info() {}, warn() {}, error() {} }
     })
     const commands: TurnMatchCommand[] = []

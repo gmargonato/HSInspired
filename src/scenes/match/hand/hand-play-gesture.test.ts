@@ -271,6 +271,25 @@ describe('cosmetic hand drag lifecycle', () => {
     drag.dispose()
   })
 
+  it('keeps return ownership until the latest animation finishes', async () => {
+    const { drag, context, entry, slot, completions } = setup()
+    drag.end()
+    const rest = layoutHand(2)[0]!
+    const retarget = drag.retargetReturn(entry.slot, rest, 0.2, 0.2)
+    expect(context.returnToHand).toHaveBeenLastCalledWith(slot, rest, 0, 0.2, 0.2)
+    completions[0]!()
+    await Promise.resolve()
+    expect(drag.returning).toBe(true)
+    expect(drag.index).toBe(0)
+    completions[1]!()
+    await retarget
+    expect(drag.index).toBeNull()
+    expect(drag.returning).toBe(false)
+    expect(slot.suppressPlayableOutline).toHaveBeenLastCalledWith(false)
+    expect(context.onReturned).not.toHaveBeenCalled()
+    drag.dispose()
+  })
+
   it('returns the original card even when its index changes during a return', async () => {
     const { drag, context, entries, entry, slot, completions } = setup()
     entries.unshift({ ...entry, slot: new Container() as HandEntry['slot'] })

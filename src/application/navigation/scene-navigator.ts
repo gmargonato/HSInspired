@@ -164,7 +164,6 @@ const SCENE_FACTORIES: Record<StandardSceneId, SceneFactory> = {
         dependencies.services.arenaStore,
         dependencies.services.logger,
         dependencies.router,
-        dependencies.services.ai,
         dependencies.services.matchLogs,
         (message) => dependencies.services.dialogs.error(message),
         dependencies.services.progressionStore,
@@ -187,7 +186,6 @@ const SCENE_FACTORIES: Record<StandardSceneId, SceneFactory> = {
       dependencies.services.arenaStore,
       dependencies.services.logger,
       dependencies.router,
-      dependencies.services.ai,
       dependencies.services.matchLogs,
       (message) => dependencies.services.dialogs.error(message),
       dependencies.services.progressionStore,
@@ -337,26 +335,27 @@ export class SceneNavigator implements SceneRouter {
     let operation: (() => Promise<unknown>) | null = null
 
     if (current instanceof MenuSettingsScene || current instanceof GameSettingsScene) {
-      operation = () => this.sceneManager.pop()
+      operation = () => this.sceneManager.pop(current)
     } else if (current instanceof GameScene) {
       const gameScene = current
-      operation = () =>
-        this.sceneManager.push(
-          new GameSettingsScene({
-            boardCorners: {
-              ...gameScene.boardCorners,
-              onSelect: (id) => gameScene.setBoardCorner(id)
-            },
-            onConcede: async () => {
-              await this.sceneManager.pop()
-              gameScene.concede()
-            },
-            onQuit: async () => {
-              await this.sceneManager.pop()
-              await this.navigate(gameScene.createExitRoute())
-            }
-          })
-        )
+      if (gameScene.hasMatchEnded) return false
+      operation = () => {
+        const overlay = new GameSettingsScene({
+          boardCorners: {
+            ...gameScene.boardCorners,
+            onSelect: (id) => gameScene.setBoardCorner(id)
+          },
+          onConcede: async () => {
+            await this.sceneManager.pop(overlay)
+            if (gameScene.isLoaded && !gameScene.hasMatchEnded) gameScene.concede()
+          },
+          onQuit: async () => {
+            await this.sceneManager.pop(overlay)
+            if (gameScene.isLoaded) await this.navigate(gameScene.createExitRoute())
+          }
+        })
+        return this.sceneManager.push(overlay, { keepUnderlyingActive: true })
+      }
     } else if (
       current instanceof MainMenuScene ||
       current instanceof DeckSelectionScene ||
@@ -524,7 +523,6 @@ export class SceneNavigator implements SceneRouter {
           this.services.arenaStore,
           this.services.logger,
           this,
-          this.services.ai,
           this.services.matchLogs,
           (message) => this.services.dialogs.error(message),
           this.services.progressionStore,

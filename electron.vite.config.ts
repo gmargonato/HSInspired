@@ -61,11 +61,6 @@ export default defineConfig(({ mode }) => ({
             ? 'src/application/renderer-production-placeholder.ts'
             : 'src/dev-tools/vfx-lab/vfx-lab-scene.ts'
         ),
-        '@dev-layout-inspector': resolve(
-          mode === 'production'
-            ? 'src/application/renderer-production-placeholder.ts'
-            : 'src/dev-tools/layout-inspector/index.ts'
-        ),
         '@dev-match-performance': resolve(
           mode === 'production'
             ? 'src/application/renderer-production-placeholder.ts'

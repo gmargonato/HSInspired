@@ -298,8 +298,18 @@ export class GameHandView {
           // Existing cards remain hoverable while the incoming card travels.
           // Use interruptible tweens instead of a layout timeline so changing
           // hover cannot fight the reflow or delay completion of the draw.
-          if (!isHandOwnedSlot(entry.slot, this.layer) || this.drag.index === index)
-            return Promise.resolve()
+          if (!isHandOwnedSlot(entry.slot, this.layer)) return Promise.resolve()
+          if (this.drag.index === index) {
+            if (!this.drag.returning) return Promise.resolve()
+            // A draw can change the fan while this card is returning. Retarget
+            // its return instead of leaving it at the previous hand's pose.
+            return this.drag.retargetReturn(
+              entry.slot,
+              transform,
+              opts.positionDuration,
+              opts.scaleDuration
+            )
+          }
           const hoveredIndex = entry.slot === this.localHoveredSlot ? index : -1
           entry.displaced = hoveredIndex >= 0
           this.animateHoverTarget(

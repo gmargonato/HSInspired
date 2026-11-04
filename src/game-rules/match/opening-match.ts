@@ -722,7 +722,7 @@ export function createOpeningMatch(
         creationOrdinal: initialEntityOrdinal++,
         cost: heroPowerBonus === 'cost-one' ? 1 : heroPower.cost,
         baseCost: heroPower.cost,
-        available: false,
+        available: true,
         targetType: heroPower.targeting,
         targetingGranted: null,
         enchantments: []
@@ -893,8 +893,7 @@ export function createOpeningMatch(
     const playerOneMana = growMana(playerOne.mana)
     nextPlayers[0] = {
       ...drawn.player,
-      mana: playerOneMana,
-      heroPower: { ...drawn.player.heroPower, available: true }
+      mana: playerOneMana
     }
     state = {
       ...state,

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { enumerateLegalCommands } from '../../../game-rules/match/ai'
 import type { TurnMatchCommand } from '../../../game-rules/match'
 import { createMatchScenario } from '../../../game-rules/match/testing/match-scenario-builder'
@@ -534,7 +534,8 @@ describe('hardware local AI', () => {
     expect(selected && session.match.dispatch(selected.command).accepted).toBe(true)
   })
 
-  it('satisfies the existing turn-controller protocol', async () => {
+  it('satisfies the local turn-controller protocol while offline', async () => {
+    vi.stubGlobal('navigator', { onLine: false })
     const scenario = createMatchScenario({ seed: 0x404 })
     const session = new GameBoardSession({
       setup: scenario.setup,
@@ -599,6 +600,7 @@ describe('hardware local AI', () => {
       controller.recordExecution(decision!, result)
     } finally {
       controller.dispose()
+      vi.unstubAllGlobals()
     }
   }, 30_000)
 

@@ -59,9 +59,9 @@ export class ResolutionSelector extends Container {
     const title = new Text({
       text: 'Resolution',
       style: {
-        fontFamily: 'Belwe',
-        fontSize: 42,
-        fill: 0xffffff
+        fontFamily: 'Franklin Gothic Condensed',
+        fontSize: 36,
+        fill: 0xf5e3b6
       }
     })
     title.label = 'settings.resolution-title'
@@ -78,7 +78,7 @@ export class ResolutionSelector extends Container {
     this.valueLabel = new Text({
       text: '',
       style: {
-        fontFamily: 'Belwe',
+        fontFamily: 'Franklin Gothic Condensed',
         fontSize: 28,
         fill: 0x120d09,
         align: 'center'
@@ -126,6 +126,7 @@ export class ResolutionSelector extends Container {
   private openOptions(): void {
     if (this.open || this.applying || this.options.length === 0) return
     this.onOpen()
+    this.zIndex = 10
     this.open = true
     this.dismissLayer.visible = true
     this.optionsLayer.visible = true
@@ -134,6 +135,7 @@ export class ResolutionSelector extends Container {
 
   closeOptions(): void {
     if (!this.open) return
+    this.zIndex = 0
     this.open = false
     this.dismissLayer.visible = false
     this.optionsLayer.visible = false
@@ -190,7 +192,7 @@ export class ResolutionSelector extends Container {
       const label = new Text({
         text: formatResolution(resolution),
         style: {
-          fontFamily: 'Belwe',
+          fontFamily: 'Franklin Gothic Condensed',
           fontSize: 26,
           fill: 0xf5e3b6
         }

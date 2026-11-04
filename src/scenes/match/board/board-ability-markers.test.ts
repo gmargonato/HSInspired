@@ -35,6 +35,49 @@ function markersForTrigger(trigger: CardTrigger) {
 }
 
 describe('board ability markers', () => {
+  it('removes Ancient of Yore dormant-only markers on awakening', () => {
+    const definition = CARD_CATALOG.require('future_past_ancient_of_yore')
+    const minion = {
+      instanceId: 'yore',
+      cardId: definition.id,
+      attack: 5,
+      health: 5,
+      maxHealth: 5,
+      keywords: [],
+      summonedOnTurn: 1,
+      lastAttackedOnTurn: null
+    } as BoardMinion
+    expect(boardAbilityMarkers(definition).trigger).toBe(true)
+    expect(
+      boardMinionAbilityMarkers({ ...minion, dormant: true }, definition, 1).trigger
+    ).toBe(true)
+    expect(boardMinionAbilityMarkers(minion, definition, 3).trigger).toBe(false)
+    expect(
+      boardMinionAbilityMarkers(
+        minion,
+        { ...definition, effects: [...definition.effects, { trigger: 'on-attack' }] },
+        3
+      ).trigger
+    ).toBe(true)
+    expect(
+      boardMinionAbilityMarkers(
+        {
+          ...minion,
+          grantedTriggers: [
+            {
+              id: 'granted-draw',
+              sourceInstanceId: 'other-minion',
+              trigger: 'end-of-turn',
+              actions: [{ action: 'draw' }]
+            }
+          ]
+        },
+        definition,
+        3
+      ).trigger
+    ).toBe(true)
+  })
+
   it('shows Enrage only while an unsilenced Enrage minion is damaged', () => {
     const grommash = CARD_CATALOG.require('classic_grommash_hellscream')
     const minion = {

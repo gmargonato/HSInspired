@@ -7,11 +7,13 @@ import {
   CARD_PROFILES,
   CARD_STATS,
   CARD_RACE_LAYOUT,
+  CARD_SPELL_RACE_LAYOUT,
   CARD_SILENCE_LAYOUT,
   CARD_TRADEABLE_LAYOUT,
   CARD_RULES_LINE_BREAKS,
   RARITY_GEM_SCALE,
   cardFramePlacement,
+  cardSpellRaceBannerPlacement,
   cardFrameShadowKey,
   cardFrameShadowPlacement,
   cardClassMaskPlacement,
@@ -305,15 +307,25 @@ export function buildCardRenderTree(
     children.push(
       image(
         'race-banner',
-        premium ? 'card.race-banner.premium' : 'card.race-banner',
-        CARD_RACE_LAYOUT.banner,
+        card.type === 'Spell'
+          ? premium
+            ? 'card.race-banner.spell.premium'
+            : 'card.race-banner.spell'
+          : premium
+            ? 'card.race-banner.premium'
+            : 'card.race-banner',
+        card.type === 'Spell'
+          ? cardSpellRaceBannerPlacement(premium)
+          : CARD_RACE_LAYOUT.banner,
         CARD_LAYERS.raceBanner,
         true
       ),
       text(
         'race',
         label,
-        CARD_RACE_LAYOUT.text,
+        card.type === 'Spell'
+          ? CARD_SPELL_RACE_LAYOUT.text[premium ? 'premium' : 'standard']
+          : CARD_RACE_LAYOUT.text,
         CARD_RACE_LAYOUT.style,
         CARD_LAYERS.raceText
       )

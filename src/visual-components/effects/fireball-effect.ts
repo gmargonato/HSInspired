@@ -473,7 +473,13 @@ export class FireballEffect {
       ...missile.map((p) => this.launchSeconds + p.birth + p.life),
       ...impact.map((p) => this.launchSeconds + p.birth + p.life)
     )
-    this.update(0)
+    try {
+      this.update(0)
+    } catch (error) {
+      // The first update renders offscreen passes before the caller owns us.
+      this.dispose()
+      throw error
+    }
   }
 
   update(seconds: number): void {

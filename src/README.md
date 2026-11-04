@@ -108,7 +108,7 @@ predicate blocks history, deck details and board previews during card, attack an
 hero-power gestures, including return animations. Delayed previews check the same
 predicate before activation; modal choices can explicitly expose board inspection.
 
-Expert AI attention samples provisional search candidates as brief, single-object
+Local AI attention samples provisional search candidates as brief, single-object
 inspection gestures. Hand plays move only the considered card back downward,
 preserving the fan's stacking order; board gestures highlight either the source
 or a target, never both. After a 350 ms initial delay, gestures last 600-1000 ms
@@ -117,7 +117,7 @@ are spaced at least 8 seconds apart. Cosmetic randomness does not use the match
 or search RNG. Quiet gaps persist across decisions. Completion clears attention
 immediately without delaying play. Timing lives in
 `scenes/match/ai/ai-attention-controller.ts`; the downward hand offset lives in
-`GAME_BOARD_LAYOUT.remoteHand.attentionDrop`. Easy and API modes do not emit
+`GAME_BOARD_LAYOUT.remoteHand.attentionDrop`. Both difficulty presets use the same
 attention updates. Opponent backs retain card-instance associations internally
 through draw, play, discard, and return presentation; faces remain concealed.
 
@@ -153,6 +153,12 @@ stay behind mana/health symbols without splitting the cached card face; the same
 mask follows the card's perspective during dragging.
 
 ## Startup
+
+Menu startup and match loading share `visual-components/cards/card-render-warmup.ts`
+to draw representative complete cards in standard and premium finishes before use.
+Match loading also uploads healing textures and exercises healing/projectile shader
+passes through `scenes/match/loading/spell-vfx-warmup.ts`. These offscreen samples
+release their temporary visuals and render targets while retaining shared programs.
 
 Normal startup shows the HTML `app-start.png` splash while application-owned
 menu resources load and upload to the GPU. `application/prepare-menu-resources.ts`
@@ -238,3 +244,11 @@ the repository's root `assets` folder. Build output retains Electron's
 See [AGENTS.md](../AGENTS.md) for ownership rules and
 [the source-layout tracker](../docs/source-layout.md) for the move inventory,
 validation results, and remaining adjacent issues.
+
+AI difficulty is a local resource preset, persisted as `aiDifficulty: easy | expert`.
+The game creates its decision engine in `scenes/match`, without an Electron AI bridge.
+The desktop bridge still owns preferences, saved decks, match logs and other native
+services. Legacy preferences migrate `hardware` to Easy and `hardware-v2`/`api` to
+Expert. Provider configuration and credential loading are retired; existing user key
+files are not deleted. The shared decision types and historical match-log readers
+remain available to local AI and diagnostics.

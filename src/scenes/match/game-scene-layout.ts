@@ -84,7 +84,7 @@ export const GAME_BOARD_LAYOUT = {
     /** Remote (top) minion row; presentation stays empty in this phase. */
     remote: {
       centerX: 985,
-      baselineY: 400,
+      baselineY: 405,
       maxSpan: 900,
       maxStep: 150,
       minionScale: 1
@@ -149,7 +149,7 @@ export const GAME_BOARD_LAYOUT = {
   weapons: {
     /** Local equipped weapon, screen-left of the local hero frame. */
     local: placement(
-      { x: 800, y: 850 },
+      { x: 800, y: 827 },
       { width: 240, height: 210 },
       {
         anchor: CENTER,

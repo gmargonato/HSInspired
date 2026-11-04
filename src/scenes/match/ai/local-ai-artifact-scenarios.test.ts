@@ -2,7 +2,7 @@ import {
   findExpertDelayedDamageRescue,
   EXPERT_DELAYED_DAMAGE_MAX_DISPATCHES
 } from './expert-delayed-damage-rescue'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { asCardId, CARD_CATALOG } from '../../../game-rules/content/cards'
 import {
   canonicalCommandKey,
@@ -9919,6 +9919,382 @@ describe('Yore sweep adverse target regressions', () => {
     expect(inspect(self).penalty).toBe(0)
     expect(session.match.getCheckpoint()).toEqual(before)
   })
+
+  it.each([
+    ['basic_boulderfist_ogre', 'classic_wisp', 30],
+    ['classic_wisp', 'basic_boulderfist_ogre', 25]
+  ] as const)(
+    'rejects unpaid Healing Wave in either joust branch (%s)',
+    (own, enemy, health) => {
+      // Recorded turn 18 public position. Decks below deliberately force each
+      // possible healing amount; this does not reconstruct concealed identities.
+      const session = createSession({
+        seed: 2026110318,
+        turnNumber: 18,
+        aiHeroId: 'thrall',
+        opponentHeroId: 'garrosh',
+        aiMana: 3,
+        aiMaximumMana: 10,
+        aiHealth: 30,
+        aiHeroPowerAvailable: false,
+        opponentHealth: 18,
+        opponentWeapon: { cardId: 'classic_gorehowl', attack: 5, durability: 1 },
+        opponentQuest: { cardId: 'journey_to_ungoro_enter_the_lost_city', progress: 9 },
+        aiBoard: [
+          { cardId: 'classic_baine_bloodhoof', attacksUsedThisTurn: 1, ready: true },
+          { cardId: 'classic_frog' }
+        ],
+        aiHand: [
+          'the_grand_tournament_healing_wave',
+          'the_grand_tournament_healing_wave',
+          'journey_to_ungoro_tidal_surge',
+          'basic_hex',
+          'journey_to_ungoro_tidal_surge'
+        ],
+        aiDeck: [own],
+        opponentDeck: [enemy]
+      })
+      const before = session.match.getCheckpoint()
+      const enemyHeal = playCommand(
+        session,
+        'the_grand_tournament_healing_wave',
+        (target) =>
+          target.kind === 'hero' && target.participantId === session.localParticipantId
+      )
+      const selfHeal = playCommand(
+        session,
+        'the_grand_tournament_healing_wave',
+        (target) =>
+          target.kind === 'hero' && target.participantId === session.remoteParticipantId
+      )
+      const outcome = session.match.analyze((fork) => {
+        const inspection = inspectExpertAction(
+          fork,
+          session.remoteParticipantId,
+          enemyHeal
+        )
+        expect(
+          fork
+            .dispatch(enemyHeal)
+            .state.players.find(
+              (player) => player.participantId === session.localParticipantId
+            )!.hero.health
+        ).toBe(health)
+        return inspection
+      })
+      expect(outcome).toEqual({ penalty: 0.25, reason: 'opponent-heal' })
+      expect(
+        createExpertActionInspector(before, session.remoteParticipantId)(enemyHeal)
+      ).toEqual(outcome)
+      expect(
+        createExpertActionInspector(before, session.remoteParticipantId)(selfHeal)
+          .penalty
+      ).toBe(0)
+      expect(session.match.getCheckpoint()).toEqual(before)
+    }
+  )
+
+  it.each([
+    ['classic_wisp', 'basic_boulderfist_ogre', 8, 10],
+    ['basic_boulderfist_ogre', 'classic_wisp', 9, 4]
+  ] as const)(
+    'preserves Healing Wave when only one joust outcome removes Enrage (%s)',
+    (own, enemy, health, attack) => {
+      const session = createSession({
+        seed: 2026110319,
+        aiHeroId: 'thrall',
+        opponentHeroId: 'garrosh',
+        aiMana: 3,
+        aiHealth: 8,
+        aiHand: ['the_grand_tournament_healing_wave'],
+        opponentBoard: [
+          { cardId: 'classic_grommash_hellscream', health: 1, maxHealth: 9 }
+        ],
+        aiDeck: [own],
+        opponentDeck: [enemy]
+      })
+      const command = playCommand(
+        session,
+        'the_grand_tournament_healing_wave',
+        (target) =>
+          target.kind === 'minion' &&
+          target.participantId === session.localParticipantId
+      )
+      const before = session.match.getCheckpoint()
+      session.match.analyze((fork) => {
+        expect(
+          inspectExpertAction(fork, session.remoteParticipantId, command).penalty
+        ).toBe(0)
+        const target = fork
+          .dispatch(command)
+          .state.players.find(
+            (player) => player.participantId === session.localParticipantId
+          )!.board[0]!
+        expect(target.health).toBe(health)
+        expect(target.attack).toBe(attack)
+      })
+      expect(
+        createExpertActionInspector(before, session.remoteParticipantId)(command)
+          .penalty
+      ).toBe(0)
+      expect(session.match.getCheckpoint()).toEqual(before)
+    }
+  )
+
+  it.each(['basic_healing_touch', 'the_grand_tournament_healing_wave'])(
+    'preserves %s healing that removes an enemy damaged bonus',
+    (cardId) => {
+      const session = createSession({
+        seed: 2026110319,
+        aiHeroId: 'thrall',
+        opponentHeroId: 'garrosh',
+        aiMana: 3,
+        aiHand: [cardId],
+        opponentBoard: [{ cardId: 'classic_amani_berserker', health: 2, maxHealth: 3 }]
+      })
+      const command = playCommand(
+        session,
+        cardId,
+        (target) =>
+          target.kind === 'minion' &&
+          target.participantId === session.localParticipantId
+      )
+      const before = session.match.getCheckpoint()
+      expect(
+        createExpertActionInspector(before, session.remoteParticipantId)(command)
+          .penalty
+      ).toBe(0)
+      expect(session.match.getCheckpoint()).toEqual(before)
+    }
+  )
+
+  it('preserves hero healing that enables an undamaged-only follow-up', () => {
+    // Constructed public setup: this is a real engine win, not a recorded match.
+    const session = createSession({
+      seed: 610091,
+      aiHeroId: 'thrall',
+      opponentHeroId: 'garrosh',
+      aiMana: 6,
+      opponentHealth: 23,
+      aiHand: [
+        'the_grand_tournament_healing_wave',
+        'whispers_of_the_old_gods_shadow_strike'
+      ],
+      aiBoard: Array.from({ length: 5 }, () => ({ cardId: 'classic_malygos' })),
+      aiDeck: ['classic_wisp'],
+      opponentDeck: ['basic_boulderfist_ogre']
+    })
+    const enemy = (
+      target: NonNullable<
+        Extract<TurnMatchCommand, { type: 'play-card' }>['targets']
+      >[number]
+    ) => target.kind === 'hero' && target.participantId === session.localParticipantId
+    const wave = playCommand(session, 'the_grand_tournament_healing_wave', enemy)
+    const before = session.match.getCheckpoint()
+    expect(
+      createExpertActionInspector(before, session.remoteParticipantId)(wave).penalty
+    ).toBe(0)
+    session.match.analyze((fork) => {
+      expect(inspectExpertAction(fork, session.remoteParticipantId, wave).penalty).toBe(
+        0
+      )
+      expect(fork.dispatch(wave).accepted).toBe(true)
+      const strike = enumerateLegalCommands(fork, session.remoteParticipantId).find(
+        (command) => command.type === 'play-card' && command.targets?.some(enemy)
+      )!
+      expect(strike).toBeDefined()
+      expect(fork.dispatch(strike).state.winnerId).toBe(session.remoteParticipantId)
+    })
+    expect(session.match.getCheckpoint()).toEqual(before)
+  })
+
+  it.each([
+    'classic_auchenai_soulpriest',
+    'classic_lightwarden',
+    'goblins_vs_gnomes_shadowboxer'
+  ])(
+    'preserves hero-target Healing Wave with a visible %s healing effect',
+    (engine) => {
+      const session = createSession({
+        seed: 2026110320,
+        aiHeroId: 'thrall',
+        opponentHeroId: 'garrosh',
+        aiMana: 3,
+        opponentHealth: 18,
+        aiHand: ['the_grand_tournament_healing_wave'],
+        aiBoard: [{ cardId: engine }]
+      })
+      const command = playCommand(
+        session,
+        'the_grand_tournament_healing_wave',
+        (target) =>
+          target.kind === 'hero' && target.participantId === session.localParticipantId
+      )
+      expect(
+        createExpertActionInspector(
+          session.match.getCheckpoint(),
+          session.remoteParticipantId
+        )(command).penalty
+      ).toBe(0)
+    }
+  )
+
+  it.each([
+    'classic_auchenai_soulpriest',
+    'basic_northshire_cleric',
+    'classic_gadgetzan_auctioneer'
+  ])('preserves Healing Wave with a real %s payoff', (engine) => {
+    const session = createSession({
+      seed: 2026110320,
+      aiHeroId: 'thrall',
+      opponentHeroId: 'garrosh',
+      aiMana: 3,
+      aiHand: ['the_grand_tournament_healing_wave'],
+      aiBoard: [{ cardId: engine }],
+      opponentBoard: [{ cardId: 'basic_chillwind_yeti', health: 2, maxHealth: 5 }]
+    })
+    const command = playCommand(
+      session,
+      'the_grand_tournament_healing_wave',
+      (target) =>
+        target.kind === 'minion' && target.participantId === session.localParticipantId
+    )
+    expect(
+      createExpertActionInspector(
+        session.match.getCheckpoint(),
+        session.remoteParticipantId
+      )(command).penalty
+    ).toBe(0)
+  })
+
+  it.each([
+    [true, 12, 'classic_wisp', 'basic_boulderfist_ogre'],
+    [false, 12, 'classic_wisp', 'basic_boulderfist_ogre'],
+    [true, 1, 'classic_wisp', 'basic_boulderfist_ogre'],
+    [true, 1, 'basic_boulderfist_ogre', 'classic_wisp'],
+    [false, 1, 'classic_wisp', 'basic_boulderfist_ogre'],
+    [false, 1, 'basic_boulderfist_ogre', 'classic_wisp']
+  ] as const)(
+    'uses only known enemy low-health payoffs (%s, %s, %s)',
+    (known, health, own, enemy) => {
+      const built = createAiFixture({
+        seed: 2026110323,
+        aiHeroId: 'thrall',
+        opponentHeroId: 'garrosh',
+        aiMana: 3,
+        opponentHealth: health,
+        aiHand: ['the_grand_tournament_healing_wave'],
+        opponentHand: ['classic_mortal_strike'],
+        aiDeck: [own],
+        opponentDeck: [enemy]
+      })
+      const observed = (player: (typeof built.checkpoint.state.players)[number]) =>
+        player.participantId !== built.localParticipantId
+          ? player
+          : {
+              ...player,
+              hand: player.hand.map((card) => ({
+                ...card,
+                knownTo: known ? [built.aiParticipantId] : []
+              }))
+            }
+      const checkpoint: typeof built.checkpoint = {
+        ...built.checkpoint,
+        state: {
+          ...built.checkpoint.state,
+          players: [
+            observed(built.checkpoint.state.players[0]),
+            observed(built.checkpoint.state.players[1])
+          ]
+        }
+      }
+      const session = new GameBoardSession({
+        setup: built.setup,
+        decks: built.decks,
+        checkpoint
+      })
+      const command = playCommand(
+        session,
+        'the_grand_tournament_healing_wave',
+        (target) =>
+          target.kind === 'hero' && target.participantId === session.localParticipantId
+      )
+      expect(
+        session.match.analyze((fork) =>
+          inspectExpertAction(fork, session.remoteParticipantId, command)
+        ).penalty
+      ).toBe(known ? 0 : 0.25)
+      expect(
+        createExpertActionInspector(checkpoint, session.remoteParticipantId)(command)
+          .penalty
+      ).toBe(known ? 0 : 0.25)
+      expect(session.match.getCheckpoint()).toEqual(checkpoint)
+    }
+  )
+
+  it('preserves a full-health joust used only for its public reveal', () => {
+    const session = createSession({
+      seed: 2026110321,
+      aiHeroId: 'thrall',
+      opponentHeroId: 'garrosh',
+      aiMana: 3,
+      aiHand: ['the_grand_tournament_healing_wave']
+    })
+    const command = playCommand(
+      session,
+      'the_grand_tournament_healing_wave',
+      (target) =>
+        target.kind === 'hero' && target.participantId === session.remoteParticipantId
+    )
+    expect(
+      createExpertActionInspector(
+        session.match.getCheckpoint(),
+        session.remoteParticipantId
+      )(command).penalty
+    ).toBe(0)
+  })
+
+  it.each(['drawWonCard', 'returnSourceFromGraveyard'])(
+    'does not infer pure healing from a joust with %s',
+    (extra) => {
+      const session = createSession({
+        seed: 2026110322,
+        aiHeroId: 'thrall',
+        opponentHeroId: 'garrosh',
+        aiMana: 3,
+        opponentHealth: 18,
+        aiHand: ['the_grand_tournament_healing_wave']
+      })
+      const command = playCommand(
+        session,
+        'the_grand_tournament_healing_wave',
+        (target) =>
+          target.kind === 'hero' && target.participantId === session.localParticipantId
+      )
+      const original = CARD_CATALOG.get.bind(CARD_CATALOG)
+      const mock = vi.spyOn(CARD_CATALOG, 'get').mockImplementation((id) => {
+        const definition = original(id)
+        return id !== 'the_grand_tournament_healing_wave' || !definition
+          ? definition
+          : {
+              ...definition,
+              effects: definition.effects.map((effect) => ({
+                ...effect,
+                actions: effect.actions?.map((action) => ({ ...action, [extra]: true }))
+              }))
+            }
+      })
+      try {
+        expect(
+          session.match.analyze((fork) =>
+            inspectExpertAction(fork, session.remoteParticipantId, command)
+          ).penalty
+        ).toBe(0)
+      } finally {
+        mock.mockRestore()
+      }
+    }
+  )
 
   it('leaves healing-to-damage conversion and actual healing-trigger payoffs unpenalized', () => {
     for (const engine of ['classic_auchenai_soulpriest', 'basic_northshire_cleric']) {

@@ -198,6 +198,9 @@ export class MinionView extends Container {
   private battlecryBannerTimeline: ReturnType<AnimationScope['timeline']> | null = null
   private settleBattlecryBanner: (() => void) | null = null
   private tauntPresented: boolean
+  private tauntEnabled: boolean
+  private legendaryEnabled: boolean
+  private triggerEnabled: boolean
   private baseAttack: number
   private baseHealth: number
   private maxHealth: number
@@ -226,7 +229,10 @@ export class MinionView extends Container {
     super()
     this.premiumSide = model.premiumSide ?? 'local'
     this.premium = model.premium ?? false
-    this.tauntPresented = model.taunt
+    this.tauntPresented = model.taunt && !model.dormant
+    this.tauntEnabled = model.taunt
+    this.legendaryEnabled = model.legendary
+    this.triggerEnabled = model.trigger
     this.label = model.label
     this.baseAttack = model.baseAttack ?? model.attack
     this.baseHealth = model.baseHealth ?? model.maxHealth
@@ -289,7 +295,7 @@ export class MinionView extends Container {
         : textures.taunt
     )
     applyAnchoredPlacement(this.taunt, MINION_LAYOUT.taunt)
-    this.taunt.visible = model.taunt
+    this.taunt.visible = this.tauntPresented
     this.taunt.label = 'minion.taunt'
     this.addChild(this.taunt)
 
@@ -342,7 +348,7 @@ export class MinionView extends Container {
         : textures.legendaryFrame
     )
     applyAnchoredPlacement(this.legendaryFrame, MINION_LAYOUT.legendaryFrame)
-    this.legendaryFrame.visible = model.legendary
+    this.legendaryFrame.visible = this.legendaryEnabled && !this.dormant
     this.legendaryFrame.label = 'minion.frame-legendary'
     this.addChild(this.legendaryFrame)
 
@@ -405,7 +411,7 @@ export class MinionView extends Container {
 
     this.trigger = new Sprite(textures.trigger)
     applyAnchoredPlacement(this.trigger, MINION_LAYOUT.trigger)
-    this.trigger.visible = model.trigger
+    this.trigger.visible = this.triggerEnabled || this.dormant
     this.trigger.label = 'minion.trigger'
     this.addChild(this.trigger)
 
@@ -591,6 +597,7 @@ export class MinionView extends Container {
   setDormant(dormant: boolean): void {
     this.dormant = dormant
     this.updateStatsVisibility()
+    this.updateDecorations()
     this.updateAura()
     if (this.dormantOverlay) this.dormantOverlay.visible = dormant
     if (!dormant) return
@@ -727,10 +734,27 @@ export class MinionView extends Container {
   }
 
   setTaunt(visible: boolean): void {
-    const gained = visible && !this.tauntPresented
-    this.tauntPresented = visible
-    this.invalidateShadowVisibility(this.taunt, visible)
-    this.taunt.visible = visible
+    this.tauntEnabled = visible
+    this.updateDecorations()
+  }
+
+  setLegendary(visible: boolean): void {
+    this.legendaryEnabled = visible
+    this.updateDecorations()
+  }
+
+  private updateDecorations(): void {
+    const taunt = this.tauntEnabled && !this.dormant
+    const legendary = this.legendaryEnabled && !this.dormant
+    const trigger = this.triggerEnabled || this.dormant
+    const gained = taunt && !this.tauntPresented
+    this.tauntPresented = taunt
+    this.invalidateShadowVisibility(this.taunt, taunt)
+    this.invalidateShadowVisibility(this.legendaryFrame, legendary)
+    this.invalidateShadowVisibility(this.trigger, trigger)
+    this.taunt.visible = taunt
+    this.legendaryFrame.visible = legendary
+    this.trigger.visible = trigger
     this.updateTauntOpacity()
     if (gained) this.presentTauntPop()
   }
@@ -805,8 +829,8 @@ export class MinionView extends Container {
   }
 
   setTrigger(visible: boolean): void {
-    this.invalidateShadowVisibility(this.trigger, visible)
-    this.trigger.visible = visible
+    this.triggerEnabled = visible
+    this.updateDecorations()
   }
 
   setInspire(visible: boolean): void {

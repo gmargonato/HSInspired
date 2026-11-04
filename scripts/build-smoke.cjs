@@ -44,7 +44,6 @@ const devOnlyMarkers = [
   'dev-tools/outline-lab',
   'dev-tools/hero-power-anim',
   'dev-tools/vfx-lab',
-  'dev-tools/layout-inspector',
   'dev-tools/runtime',
   'runMatchPerformanceBenchmark',
   'VITE_DEV_START_ROUTE'
@@ -62,6 +61,31 @@ if (leakedMarkers.length > 0) {
   )
 }
 
+// External AI transports must not return through either desktop or renderer output.
+walk(join(process.cwd(), 'out', 'main'))
+walk(join(process.cwd(), 'out', 'preload'))
+const externalAiMarkers = [
+  'openrouter.ai',
+  'azure-openai',
+  '/chat/completions',
+  'HSINSPIRED_AI_API_KEY',
+  'HSINSPIRED_AZURE_OPENAI_API_KEY',
+  'HSINSPIRED_OPENROUTER_API_KEY',
+  'ai:decide',
+  'ai:settings',
+  'ai-key.local.txt',
+  'openrouter-key.local.txt'
+]
+for (const path of new Set(textFiles)) {
+  const source = readFileSync(path, 'utf8')
+  const markers = externalAiMarkers.filter((marker) => source.includes(marker))
+  if (markers.length) {
+    throw new Error(
+      `Production build contains external AI runtime: ${path}: ${markers.join(', ')}`
+    )
+  }
+}
+
 console.log(
-  `Build smoke check passed (${textFiles.length} renderer output files inspected).`
+  `Build smoke check passed (${new Set(textFiles).size} output files inspected).`
 )

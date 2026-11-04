@@ -271,7 +271,7 @@ export class CollectionView extends Actor {
     await this.applyCollectionFilters(true)
   }
 
-  /** Re-applies deck copy-limit dimming to the current page. */
+  /** Re-applies deck copy-limit indicators to the current page. */
   refreshCompletionState(): void {
     this.updateCollectionCardCompletionState()
   }

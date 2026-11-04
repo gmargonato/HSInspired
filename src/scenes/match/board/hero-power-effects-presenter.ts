@@ -136,14 +136,6 @@ export class HeroPowerEffectsPresenter {
     this.layer.interactiveChildren = false
   }
 
-  async reveal(): Promise<void> {
-    await Promise.all([...this.views.values()].map((view) => view.flipUp()))
-  }
-
-  async refresh(participantId: PlayerId): Promise<void> {
-    await this.views.get(participantId)?.flipUp()
-  }
-
   async syncAvailability(participantId: PlayerId, available: boolean): Promise<void> {
     const view = this.views.get(participantId)
     if (!view || view.destroyed) return

@@ -10,11 +10,10 @@ module.exports = {
       id: 'ai-decisioning',
       name: 'AI decisioning',
       responsibility:
-        'Builds fair observations and legal turn policies for one remote strategy choice.',
+        'Builds fair observations and local search policies for legal turn choices.',
       roots: [
         'src/game-rules/match/ai/',
         'src/scenes/match/ai/',
-        'src/desktop/main/services/azure-openai-ai-service',
         'src/desktop/main/services/ai-',
         'src/desktop/contracts/ipc/ai.ts'
       ],

@@ -1,7 +1,6 @@
 import { app, shell, screen, BrowserWindow } from 'electron'
 import { writeFile } from 'node:fs/promises'
 import { isAbsolute, join } from 'path'
-import { parseMatchLogObject } from '../contracts/ipc/match-logs'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import icon from '../../../assets/icon.png?asset'
 import { DeckRepository } from './services/deck-repository'
@@ -15,9 +14,6 @@ import { PreferencesRepository } from './services/preferences-repository'
 import { registerPreferencesIpc } from './services/preferences-ipc'
 import { registerWindowAttentionIpc } from './services/window-attention-ipc'
 import { installSceneMenu } from './dev-menu'
-import { loadAiConfig } from './services/ai-config'
-import { registerAiIpc } from './services/ai-ipc'
-import { AiDecisionService } from './services/ai-decision-service'
 import { registerPlayerStatsIpc } from './services/player-stats-ipc'
 import { PlayerStatsRepository } from './services/player-stats-repository'
 import { ArenaRepository } from './services/arena-repository'
@@ -174,20 +170,6 @@ void app
     electronApp.setAppUserModelId('com.hsinspired.app')
 
     const appPath = app.getAppPath()
-    const aiService = new AiDecisionService({
-      loadConfig: () =>
-        loadAiConfig({
-          configPath: join(appPath, 'config', 'ai.json'),
-          azureKeyPaths: [
-            join(appPath, 'config', 'ai-key.local.txt'),
-            join(app.getPath('userData'), 'ai-key.local.txt')
-          ],
-          openRouterKeyPaths: [
-            join(appPath, 'config', 'openrouter-key.local.txt'),
-            join(app.getPath('userData'), 'openrouter-key.local.txt')
-          ]
-        })
-    })
     matchLogs = new MatchLogRepository(
       matchPerformanceRoot
         ? join(matchPerformanceRoot, 'match-logs')
@@ -198,9 +180,7 @@ void app
     await matchLogs
       .initialize()
       .catch((error) => console.error('Could not initialize match logging:', error))
-    registerMatchLogIpc(matchLogs, async () =>
-      parseMatchLogObject(await aiService.settings())
-    )
+    registerMatchLogIpc(matchLogs)
     if (is.dev) {
       registerCardClassBuilderIpc(
         new CardClassBuilderRepository(
@@ -214,7 +194,6 @@ void app
         new VfxTemplateRepository(join(appPath, 'config', 'vfx-templates.json'))
       )
     }
-    registerAiIpc(aiService)
     registerDeckIpc(new DeckRepository(join(app.getPath('userData'), 'decks.json')))
     registerPreferencesIpc(
       new PreferencesRepository(join(app.getPath('userData'), 'preferences.json'))

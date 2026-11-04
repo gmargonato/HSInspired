@@ -1,3 +1,6 @@
+import { reviewEquivalentTrade } from './expert-equivalent-trade'
+import { expertAttackSetupPreference } from './expert-resource-preference'
+import { createExpertActionInspector } from './expert-action-outcome'
 import { reviewChanceAttackOrder, hasChanceWeaponSetup } from './expert-chance-order'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
@@ -14,12 +17,14 @@ import { GameBoardSession } from '../game-board-session'
 import { createExpertAttackOrderInspector } from './expert-action-ordering'
 import recorded from './expert-tactical-recorded-states.json'
 import { reviewCommittedActionOrder } from './expert-committed-order'
+import { reviewRedundantAttackPrefix } from './expert-redundant-attack'
 import { reviewRedundantHealingPrefix } from './expert-redundant-healing'
 import { reviewRedundantSpellPrefix } from './expert-redundant-spell'
 import * as redundantSpellReview from './expert-redundant-spell'
 import { createOpeningMatchFromCheckpoint } from '../../../game-rules/match/opening-match'
 import { createFairHypothesisCheckpoint } from '../../../game-rules/match/ai/fair-hypothesis-checkpoint'
 import { asCardId, CARD_CATALOG } from '../../../game-rules/content'
+import { CURATED_OPPONENT_DECKS } from '../../../game-rules/decks/curated-opponent-decks'
 import healingRecorded from './expert-redundant-healing-recorded.json'
 import { ExpertAiDecisionApi } from './expert-ai-decision-api'
 import { LocalAiDecisionApi } from './local-ai-decision-api'
@@ -2073,4 +2078,635 @@ describe('complete-turn redundant damage spell review', () => {
     vi.mocked(performance.now).mockReturnValueOnce(0).mockReturnValue(25)
     expect(f.review().stats).toMatchObject({ dispatches: 0, abstained: true })
   })
+})
+
+describe('Recorded summon dependency and unpaid friendly target controls', () => {
+  function setupPreference(options: Partial<AiFixtureOptions> = {}) {
+    const session = fixture({
+      aiMana: 3,
+      aiHand: ['basic_murloc_raider'],
+      aiBoard: [{ cardId: 'classic_murloc_tidecaller', ready: true }],
+      ...options
+    })
+    const before = session.match.getCheckpoint()
+    const value = session.match.analyze((root) => {
+      const command = enumerateLegalCommands(root, session.remoteParticipantId).find(
+        (c) => c.type === 'play-card'
+      )!
+      return expertAttackSetupPreference(root, session.remoteParticipantId, command)
+    })
+    expect(session.match.getCheckpoint()).toEqual(before)
+    return value
+  }
+  it('seeds a vanilla tribal summon, not just the recorded Discover card', () =>
+    expect(setupPreference()).toBeGreaterThan(0))
+  it('does not pay for an exhausted source', () =>
+    expect(
+      setupPreference({
+        aiBoard: [{ cardId: 'classic_murloc_tidecaller', ready: false }]
+      })
+    ).toBe(0))
+  it('does not pay for an unrelated summon', () =>
+    expect(setupPreference({ aiHand: ['basic_goldshire_footman'] })).toBe(0))
+  it('does not attribute other live trigger outcomes to the source', () =>
+    expect(
+      setupPreference({
+        aiBoard: [
+          { cardId: 'classic_murloc_tidecaller', ready: true },
+          { cardId: 'classic_knife_juggler', ready: true }
+        ]
+      })
+    ).toBe(0))
+  function ownPenalty(cardId: string, targetId: string) {
+    const session = fixture({
+      aiHeroId: 'anduin',
+      aiMana: 10,
+      aiHand: [cardId],
+      aiBoard: [{ cardId: targetId, ready: true }]
+    })
+    return session.match.analyze((root) => {
+      const command = enumerateLegalCommands(root, session.remoteParticipantId).find(
+        (c) =>
+          c.type === 'play-card' &&
+          c.targets?.[0]?.kind === 'minion' &&
+          c.targets[0].participantId === session.remoteParticipantId
+      )!
+      expect(command).toBeDefined()
+      return createExpertActionInspector(
+        session.match.getCheckpoint(),
+        session.remoteParticipantId,
+        () => false
+      )(command).penalty
+    })
+  }
+  it('warns against pure own-minion destruction', () =>
+    expect(
+      ownPenalty('basic_shadow_word_pain', 'basic_goldshire_footman')
+    ).toBeGreaterThan(0))
+  it('preserves a deathrattle payoff', () =>
+    expect(ownPenalty('basic_shadow_word_pain', 'classic_loot_hoarder')).toBe(0))
+  it('preserves damage-trigger draw', () =>
+    expect(ownPenalty('basic_elven_archer', 'classic_acolyte_of_pain')).toBe(0))
+  it('preserves removing a future board-wipe source', () =>
+    expect(ownPenalty('basic_shadow_word_pain', 'classic_doomsayer')).toBe(0))
+  it('preserves removing a healing-to-damage replacement aura', () =>
+    expect(ownPenalty('basic_shadow_word_pain', 'classic_auchenai_soulpriest')).toBe(0))
+  it('preserves enrage setup', () =>
+    expect(ownPenalty('basic_elven_archer', 'classic_amani_berserker')).toBe(0))
+})
+
+describe('Equivalent plain-target finishing review', () => {
+  function trade(options: Partial<AiFixtureOptions> = {}, stop = () => false) {
+    const session = fixture({
+      aiMana: 0,
+      aiHand: [],
+      aiHeroPowerAvailable: false,
+      aiBoard: [{ cardId: 'basic_silver_hand_recruit', ready: true }],
+      opponentBoard: [
+        { cardId: 'basic_chillwind_yeti', attack: 1, health: 5, maxHealth: 5 },
+        { cardId: 'basic_chillwind_yeti', attack: 1, health: 1, maxHealth: 5 }
+      ],
+      ...options
+    })
+    const checkpoint = session.match.getCheckpoint()
+    const target = checkpoint.state.players.find(
+      (p) => p.participantId !== session.remoteParticipantId
+    )!.board[0]!
+    const selected = session.match.analyze((root) =>
+      enumerateLegalCommands(root, session.remoteParticipantId).find(
+        (c) =>
+          c.type === 'attack-character' &&
+          c.defender.kind === 'minion' &&
+          c.defender.instanceId === target.instanceId
+      )
+    )!
+    return {
+      session,
+      selected,
+      result: reviewEquivalentTrade(
+        checkpoint,
+        session.remoteParticipantId,
+        selected,
+        [],
+        stop,
+        () => 0
+      )
+    }
+  }
+  it('finishes an equivalent wounded target with the same sacrifice', () => {
+    const { session, result } = trade()
+    const enemy = session
+      .getState()
+      .players.find((p) => p.participantId !== session.remoteParticipantId)!
+    expect(result.command).toMatchObject({
+      defender: { instanceId: enemy.board[1]!.instanceId }
+    })
+  })
+  it('preserves a committed summon after the sacrifice', () => {
+    const { session, selected } = trade({
+      aiMana: 2,
+      aiHand: ['knights_of_the_frozen_throne_righteous_protector']
+    })
+    const play = session.match.analyze((root) =>
+      enumerateLegalCommands(root, session.remoteParticipantId).find(
+        (c) => c.type === 'play-card'
+      )
+    )!
+    const result = reviewEquivalentTrade(
+      session.match.getCheckpoint(),
+      session.remoteParticipantId,
+      selected,
+      [aiActionIntent(play, session.localParticipantId)],
+      () => false,
+      () => 0
+    )
+    expect(result.command).not.toBeNull()
+  })
+  it('does not inspect concealed target provenance', () => {
+    const { session, selected } = trade()
+    const checkpoint = session.match.getCheckpoint()
+    const changed = {
+      ...checkpoint,
+      state: {
+        ...checkpoint.state,
+        players: checkpoint.state.players.map((p) =>
+          p.participantId !== session.remoteParticipantId
+            ? {
+                ...p,
+                board: p.board.map((m, i) => ({
+                  ...m,
+                  startedInDeck: i === 0,
+                  concealedDeathrattleChoice: i
+                }))
+              }
+            : p
+        ) as unknown as typeof checkpoint.state.players
+      }
+    }
+    expect(
+      reviewEquivalentTrade(
+        changed,
+        session.remoteParticipantId,
+        selected,
+        [],
+        () => false,
+        () => 0
+      ).command
+    ).not.toBeNull()
+  })
+  it('does not replace an immediate kill with another', () => {
+    expect(
+      trade({ aiBoard: [{ cardId: 'basic_chillwind_yeti', attack: 5, ready: true }] })
+        .result.command
+    ).toBeNull()
+  })
+  it('rejects targets with different retaliation', () => {
+    expect(
+      trade({
+        opponentBoard: [
+          { cardId: 'basic_chillwind_yeti', attack: 1, health: 5, maxHealth: 5 },
+          { cardId: 'basic_chillwind_yeti', attack: 2, health: 1, maxHealth: 5 }
+        ]
+      }).result.command
+    ).toBeNull()
+  })
+  it('rejects deathrattle targets', () => {
+    expect(
+      trade({
+        opponentBoard: [
+          { cardId: 'classic_loot_hoarder', attack: 1, health: 5, maxHealth: 5 },
+          { cardId: 'classic_loot_hoarder', attack: 1, health: 1, maxHealth: 5 }
+        ]
+      }).result.command
+    ).toBeNull()
+  })
+  it('abstains when attack reveals a drawn card', () => {
+    expect(
+      trade({ aiBoard: [{ cardId: 'classic_acolyte_of_pain', ready: true }] }).result
+        .command
+    ).toBeNull()
+  })
+  it('abstains on secrets', () => {
+    expect(
+      trade({ opponentSecrets: [{ cardId: 'classic_ice_barrier' }] }).result.command
+    ).toBeNull()
+  })
+  it('abstains when the budget expires', () => {
+    expect(trade({}, () => true).result.command).toBeNull()
+  })
+})
+
+describe('Bounded attack omission before a complete board bounce', () => {
+  function bounceFixture(options: Partial<AiFixtureOptions> = {}) {
+    const session = fixture({
+      aiHeroId: 'valeera',
+      opponentHeroId: 'garrosh',
+      turnNumber: 12,
+      aiMana: 6,
+      aiMaximumMana: 6,
+      aiHealth: 30,
+      aiArmor: 5,
+      opponentHealth: 23,
+      aiQuest: {
+        cardId: 'journey_to_ungoro_the_caverns_below',
+        progress: 4,
+        playedNames: { 'Flame Elemental': 4, 'Fire Fly': 3 }
+      },
+      aiHand: [
+        'mean_streets_of_gadgetzan_gadgetzan_ferryman',
+        'basic_vanish',
+        'journey_to_ungoro_igneous_elemental',
+        'journey_to_ungoro_flame_elemental',
+        'journey_to_ungoro_flame_elemental',
+        'journey_to_ungoro_flame_elemental',
+        'whispers_of_the_old_gods_bilefin_tidehunter'
+      ],
+      aiBoard: [
+        {
+          cardId: 'journey_to_ungoro_flame_elemental',
+          health: 1,
+          maxHealth: 2,
+          ready: true
+        },
+        { cardId: 'journey_to_ungoro_fire_fly', health: 1, maxHealth: 2, ready: true }
+      ],
+      opponentBoard: [
+        { cardId: 'blackrock_mountain_grim_patron', health: 2, maxHealth: 3 },
+        { cardId: 'blackrock_mountain_grim_patron' },
+        { cardId: 'one_night_in_karazhan_pompous_thespian' }
+      ],
+      opponentHand: Array<string>(5).fill('basic_bloodfen_raptor'),
+      aiDeck: ['basic_bloodfen_raptor'],
+      opponentDeck: ['basic_bloodfen_raptor'],
+      ...options
+    })
+    const state = session.getState(),
+      actor = session.remoteParticipantId,
+      enemy = session.localParticipantId
+    const self = state.players.find((p) => p.participantId === actor)!,
+      opponent = state.players.find((p) => p.participantId === enemy)!
+    const attack: TurnMatchCommand = {
+      type: 'attack-character',
+      participantId: actor,
+      attacker: { kind: 'minion', instanceId: self.board[0]!.instanceId },
+      defender: { kind: 'minion', instanceId: opponent.board.at(-1)!.instanceId }
+    }
+    const bounce: TurnMatchCommand = {
+      type: 'play-card',
+      participantId: actor,
+      cardInstanceId: self.hand.find((c) => c.cardId === 'basic_vanish')!.instanceId
+    }
+    const end: TurnMatchCommand = { type: 'end-turn', participantId: actor }
+    const intents = [attack, bounce, end].map((command) =>
+      aiActionIntent(command, enemy)
+    )
+    return { session, actor, intents, attack, bounce, end }
+  }
+
+  beforeEach(() => vi.spyOn(performance, 'now').mockReturnValue(0))
+
+  it('retains the Flame Elemental and quest progress on the logged Rogue setup', () => {
+    const { session, actor, intents, bounce, end } = bounceFixture()
+    const checkpoint = session.match.getCheckpoint()
+    const result = reviewRedundantAttackPrefix(checkpoint, actor, intents)
+    expect(result.commands).toEqual([bounce, end])
+    expect(result.stats.cardsSaved).toBe(1)
+    expect(result.stats.dispatches).toBe(3)
+    expect(session.match.getCheckpoint()).toEqual(checkpoint)
+  })
+
+  it.each<[string, Partial<AiFixtureOptions>]>([
+    [
+      'attacker Deathrattle',
+      { aiBoard: [{ cardId: 'classic_leper_gnome', health: 1, ready: true }] }
+    ],
+    ['damage trigger', { opponentBoard: [{ cardId: 'classic_acolyte_of_pain' }] }],
+    [
+      'friendly damage trigger',
+      {
+        aiBoard: [
+          { cardId: 'journey_to_ungoro_flame_elemental', health: 1, ready: true },
+          { cardId: 'classic_armorsmith' }
+        ]
+      }
+    ],
+    [
+      'random damage trigger',
+      { opponentBoard: [{ cardId: 'knights_of_the_frozen_throne_rotface' }] }
+    ],
+    [
+      'lethal target trade',
+      {
+        opponentBoard: [{ cardId: 'one_night_in_karazhan_pompous_thespian', health: 1 }]
+      }
+    ],
+    [
+      'surviving attacker',
+      { aiBoard: [{ cardId: 'basic_chillwind_yeti', ready: true }] }
+    ],
+    [
+      'own next-draw headroom',
+      { aiHand: ['basic_vanish', ...Array<string>(8).fill('basic_bloodfen_raptor')] }
+    ],
+    [
+      'opponent hand burn',
+      { opponentHand: Array<string>(8).fill('basic_bloodfen_raptor') }
+    ],
+    ['concealed secret', { opponentSecrets: [{ cardId: 'classic_vaporize' }] }],
+    [
+      'other quest progress',
+      { aiQuest: { cardId: 'journey_to_ungoro_open_the_waygate', progress: 5 } }
+    ],
+    [
+      'known future resurrection',
+      { aiDeck: ['whispers_of_the_old_gods_nzoth_the_corruptor'] }
+    ],
+    ['known death counter', { aiDeck: ['blackrock_mountain_volcanic_drake'] }],
+    ['known hand-size consumer', { aiDeck: ['classic_mountain_giant'] }],
+    ['known random hand discard', { aiDeck: ['classic_doomguard'] }],
+    ['known named death condition', { aiDeck: ['naxxramas_feugen'] }],
+    [
+      'opponent next-draw headroom',
+      { opponentHand: Array<string>(7).fill('basic_bloodfen_raptor') }
+    ]
+  ])('preserves the selected line with %s', (_name, options) => {
+    const { session, actor, intents } = bounceFixture(options)
+    expect(
+      reviewRedundantAttackPrefix(session.match.getCheckpoint(), actor, intents)
+        .commands
+    ).toBeNull()
+  })
+
+  it('allows nine-card post-bounce hands while preserving room for a normal draw', () => {
+    const { session, actor, intents } = bounceFixture({
+      aiHand: ['basic_vanish', ...Array<string>(7).fill('basic_bloodfen_raptor')],
+      opponentHand: Array<string>(6).fill('basic_bloodfen_raptor')
+    })
+    expect(
+      reviewRedundantAttackPrefix(session.match.getCheckpoint(), actor, intents)
+        .commands
+    ).not.toBeNull()
+  })
+
+  it('supports the logged Rogue deck, including its known generated-card tools', () => {
+    const { session, actor, intents } = bounceFixture()
+    const checkpoint = session.match.getCheckpoint()
+    const deck = CURATED_OPPONENT_DECKS.find(
+      (entry) => entry.definition.id === 'rogue-crystal-caverns'
+    )!.deck
+    const originalDeckCardIds = Object.entries(deck.cards).flatMap(([id, count]) =>
+      Array.from({ length: count }, () => asCardId(id))
+    )
+    const recordedDeckRoot: OpeningMatchCheckpoint = {
+      ...checkpoint,
+      state: {
+        ...checkpoint.state,
+        players: checkpoint.state.players.map((player) =>
+          player.participantId === actor ? { ...player, originalDeckCardIds } : player
+        ) as unknown as typeof checkpoint.state.players
+      }
+    }
+    expect(
+      reviewRedundantAttackPrefix(recordedDeckRoot, actor, intents).commands
+    ).not.toBeNull()
+    expect(session.match.getCheckpoint()).toEqual(checkpoint)
+  })
+
+  it('abstains on a publicly known opponent deck history consumer without reading concealed ones', () => {
+    const { session, actor, intents } = bounceFixture({
+      opponentDeck: ['blackrock_mountain_volcanic_drake']
+    })
+    const checkpoint = session.match.getCheckpoint()
+    const visible: OpeningMatchCheckpoint = {
+      ...checkpoint,
+      state: {
+        ...checkpoint.state,
+        players: checkpoint.state.players.map((player) =>
+          player.participantId !== actor
+            ? {
+                ...player,
+                deck: player.deck.map((card) => ({ ...card, knownTo: [actor] }))
+              }
+            : player
+        ) as unknown as typeof checkpoint.state.players
+      }
+    }
+    expect(
+      reviewRedundantAttackPrefix(checkpoint, actor, intents).commands
+    ).not.toBeNull()
+    const review = reviewRedundantAttackPrefix(visible, actor, intents)
+    expect(review.commands).toBeNull()
+    expect(review.stats.dispatches).toBe(0)
+    expect(session.match.getCheckpoint()).toEqual(checkpoint)
+  })
+
+  it('requires the complete three-action witness and rejects a stale prepared root', () => {
+    const { session, actor, intents } = bounceFixture()
+    const checkpoint = session.match.getCheckpoint()
+    expect(
+      reviewRedundantAttackPrefix(checkpoint, actor, intents.slice(0, -1)).commands
+    ).toBeNull()
+    expect(
+      reviewRedundantAttackPrefix(checkpoint, actor, intents, () => true).commands
+    ).toBeNull()
+    const fair = createFairHypothesisCheckpoint(checkpoint, actor, 0x71ac71c)
+    expect(
+      reviewRedundantAttackPrefix(checkpoint, actor, intents, () => false, {
+        ...fair,
+        state: { ...fair.state, revision: fair.state.revision + 1 }
+      }).commands
+    ).toBeNull()
+    expect(
+      reviewRedundantAttackPrefix(checkpoint, actor, intents, () => false, fair)
+        .commands
+    ).not.toBeNull()
+  })
+
+  it('abstains when the prepared hypothesis has a death-sensitive hand cost', () => {
+    const { session, actor, intents } = bounceFixture()
+    const checkpoint = session.match.getCheckpoint()
+    const fair = createFairHypothesisCheckpoint(checkpoint, actor, 1212)
+    expect(
+      fair.state.players
+        .find((player) => player.participantId !== actor)!
+        .hand.some((card) => card.cardId === 'blackrock_mountain_volcanic_drake')
+    ).toBe(true)
+    const review = reviewRedundantAttackPrefix(
+      checkpoint,
+      actor,
+      intents,
+      () => false,
+      fair
+    )
+    expect(review.commands).toBeNull()
+    expect(review.stats.dispatches).toBe(3)
+    expect(session.match.getCheckpoint()).toEqual(checkpoint)
+  })
+
+  it.each([1, 2])('rolls back cleanly after aborting after %i dispatches', (limit) => {
+    const { session, actor, intents } = bounceFixture()
+    const checkpoint = session.match.getCheckpoint()
+    // Root eligibility, known-card checks, prepared root, then one call per dispatch.
+    let checks = 0
+    const review = reviewRedundantAttackPrefix(
+      checkpoint,
+      actor,
+      intents,
+      () => ++checks > 3 + limit
+    )
+    expect(review.commands).toBeNull()
+    expect(review.stats.abstained).toBe(true)
+    expect(review.stats.dispatches).toBe(limit)
+    expect(session.match.getCheckpoint()).toEqual(checkpoint)
+  })
+
+  it('does not depend on concealed opponent hand or deck identities', () => {
+    const outcomes = [
+      {
+        opponentHand: Array<string>(5).fill('basic_bloodfen_raptor'),
+        opponentDeck: ['basic_bloodfen_raptor']
+      },
+      {
+        opponentHand: Array<string>(5).fill('classic_brawl'),
+        opponentDeck: ['classic_deathwing']
+      }
+    ].map((options) => {
+      const { session, actor, intents } = bounceFixture(options)
+      return reviewRedundantAttackPrefix(session.match.getCheckpoint(), actor, intents)
+        .commands
+    })
+    expect(outcomes[0]).not.toBeNull()
+    expect(outcomes[0]).toEqual(outcomes[1])
+  })
+
+  it('abstains when the work deadline expires before any dispatch', () => {
+    const { session, actor, intents } = bounceFixture()
+    let now = 0
+    vi.spyOn(performance, 'now').mockImplementation(() => (now += 30))
+    const review = reviewRedundantAttackPrefix(
+      session.match.getCheckpoint(),
+      actor,
+      intents
+    )
+    expect(review.commands).toBeNull()
+    expect(review.stats.dispatches).toBe(0)
+  })
+  it.each(['action', 'plan'] as const)(
+    'repairs the complete %s witness through the decision API',
+    async (phase) => {
+      const { session, actor, intents, bounce, end } = bounceFixture()
+      const actions = () =>
+        aiActions(
+          session,
+          enumerateLegalCommands(
+            {
+              getState: session.match.getState,
+              getPlayInput: session.match.getPlayInput!,
+              getLegality: session.match.getLegality!
+            },
+            actor
+          )
+        )
+      let receive: ((event: MessageEvent<ExpertAiWorkerResponse>) => void) | undefined
+      const worker = {
+        addEventListener(type: string, listener: unknown) {
+          if (type === 'message') receive = listener as typeof receive
+        },
+        postMessage(message: ExpertAiWorkerRequest) {
+          if (message.type !== 'decide') return
+          const selected = actions().find(
+            (action) =>
+              JSON.stringify(
+                aiActionIntent(action.command, session.localParticipantId)
+              ) === JSON.stringify(intents[0])
+          )!
+          const response: AiDecisionResponse = {
+            ...message.request,
+            modelId: 'hardware-local-v2',
+            reason: 'Attack then Vanish',
+            durationMs: 0,
+            finishReason: 'fixture',
+            choice:
+              phase === 'plan'
+                ? {
+                    plan: {
+                      objective: 'Attack then Vanish',
+                      winCheck: '',
+                      lossRisk: '',
+                      candidates: [
+                        {
+                          sequence: ['Attack', 'Vanish'],
+                          budget: '',
+                          endPosition: '',
+                          opponentReply: ''
+                        }
+                      ],
+                      preferred: 0,
+                      firstActionId: selected.id,
+                      checks: []
+                    }
+                  }
+                : {
+                    actionId: selected.id,
+                    intent: intents[0]!,
+                    expectedResult: '',
+                    planUpdate: null
+                  },
+            usage: {
+              decisionPriority: 'strategy',
+              plannedActionIntents: intents
+                .slice(0, 2)
+                .map((intent) => ({ ...intent, targets: [...intent.targets] })),
+              resourceReviewIntents: intents.map((intent) => ({
+                ...intent,
+                targets: [...intent.targets]
+              }))
+            }
+          }
+          receive?.({
+            data: { type: 'decision', requestId: message.request.requestId, response }
+          } as MessageEvent<ExpertAiWorkerResponse>)
+        },
+        terminate() {}
+      }
+      const api = new ExpertAiDecisionApi(
+        session,
+        () => worker as unknown as Worker,
+        () => 0
+      )
+      const request = (nextPhase: 'action' | 'plan'): AiDecisionRequest => ({
+        matchId: 'redundant-attack-controller',
+        requestId: `attack-${phase}-${nextPhase}-${session.getState().revision}`,
+        expectedRevision: session.getState().revision,
+        phase: nextPhase,
+        allowInspection: false,
+        messages: [],
+        actionIds: actions().map((action) => action.id)
+      })
+      const chosen = (response: AiDecisionResponse) => {
+        const id =
+          'plan' in response.choice
+            ? response.choice.plan.firstActionId
+            : 'actionId' in response.choice
+              ? response.choice.actionId
+              : null
+        return actions().find((action) => action.id === id)!.command
+      }
+      try {
+        const before = session.match.getCheckpoint()
+        const response = await api.decide(request(phase))
+        expect(response.usage?.actionOutcomeReason).toBe('redundant-attack-prefix')
+        expect(chosen(response)).toEqual(bounce)
+        expect(session.match.getCheckpoint()).toEqual(before)
+        if (phase === 'plan')
+          expect(chosen(await api.decide(request('action')))).toEqual(bounce)
+        expect(session.dispatch(bounce).accepted).toBe(true)
+        expect(session.findPlayer(session.getState(), actor).hand).toHaveLength(8)
+        expect(chosen(await api.decide(request('action')))).toEqual(end)
+        expect(session.dispatch(end).accepted).toBe(true)
+      } finally {
+        api.dispose()
+      }
+    }
+  )
 })

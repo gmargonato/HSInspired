@@ -144,6 +144,10 @@ export class MatchLogRepository {
       ...(metadata.expertDeckStrategy
         ? { expertDeckStrategy: metadata.expertDeckStrategy }
         : {}),
+      ...(metadata.aiDifficulty ? { aiDifficulty: metadata.aiDifficulty } : {}),
+      ...(metadata.aiResources ? { aiResources: metadata.aiResources } : {}),
+      ...(metadata.aiEngine ? { aiEngine: metadata.aiEngine } : {}),
+      // Older recorded matches retain their original mode metadata.
       ...(metadata.aiMode ? { aiMode: metadata.aiMode } : {}),
       ...(typeof metadata.aiHeroPowerBonusEnabled === 'boolean'
         ? { aiHeroPowerBonusEnabled: metadata.aiHeroPowerBonusEnabled }
@@ -260,7 +264,7 @@ export class MatchLogRepository {
         Number(recording.summary.loggingFailures ?? 0) + 1
       return Promise.reject(new Error(recording.failure))
     }
-    // IPC owns its structured-cloned value; provider records are immutable call-time values.
+    // IPC owns its structured-cloned value; decision records are immutable call-time values.
     const result = new Promise<void>((resolve, reject) => {
       recording.pending.push({
         record: { ...record, sequence: ++recording.sequence },

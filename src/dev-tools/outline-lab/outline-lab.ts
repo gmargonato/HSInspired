@@ -1,4 +1,5 @@
 import { WINDFURY_DEFAULTS } from '../../desktop/contracts/ipc/windfury-tuning'
+import { observeShadows } from '../../visual-components/effects/shadow-visibility'
 import {
   AURA_CATEGORIES,
   AURA_ELEMENT_LABELS,
@@ -162,6 +163,10 @@ function addLabel(
   )
   label.label = `outline-lab.label.${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
   label.eventMode = 'none'
+  const shadow = label.style.dropShadow
+  observeShadows(label, (enabled) => {
+    label.style.dropShadow = enabled ? shadow : false
+  })
   parent.addChild(label)
   return label
 }

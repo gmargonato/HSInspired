@@ -11,6 +11,32 @@ collection, create decks, and play turn-based matches against AI opponents.
 - **Tavern Brawl:** Play a special preset-deck challenge. The current brawl gives
   both players 30 Unstable Portals.
 
+## Settings
+
+Menu settings groups Resolution, Enable 3D elements, and Enable shadows under Graphics, Difficulty and AI Cheats under
+Game, and Cursor Size under Miscellaneous. AI Cheats defaults to On and gives the
+AI either an upgraded starting hero power or a 1-mana starting hero power, with
+an equal chance of each. Off disables both startup bonuses. The saved setting
+applies to future matches across difficulty modes.
+
+Both graphics checkboxes default to On. The 3D setting applies to the next match;
+disabling it uses the 2D hero-power and end-turn controls. The shadow setting applies
+immediately across the application to cast shadows, separate card-frame shadows,
+and UI/text drop shadows. Glows and shadows painted into artwork remain.
+
+Difficulty offers local Easy and Expert opponents; neither requires a network connection
+or an external AI account. Both use the same search policy with different compute
+budgets. Expert keeps its existing budget; Easy starts with a smaller allowance,
+not a calibrated strength target. Existing Easy/Expert choices are preserved. Retired API mode
+and missing or invalid difficulty settings default to Expert. Settings are saved as
+`aiDifficulty` in preferences version 3. Old AI credential files are left untouched
+and are no longer read or bundled.
+
+In-game settings blocks player input while the match, animations, and AI continue.
+It closes automatically at match end. Board choices use numbered labels and apply
+immediately for that match. Settings labels and dropdown text use Franklin Gothic
+Condensed; section headings and action-button lettering remain part of the artwork.
+
 ## Cards and effects
 
 Cards come in four types: minions, spells, weapons, and hero cards. Minions stay
@@ -48,7 +74,7 @@ Journey to Un'Goro, and Knights of the Frozen Throne.
 
 The game features animated card auras, premium card appearances, board shadows,
 ghostly mist and particles, card and Secret reveals, combat, and selected
-hero-power animations. In development, press **F3** to toggle GPU effects.
+hero-power animations.
 
 Ghost UI uses the extracted mulligan glow atlas, scrolling clouds, two smoke
 layers, light motes, and floating-button evaporation textures. Shader Lab's
