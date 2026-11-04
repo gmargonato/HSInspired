@@ -44,7 +44,6 @@ const devOnlyMarkers = [
   'dev-tools/outline-lab',
   'dev-tools/hero-power-anim',
   'dev-tools/vfx-lab',
-  'dev-tools/layout-inspector',
   'dev-tools/runtime',
   'runMatchPerformanceBenchmark',
   'VITE_DEV_START_ROUTE'

@@ -13,6 +13,7 @@ import {
 import 'pixi.js/advanced-blend-modes'
 import type { CardDefinition } from '../../game-rules/content/cards'
 import type { CardCostResource } from '../../game-rules/match/rules/card-cost-resource'
+import { observeShadows } from '../effects/shadow-visibility'
 import { supportsPremiumFormat } from '../../game-rules/progression/premium-support'
 import { CardAssetResolver } from '../assets/card-asset-resolver'
 import { CARD_NAME_FIT, CARD_RULES_COMPACT_SPACING } from './card-layout'
@@ -460,6 +461,15 @@ export class CardView extends Container {
           view.setClassFrameAppearance(card.cardClass)
         })
       }
+      observeShadows(view, (enabled) => {
+        const shadow = view.treeObjects.get('card.frame-shadow')?.object
+        if (shadow) shadow.renderable = enabled
+        view.updateCacheTexture()
+        for (let ancestor = view.parent; ancestor; ancestor = ancestor.parent) {
+          if (ancestor.isCachedAsTexture) ancestor.updateCacheTexture()
+        }
+        for (const refresh of view.appearanceSnapshots) refresh()
+      })
     } catch (error) {
       view.destroy({ children: true })
       throw error

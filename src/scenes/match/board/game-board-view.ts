@@ -169,10 +169,8 @@ import { HERO_POWER_CARD_CANVAS, HeroPowerCardView } from './hero-power-presenta
 import { WeaponView } from './weapon-view'
 import { prebuildWeaponOutlineShape } from './weapon-outline-shape'
 import { MatchArtworkWarmup, matchArtworkIds } from '../loading/match-artwork-warmup'
-import {
-  prewarmCardRenderPaths,
-  prewarmOpeningCard
-} from '../loading/card-render-warmup'
+import { prewarmCardRenderPaths } from '../../../visual-components/cards/card-render-warmup'
+import { prewarmOpeningCard } from '../loading/card-render-warmup'
 import { AddCardPickerView } from '../tools/add-card-picker-view'
 import { CardSelectionOverlay } from '../presentation/card-selection-overlay'
 import {

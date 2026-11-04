@@ -150,8 +150,7 @@ async function main() {
       effects[1].restore();exit.destroy();
       targets[1].alpha=.3;effects[1].syncVisibility();effects[1].particles.update(effects[1].lastTime);
       check(Math.abs(effects[1].particles.container.alpha-.3)<1e-6,'effect follows target opacity');targets[1].alpha=1;
-      GhostAura.setDebugSuppressed(true);await capture('lab-suppressed');GhostAura.setDebugSuppressed(false);
-      check(effects.every(e=>e.particles.container.visible&&e.particles.foreground.visible),'F3 restores both effect layers');
+      check(effects.every(e=>e.particles.container.visible&&e.particles.foreground.visible),'enabled Ghost effects show both particle layers');
       for(const e of effects)e.dispose();
       check(targets.every(t=>!(t.filters?.length)),'dispose removes owned filters');
       check(group.children.every(c=>!c.label?.startsWith('ghost-mist.')),'dispose removes particle and exit layers');

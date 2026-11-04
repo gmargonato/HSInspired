@@ -7,6 +7,8 @@ export interface Preferences {
   readonly lastPlayedDeckId: string | null
   readonly cursorScale: number
   readonly aiMode: AiMode
+  readonly enable3dElements: boolean
+  readonly enableShadows: boolean
   readonly aiCheatsEnabled: boolean
 }
 
@@ -16,6 +18,8 @@ export interface PreferencesUpdateRequest {
   readonly lastPlayedDeckId?: string | null
   readonly cursorScale?: number
   readonly aiMode?: AiMode
+  readonly enable3dElements?: boolean
+  readonly enableShadows?: boolean
   readonly aiCheatsEnabled?: boolean
 }
 
@@ -39,6 +43,11 @@ export function parseAiMode(value: unknown): AiMode {
   throw new Error('Invalid AI mode')
 }
 
+export function parseGraphicsEnabled(value: unknown): boolean {
+  if (typeof value !== 'boolean') throw new Error('Invalid graphics setting')
+  return value
+}
+
 export function parseAiCheatsEnabled(value: unknown): boolean {
   if (typeof value !== 'boolean') throw new Error('Invalid AI cheats setting')
   return value
@@ -59,6 +68,14 @@ export function parseCursorScale(value: unknown): number {
 export function parsePreferences(value: unknown): Preferences {
   if (!isRecord(value)) throw new Error('Invalid preferences response')
   return {
+    enable3dElements:
+      value.enable3dElements === undefined
+        ? true
+        : parseGraphicsEnabled(value.enable3dElements),
+    enableShadows:
+      value.enableShadows === undefined
+        ? true
+        : parseGraphicsEnabled(value.enableShadows),
     lastPlayedDeckId: parseLastPlayedDeckId(value.lastPlayedDeckId),
     cursorScale:
       value.cursorScale === undefined ? 1 : parseCursorScale(value.cursorScale),
@@ -75,6 +92,12 @@ export function parsePreferencesUpdateRequest(
 ): PreferencesUpdateRequest {
   if (!isRecord(value)) throw new Error('Invalid preferences update request')
   return {
+    ...(value.enable3dElements === undefined
+      ? {}
+      : { enable3dElements: parseGraphicsEnabled(value.enable3dElements) }),
+    ...(value.enableShadows === undefined
+      ? {}
+      : { enableShadows: parseGraphicsEnabled(value.enableShadows) }),
     ...(value.lastPlayedDeckId === undefined
       ? {}
       : { lastPlayedDeckId: parseLastPlayedDeckId(value.lastPlayedDeckId) }),

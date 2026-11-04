@@ -65,12 +65,16 @@ describe('PreferencesRepository', () => {
     await repository.set({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'hardware-v2',
+      enable3dElements: true,
+      enableShadows: true,
       aiCheatsEnabled: true,
       cursorScale: 0.75
     })
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'hardware-v2',
+      enable3dElements: true,
+      enableShadows: true,
       aiCheatsEnabled: true,
       cursorScale: 0.75
     })
@@ -92,6 +96,8 @@ describe('PreferencesRepository', () => {
       expect(await repository.get()).toEqual({
         lastPlayedDeckId: 'deck-123',
         aiMode: 'hardware-v2',
+        enable3dElements: true,
+        enableShadows: true,
         aiCheatsEnabled: true,
         cursorScale: 1
       })
@@ -113,6 +119,8 @@ describe('PreferencesRepository', () => {
     expect(await repository.get()).toEqual({
       lastPlayedDeckId: null,
       aiMode: 'api',
+      enable3dElements: true,
+      enableShadows: true,
       aiCheatsEnabled: true,
       cursorScale: 1
     })
@@ -124,12 +132,16 @@ describe('PreferencesRepository', () => {
     await repository.set({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'api',
+      enable3dElements: true,
+      enableShadows: true,
       aiCheatsEnabled: true,
       cursorScale: 1
     })
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'api',
+      enable3dElements: true,
+      enableShadows: true,
       aiCheatsEnabled: true,
       cursorScale: 1
     })
@@ -141,12 +153,16 @@ describe('PreferencesRepository', () => {
     await repository.set({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'hardware',
+      enable3dElements: true,
+      enableShadows: true,
       aiCheatsEnabled: true,
       cursorScale: 1
     })
     await repository.set({
       lastPlayedDeckId: null,
       aiMode: 'hardware',
+      enable3dElements: true,
+      enableShadows: true,
       aiCheatsEnabled: true,
       cursorScale: 1
     })
@@ -156,6 +172,8 @@ describe('PreferencesRepository', () => {
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: null,
       aiMode: 'hardware',
+      enable3dElements: true,
+      enableShadows: true,
       aiCheatsEnabled: true,
       cursorScale: 1
     })
@@ -167,6 +185,8 @@ describe('PreferencesRepository', () => {
     await repository.set({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'hardware-v2',
+      enable3dElements: true,
+      enableShadows: true,
       aiCheatsEnabled: true,
       cursorScale: 1
     })
@@ -174,12 +194,16 @@ describe('PreferencesRepository', () => {
     expect(JSON.parse(await readFile(filePath, 'utf8'))).toMatchObject({
       version: 2,
       aiMode: 'hardware-v2',
+      enable3dElements: true,
+      enableShadows: true,
       aiCheatsEnabled: true,
       cursorScale: 1
     })
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'hardware-v2',
+      enable3dElements: true,
+      enableShadows: true,
       aiCheatsEnabled: true,
       cursorScale: 1
     })
@@ -202,6 +226,8 @@ describe('PreferencesRepository', () => {
     expect(preferences).toEqual({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'hardware-v2',
+      enable3dElements: true,
+      enableShadows: true,
       aiCheatsEnabled: true,
       cursorScale: 1
     })
@@ -220,6 +246,8 @@ describe('PreferencesRepository', () => {
     await repository.set({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'api',
+      enable3dElements: true,
+      enableShadows: true,
       aiCheatsEnabled: true,
       cursorScale: 1
     })
@@ -229,6 +257,8 @@ describe('PreferencesRepository', () => {
       repository.set({
         lastPlayedDeckId: '',
         aiMode: 'api',
+        enable3dElements: true,
+        enableShadows: true,
         aiCheatsEnabled: true,
         cursorScale: 1
       })
@@ -237,6 +267,8 @@ describe('PreferencesRepository', () => {
       repository.set({
         lastPlayedDeckId: '   ' as string,
         aiMode: 'api',
+        enable3dElements: true,
+        enableShadows: true,
         aiCheatsEnabled: true,
         cursorScale: 1
       })
@@ -244,6 +276,8 @@ describe('PreferencesRepository', () => {
     expect(await repository.get()).toEqual({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'api',
+      enable3dElements: true,
+      enableShadows: true,
       aiCheatsEnabled: true,
       cursorScale: 1
     })
@@ -257,18 +291,24 @@ describe('PreferencesRepository', () => {
     expect(await repository.get()).toEqual({
       lastPlayedDeckId: null,
       aiMode: 'api',
+      enable3dElements: true,
+      enableShadows: true,
       aiCheatsEnabled: true,
       cursorScale: 1
     })
     await repository.set({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'api',
+      enable3dElements: true,
+      enableShadows: true,
       aiCheatsEnabled: true,
       cursorScale: 1
     })
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'api',
+      enable3dElements: true,
+      enableShadows: true,
       aiCheatsEnabled: true,
       cursorScale: 1
     })
@@ -285,6 +325,8 @@ describe('PreferencesRepository', () => {
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: null,
       aiMode: 'api',
+      enable3dElements: true,
+      enableShadows: true,
       aiCheatsEnabled: true,
       cursorScale: 1
     })
@@ -301,18 +343,24 @@ describe('PreferencesRepository', () => {
     expect(await repository.get()).toEqual({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'api',
+      enable3dElements: true,
+      enableShadows: true,
       aiCheatsEnabled: true,
       cursorScale: 1
     })
     await repository.set({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'hardware',
+      enable3dElements: true,
+      enableShadows: true,
       aiCheatsEnabled: true,
       cursorScale: 1
     })
     expect(await new PreferencesRepository(filePath).get()).toEqual({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'hardware',
+      enable3dElements: true,
+      enableShadows: true,
       aiCheatsEnabled: true,
       cursorScale: 1
     })
@@ -329,6 +377,8 @@ describe('PreferencesRepository', () => {
     expect(await repository.get()).toEqual({
       lastPlayedDeckId: 'deck-123',
       aiMode: 'api',
+      enable3dElements: true,
+      enableShadows: true,
       aiCheatsEnabled: true,
       cursorScale: 1
     })
@@ -340,6 +390,8 @@ describe('PreferencesRepository', () => {
       expect(parsePreferences({ lastPlayedDeckId: null, aiMode })).toEqual({
         lastPlayedDeckId: null,
         aiMode,
+        enable3dElements: true,
+        enableShadows: true,
         aiCheatsEnabled: true,
         cursorScale: 1
       })
@@ -348,5 +400,43 @@ describe('PreferencesRepository', () => {
     expect(() =>
       parsePreferences({ lastPlayedDeckId: null, aiMode: 'unknown' })
     ).toThrow()
+  })
+})
+
+describe('graphics preferences', () => {
+  it.each([
+    [true, true],
+    [true, false],
+    [false, true],
+    [false, false]
+  ])(
+    'persists independent 3D=%s and shadows=%s settings',
+    async (enable3dElements, enableShadows) => {
+      const { repository, filePath } = await createRepository()
+      await repository.set({
+        ...(await repository.get()),
+        enable3dElements,
+        enableShadows
+      })
+      const reloaded = new PreferencesRepository(filePath)
+      await reloaded.set({ ...(await reloaded.get()), cursorScale: 0.75 })
+      expect(await new PreferencesRepository(filePath).get()).toMatchObject({
+        enable3dElements,
+        enableShadows,
+        cursorScale: 0.75
+      })
+    }
+  )
+  it('defaults missing graphics fields and rejects nonboolean updates', () => {
+    expect(parsePreferences({ lastPlayedDeckId: null, aiMode: 'api' })).toMatchObject({
+      enable3dElements: true,
+      enableShadows: true
+    })
+    for (const key of ['enable3dElements', 'enableShadows']) {
+      for (const value of [null, 0, 'false', {}]) {
+        expect(() => parsePreferencesUpdateRequest({ [key]: value })).toThrow()
+      }
+      expect(parsePreferencesUpdateRequest({ [key]: false })).toEqual({ [key]: false })
+    }
   })
 })

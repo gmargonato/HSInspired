@@ -1,4 +1,5 @@
 import { MinionLandingCracks, hasMinionLandingCracks } from './minion-landing-cracks'
+import { setShadowsEnabled } from '../../../visual-components/effects/shadow-visibility'
 import { MinionLandingDust, hasMinionLandingDust } from './minion-landing-dust'
 import { WeaponView, type WeaponViewTextures } from '../board/weapon-view'
 import * as ShatterEffect from '../../../visual-components/effects/shatter'
@@ -8558,4 +8559,38 @@ describe('hero attack return dust', () => {
     expect(dust.mock.calls[0][3]).toBeGreaterThan(0)
     value.dispose()
   })
+})
+
+describe('match graphics preferences', () => {
+  it.each([true, false])(
+    'applies application shadow visibility to board and selection layers when enabled=%s',
+    (enableShadows) => {
+      setShadowsEnabled(enableShadows)
+      const value = board()
+      const internal = value as unknown as {
+        shadowLayer?: Container
+        cardSelectionOverlay: Container & {
+          shadowLayer?: Container
+          updateShadows(delta: number): void
+        }
+      }
+      try {
+        expect(internal.shadowLayer?.renderable).toBe(enableShadows)
+        expect(internal.cardSelectionOverlay.shadowLayer?.renderable).toBe(
+          enableShadows
+        )
+        setShadowsEnabled(false)
+        internal.cardSelectionOverlay.visible = true
+        expect(() => internal.cardSelectionOverlay.updateShadows(16)).not.toThrow()
+        expect(internal.shadowLayer?.renderable).toBe(false)
+        expect(internal.cardSelectionOverlay.shadowLayer?.renderable).toBe(false)
+        setShadowsEnabled(true)
+        expect(internal.shadowLayer?.renderable).toBe(true)
+        expect(internal.cardSelectionOverlay.shadowLayer?.renderable).toBe(true)
+      } finally {
+        value.dispose()
+        setShadowsEnabled(true)
+      }
+    }
+  )
 })

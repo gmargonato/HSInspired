@@ -63,7 +63,7 @@ cannot fade independently without replacing the artwork.
 - Startup warms the reward shader using the arena bundle. Every consumer owns
   and disposes its Ghost instance; the effect does not own shared textures.
 - Idle artwork skips the departure filters. Smoke/glow remain behind the target,
-  and echo/motes render in front. F3 suppresses both effect layers.
+  and echo/motes render in front.
 - Full-game validation exposed an existing first-turn hover restoration error
   when no pointer event had initialized Pixi's hit-test root. Board and hand
   inspection now wait for that root; subsequent pointer input works normally.

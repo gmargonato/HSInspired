@@ -1,4 +1,5 @@
 import type { Renderer, Texture, TextureSource } from 'pixi.js'
+import { areShadowsEnabled } from '../visual-components/effects/shadow-visibility'
 import { ASSET_BUNDLE_IDS } from '../visual-components/assets'
 import { AssetScope } from '../visual-components/assets/asset-scope'
 import {
@@ -6,7 +7,11 @@ import {
   tradeableAuraOcclusion,
   type TradeableAuraLease
 } from '../visual-components/cards/tradeable-aura'
-import { configureCardTexture } from '../visual-components/assets/card-asset-resolver'
+import {
+  CardAssetResolver,
+  configureCardTexture
+} from '../visual-components/assets/card-asset-resolver'
+import { prewarmCardRenderPaths } from '../visual-components/cards/card-render-warmup'
 import { DECK_HERO_ASSET_SOURCES } from '../visual-components/assets/hero-assets'
 import { premiumHeroPortrait } from '../visual-components/assets/hero-portrait-textures'
 import {
@@ -60,8 +65,10 @@ export class MenuStartupResources {
     for (const result of results) {
       if (result.status === 'rejected') throw result.reason
     }
-    this.cardShadowTexture ??= acquireCardShadowTexture(renderer)
+    if (areShadowsEnabled())
+      this.cardShadowTexture ??= acquireCardShadowTexture(renderer)
     prepareMenuEffects(renderer)
+    await prewarmCardRenderPaths(renderer, new CardAssetResolver(), () => false)
   }
 
   private async prepareBundles(renderer: Renderer): Promise<void> {

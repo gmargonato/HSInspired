@@ -153,6 +153,30 @@ export const SETTINGS_LAYOUT = {
     { anchor: CENTER, scale: 344 / 379, note: 'Handle centered on the recessed track.' }
   ),
   cursorSliderTravel: { minX: 858, maxX: 1062 },
+  enable3dElements: {
+    checkbox: placement(
+      { x: 530, y: 487 },
+      { width: 39, height: 36 },
+      { anchor: TOP_LEFT }
+    ),
+    title: placement(
+      { x: 584, y: 483 },
+      { width: 300, height: 44 },
+      { anchor: TOP_LEFT }
+    )
+  },
+  enableShadows: {
+    checkbox: placement(
+      { x: 530, y: 547 },
+      { width: 39, height: 36 },
+      { anchor: TOP_LEFT }
+    ),
+    title: placement(
+      { x: 584, y: 543 },
+      { width: 300, height: 44 },
+      { anchor: TOP_LEFT }
+    )
+  },
   aiCheats: {
     checkbox: placement(
       { x: 1040, y: 515 },

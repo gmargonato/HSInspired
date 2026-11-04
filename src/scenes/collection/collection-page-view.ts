@@ -1,9 +1,11 @@
+import { observeShadows } from '../../visual-components/effects/shadow-visibility'
 import {
   Container,
   type FederatedPointerEvent,
   type Renderer,
   Sprite,
-  Text
+  Text,
+  Texture
 } from 'pixi.js'
 import type { CardDefinition } from '../../game-rules/content/cards'
 import { getCardCopyLimit, getDeckCardCount, type Deck } from '../../game-rules/decks'
@@ -64,7 +66,7 @@ export class CollectionPageView extends Container {
   private readonly shadowLayerRoot = new Container()
   private readonly deckLimitLayerRoot = new Container()
   private readonly deckLimitLabelLayerRoot = new Container()
-  private readonly shadowTexture: CardShadowTextureLease
+  private shadowTexture: CardShadowTextureLease | null = null
   private readonly classLabel: Text
   private readonly pageLabel: Text
   private readonly emptyStateImage: Sprite
@@ -80,8 +82,7 @@ export class CollectionPageView extends Container {
     super()
     this.options = options
     this.cardResolver = options.resolver ?? new CardAssetResolver()
-    this.shadowTexture = acquireCardShadowTexture(options.renderer)
-    this.once('destroyed', () => this.shadowTexture.release())
+    this.once('destroyed', () => this.shadowTexture?.release())
     this.label = 'collection.page-content'
     this.addChild(
       this.shadowLayerRoot,
@@ -337,36 +338,42 @@ export class CollectionPageView extends Container {
   }
 
   private createCardShadow(view: CardView, cardIndex: number): Sprite {
-    const { texture, bodySize, padding } = this.shadowTexture
-    const body = CARD_BODY_BOUNDS
-    const scaleX = (body.width * view.scale.x) / bodySize
-    const scaleY = (body.height * view.plan.renderScaleY * view.scale.y) / bodySize
-    const shadow = new Sprite(texture)
+    const shadow = new Sprite()
     shadow.label = `collection.card-shadow.${cardIndex}`
     shadow.eventMode = 'none'
     shadow.alpha = COLLECTION_CARD_SHADOW.opacity
-    applyAnchoredPlacement(
-      shadow,
-      placement(
-        {
-          x:
-            view.x +
-            body.x * view.scale.x +
-            COLLECTION_CARD_SHADOW.offset.x -
-            padding * scaleX,
-          y:
-            view.y +
-            body.y * view.plan.renderScaleY * view.scale.y +
-            COLLECTION_CARD_SHADOW.offset.y -
-            padding * scaleY
-        },
-        { width: texture.width, height: texture.height },
-        {
-          scale: { x: scaleX, y: scaleY },
-          note: 'Physical card body with transparent blur padding, offset down and left.'
-        }
+    observeShadows(shadow, (enabled) => {
+      shadow.renderable = enabled
+      if (!enabled || shadow.texture !== Texture.EMPTY) return
+      this.shadowTexture ??= acquireCardShadowTexture(this.options.renderer)
+      const { texture, bodySize, padding } = this.shadowTexture
+      const body = CARD_BODY_BOUNDS
+      const scaleX = (body.width * view.scale.x) / bodySize
+      const scaleY = (body.height * view.plan.renderScaleY * view.scale.y) / bodySize
+      shadow.texture = texture
+      applyAnchoredPlacement(
+        shadow,
+        placement(
+          {
+            x:
+              view.x +
+              body.x * view.scale.x +
+              COLLECTION_CARD_SHADOW.offset.x -
+              padding * scaleX,
+            y:
+              view.y +
+              body.y * view.plan.renderScaleY * view.scale.y +
+              COLLECTION_CARD_SHADOW.offset.y -
+              padding * scaleY
+          },
+          { width: texture.width, height: texture.height },
+          {
+            scale: { x: scaleX, y: scaleY },
+            note: 'Physical card body with transparent blur padding, offset down and left.'
+          }
+        )
       )
-    )
+    })
     return shadow
   }
 

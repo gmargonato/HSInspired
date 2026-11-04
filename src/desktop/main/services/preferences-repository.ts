@@ -3,6 +3,7 @@ import { dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import {
   parseAiMode,
+  parseGraphicsEnabled,
   parseAiCheatsEnabled,
   parseCursorScale,
   parseLastPlayedDeckId,
@@ -17,6 +18,8 @@ interface PersistedPreferences {
   readonly lastPlayedDeckId: string | null
   readonly cursorScale: number
   readonly aiMode: AiMode
+  readonly enable3dElements: boolean
+  readonly enableShadows: boolean
   readonly aiCheatsEnabled: boolean
 }
 
@@ -30,6 +33,8 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
 
 function clonePreferences(preferences: Preferences): Preferences {
   return {
+    enable3dElements: preferences.enable3dElements,
+    enableShadows: preferences.enableShadows,
     lastPlayedDeckId: preferences.lastPlayedDeckId,
     cursorScale: preferences.cursorScale,
     aiCheatsEnabled: preferences.aiCheatsEnabled,
@@ -53,6 +58,8 @@ export class PreferencesRepository {
         lastPlayedDeckId: null,
         aiMode: 'api',
         cursorScale: 1,
+        enable3dElements: true,
+        enableShadows: true,
         aiCheatsEnabled: true
       }
     )
@@ -60,6 +67,8 @@ export class PreferencesRepository {
 
   async set(preferences: Preferences): Promise<void> {
     parseLastPlayedDeckId(preferences.lastPlayedDeckId)
+    parseGraphicsEnabled(preferences.enable3dElements)
+    parseGraphicsEnabled(preferences.enableShadows)
     parseAiMode(preferences.aiMode)
     parseAiCheatsEnabled(preferences.aiCheatsEnabled)
     parseCursorScale(preferences.cursorScale)
@@ -97,6 +106,12 @@ export class PreferencesRepository {
     ) {
       try {
         this.preferences = {
+          enable3dElements:
+            typeof parsed.enable3dElements === 'boolean'
+              ? parsed.enable3dElements
+              : true,
+          enableShadows:
+            typeof parsed.enableShadows === 'boolean' ? parsed.enableShadows : true,
           lastPlayedDeckId: parseLastPlayedDeckId(parsed.lastPlayedDeckId),
           aiCheatsEnabled:
             typeof parsed.aiCheatsEnabled === 'boolean' ? parsed.aiCheatsEnabled : true,
@@ -128,6 +143,8 @@ export class PreferencesRepository {
   private async persist(preferences: Preferences): Promise<void> {
     const payload: PersistedPreferences = {
       version: PREFERENCES_FILE_VERSION,
+      enable3dElements: preferences.enable3dElements,
+      enableShadows: preferences.enableShadows,
       lastPlayedDeckId: preferences.lastPlayedDeckId,
       cursorScale: preferences.cursorScale,
       aiCheatsEnabled: preferences.aiCheatsEnabled,

@@ -37,18 +37,10 @@ export interface AnimatedOutlineOptions {
 const startTime = performance.now()
 /** Metaball V5 Aura. The existing outline interface keeps callers small. */
 export class AnimatedOutline extends Actor {
-  private static readonly debugInstances = new Set<AnimatedOutline>()
-  private static debugSuppressed = false
-  private debugRenderable: boolean | null = null
   private readonly filter: AuraFilter
   private enabled = true
   private readonly clock = { value: 0 }
   private readonly timeTween: gsap.core.Tween
-  static setDebugSuppressed(suppressed: boolean): void {
-    if (!import.meta.env.DEV) return
-    this.debugSuppressed = suppressed
-    for (const outline of this.debugInstances) outline.syncDebugSuppression()
-  }
   constructor(
     private readonly target: Container,
     options: AnimatedOutlineOptions
@@ -75,10 +67,6 @@ export class AnimatedOutline extends Actor {
         this.filter.syncPadding()
       }
     })
-    if (import.meta.env.DEV) {
-      AnimatedOutline.debugInstances.add(this)
-      this.syncDebugSuppression()
-    }
   }
   setEnabled(enabled: boolean): void {
     this.enabled = enabled
@@ -113,24 +101,13 @@ export class AnimatedOutline extends Actor {
     this.filter.auraUniforms.uniforms.uTime = time
   }
   override dispose(): void {
-    AnimatedOutline.debugInstances.delete(this)
     if (!this.target.destroyed) {
-      if (this.debugRenderable !== null) this.target.renderable = this.debugRenderable
       this.target.filters = (this.target.filters ?? []).filter(
         (filter) => filter !== this.filter
       )
     }
     this.filter.destroy()
     super.dispose()
-  }
-  private syncDebugSuppression(): void {
-    if (AnimatedOutline.debugSuppressed) {
-      this.debugRenderable ??= this.target.renderable
-      this.target.renderable = false
-    } else if (this.debugRenderable !== null) {
-      this.target.renderable = this.debugRenderable
-      this.debugRenderable = null
-    }
   }
 }
 export { AnimatedOutline as Aura }

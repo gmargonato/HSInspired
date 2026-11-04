@@ -154,6 +154,12 @@ mask follows the card's perspective during dragging.
 
 ## Startup
 
+Menu startup and match loading share `visual-components/cards/card-render-warmup.ts`
+to draw representative complete cards in standard and premium finishes before use.
+Match loading also uploads healing textures and exercises healing/projectile shader
+passes through `scenes/match/loading/spell-vfx-warmup.ts`. These offscreen samples
+release their temporary visuals and render targets while retaining shared programs.
+
 Normal startup shows the HTML `app-start.png` splash while application-owned
 menu resources load and upload to the GPU. `application/prepare-menu-resources.ts`
 holds their asset scope and GPU residency for the renderer lifetime, including

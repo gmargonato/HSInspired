@@ -21,7 +21,6 @@
       "@hero-power-anim": ["src/dev-tools/hero-power-anim/hero-power-anim-scene.ts"],
       "@vfx-lab": ["src/dev-tools/vfx-lab/vfx-lab-scene.ts"],
       "@dev-match-performance": ["src/dev-tools/runtime/dev-match-performance.ts"],
-      "@dev-layout-inspector": ["src/dev-tools/layout-inspector/index.ts"],
       "@outline-directions": ["src/dev-tools/outline-lab/outline-directions-dev.ts"]
     }
   }

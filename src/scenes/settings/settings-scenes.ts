@@ -1,5 +1,6 @@
 import { Graphics, Rectangle, Sprite, type Texture } from 'pixi.js'
 import { SETTINGS_LAYOUT } from './settings-layout'
+import { GraphicsToggle } from './graphics-toggle'
 import { AiCheatsToggle } from './ai-cheats-toggle'
 import { CursorSizeSlider } from './cursor-size-slider'
 import { AiModeSelector } from './ai-mode-selector'
@@ -73,6 +74,7 @@ abstract class SettingsScene extends Scene {
 
 /** Settings overlay used throughout the non-match menu flow. */
 export class MenuSettingsScene extends SettingsScene {
+  private readonly graphicsToggles: GraphicsToggle[] = []
   private aiCheatsToggle: AiCheatsToggle | null = null
   private cursorSizeSlider: CursorSizeSlider | null = null
   private aiModeSelector: AiModeSelector | null = null
@@ -91,6 +93,15 @@ export class MenuSettingsScene extends SettingsScene {
     await cheats.init()
     this.aiCheatsToggle = cheats
     this.root.addChild(cheats)
+    for (const setting of ['enable3dElements', 'enableShadows'] as const) {
+      const toggle = new GraphicsToggle(assets, window.api.preferences, setting, () => {
+        this.aiModeSelector?.closeOptions()
+        this.resolutionSelector?.closeOptions()
+      })
+      await toggle.init()
+      this.graphicsToggles.push(toggle)
+      this.root.addChild(toggle)
+    }
     const cursor = this.sceneManager.cursor
     if (cursor) {
       const shared = await this.assetScope.acquire<SharedUIAssets>(
@@ -129,6 +140,8 @@ export class MenuSettingsScene extends SettingsScene {
 
   protected override onExit(): void {
     super.onExit()
+    for (const toggle of this.graphicsToggles) toggle.removeAllListeners()
+    this.graphicsToggles.length = 0
     this.aiCheatsToggle?.removeAllListeners()
     this.aiCheatsToggle = null
     this.cursorSizeSlider?.dispose()

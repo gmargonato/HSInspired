@@ -20,6 +20,7 @@ export function registerPreferencesIpc(repository: PreferencesRepository): void 
         const current = await repository.get()
         const next = {
           ...current,
+          ...update,
           ...(update.aiCheatsEnabled === undefined
             ? {}
             : { aiCheatsEnabled: update.aiCheatsEnabled }),

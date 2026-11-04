@@ -5,6 +5,7 @@ import { prewarmWindfury } from './loading/windfury-warmup'
 import { prewarmCardPlay } from './loading/card-play-warmup'
 import { prewarmCombatImpact } from './loading/combat-impact-warmup'
 import { prewarmMatchResult } from './loading/match-result-warmup'
+import { prewarmHealing, prewarmProjectiles } from './loading/spell-vfx-warmup'
 import {
   MatchVisualResources,
   matchVisualTextures
@@ -237,7 +238,7 @@ export class GameScene extends Scene {
       decks.map((d) => `${d.id} â€” ${d.heroId}`)
     )
 
-    const aiPreferences = await this.readAiPreferences()
+    const aiPreferences = await this.readMatchPreferences()
     const aiMode = aiPreferences.aiMode
     const profileId = this.route.curatedOpponent?.expertStrategyProfileId
     const aiParticipantId = this.route.setup.participants.find(
@@ -318,9 +319,12 @@ export class GameScene extends Scene {
     const healingAssets = await this.assetScope.acquire<HealingAssets>(
       ASSET_BUNDLE_IDS.healingVfx
     )
-    const controlAssets = await this.assetScope.acquire<MatchControlAssets>(
-      ASSET_BUNDLE_IDS.gameControls
-    )
+    const controlAssets =
+      aiPreferences.enable3dElements !== false
+        ? await this.assetScope.acquire<MatchControlAssets>(
+            ASSET_BUNDLE_IDS.gameControls
+          )
+        : undefined
     this.logger?.info('[GameScene] game assets acquired')
     await this.reportLoading(0.2, 'Loading hero assets')
     const deckPresentationAssets =
@@ -348,6 +352,7 @@ export class GameScene extends Scene {
       Object.values(cardAssets),
       [
         ...matchVisualTextures(heroAssets, this.tableAssets!.board),
+        ...Object.values(healingAssets),
         ...Object.values(this.tableAssets!)
       ],
       (progress) =>
@@ -407,6 +412,16 @@ export class GameScene extends Scene {
       this.logger?.warn('[GameScene] match result warm-up failed', error)
     }
 
+    try {
+      prewarmHealing(this.appInstance.renderer, healingAssets)
+    } catch (error) {
+      this.logger?.warn('[GameScene] healing warm-up failed', error)
+    }
+    try {
+      prewarmProjectiles(this.appInstance.renderer, gameAssets)
+    } catch (error) {
+      this.logger?.warn('[GameScene] projectile warm-up failed', error)
+    }
     await this.reportLoading(0.46, 'Building game board')
     this.view = new GameBoardView({
       controlAssets,
@@ -447,7 +462,7 @@ export class GameScene extends Scene {
     }
   }
 
-  private async readAiPreferences(): Promise<Preferences> {
+  private async readMatchPreferences(): Promise<Preferences> {
     const preferences =
       this.preferences ??
       (typeof window !== 'undefined' ? window.api?.preferences : undefined)
@@ -456,6 +471,8 @@ export class GameScene extends Scene {
         lastPlayedDeckId: null,
         aiMode: 'api',
         cursorScale: 1,
+        enable3dElements: true,
+        enableShadows: true,
         aiCheatsEnabled: true
       }
     try {
@@ -466,6 +483,8 @@ export class GameScene extends Scene {
         lastPlayedDeckId: null,
         aiMode: 'api',
         cursorScale: 1,
+        enable3dElements: true,
+        enableShadows: true,
         aiCheatsEnabled: true
       }
     }

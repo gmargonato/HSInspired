@@ -84,7 +84,7 @@ export const GAME_BOARD_LAYOUT = {
     /** Remote (top) minion row; presentation stays empty in this phase. */
     remote: {
       centerX: 985,
-      baselineY: 400,
+      baselineY: 405,
       maxSpan: 900,
       maxStep: 150,
       minionScale: 1

@@ -23,12 +23,6 @@ export const GHOST_DISAPPEARANCE_SECONDS = GHOST_TIMING.duration
 /** Owns the live mist, foreground particles and interruptible disappearance. */
 export class GhostAura extends Actor {
   private static readonly instances = new Set<GhostAura>()
-  private static suppressed = false
-  static setDebugSuppressed(suppressed: boolean): void {
-    if (!import.meta.env.DEV) return
-    this.suppressed = suppressed
-    for (const effect of this.instances) effect.syncVisibility()
-  }
 
   private readonly values: GhostMistValues = {
     ...GHOST_AURA_CONFIG.tuning,
@@ -271,7 +265,7 @@ export class GhostAura extends Actor {
       parent.addChildAt(particles, parent.getChildIndex(this.target))
     if (parent && foreground.parent !== parent)
       parent.addChildAt(foreground, parent.getChildIndex(this.target) + 1)
-    let visible = this.enabled && !GhostAura.suppressed
+    let visible = this.enabled
     for (let node: Container | null = this.target; node; node = node.parent)
       visible &&= node.visible && node.renderable && node.alpha > 0
     particles.visible = visible
@@ -283,7 +277,7 @@ export class GhostAura extends Actor {
     foreground.alpha = particles.alpha
     foreground.zIndex = particles.zIndex
     // These filters only control departure; idle art needs no offscreen pass.
-    this.mist.filter.enabled = !GhostAura.suppressed && this.values.progress > 0
+    this.mist.filter.enabled = this.values.progress > 0
     if (this.textFade) this.textFade.filter.enabled = this.mist.filter.enabled
     return visible
   }
