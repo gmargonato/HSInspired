@@ -32,21 +32,6 @@ import {
   type DevSceneId
 } from '../contracts/dev-menu'
 import {
-  AI_IPC_CHANNELS,
-  parseAiIdentity,
-  parseAiRequestProgress,
-  type AiRequestProgress,
-  parseAiSettings,
-  type AiDecisionIdentity,
-  parseAiDecisionRequest,
-  parseAiDecisionResponse,
-  parseAiIpcResult,
-  unwrapAiIpcResult,
-  type AiDecisionRequest,
-  type AiDecisionResponse,
-  type AiIpcResult
-} from '../contracts/ipc/ai'
-import {
   DECK_IPC_CHANNELS,
   parseDeckCreateRequest,
   parseDeckId,
@@ -226,34 +211,6 @@ const api = {
           ARENA_IPC_CHANNELS.recordResult,
           parseArenaMatchResult(result)
         )
-      )
-  },
-
-  ai: {
-    onProgress(listener: (progress: AiRequestProgress) => void): () => void {
-      const handle = (_event: IpcRendererEvent, value: unknown): void => {
-        listener(parseAiRequestProgress(value))
-      }
-      ipcRenderer.on(AI_IPC_CHANNELS.progress, handle)
-      return () => ipcRenderer.removeListener(AI_IPC_CHANNELS.progress, handle)
-    },
-    settings: async () =>
-      unwrapAiIpcResult(
-        await ipcRenderer.invoke(AI_IPC_CHANNELS.settings),
-        parseAiSettings
-      ),
-    cancel: async (identity: AiDecisionIdentity): Promise<void> => {
-      await ipcRenderer.invoke(AI_IPC_CHANNELS.cancel, parseAiIdentity(identity))
-    },
-    decide: async (
-      request: AiDecisionRequest
-    ): Promise<AiIpcResult<AiDecisionResponse>> =>
-      parseAiIpcResult(
-        await ipcRenderer.invoke(
-          AI_IPC_CHANNELS.decide,
-          parseAiDecisionRequest(request)
-        ),
-        parseAiDecisionResponse
       )
   },
 

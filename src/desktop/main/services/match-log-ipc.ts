@@ -7,19 +7,11 @@ import {
   parseMatchLogStatus
 } from '../../contracts/ipc/match-logs'
 import type { MatchLogRepository } from './match-log-repository'
-import type { JsonObject } from '../../contracts/ipc/ai'
 
-export function registerMatchLogIpc(
-  repository: MatchLogRepository,
-  settings?: () => Promise<JsonObject>
-): void {
+export function registerMatchLogIpc(repository: MatchLogRepository): void {
   ipcMain.handle(MATCH_LOG_CHANNELS.start, async (event, metadata: unknown) => {
     const parsed = parseMatchLogObject(metadata)
-    const aiConfig = await settings?.().catch(() => ({ unavailable: true }))
-    return repository.start(event.sender.id, {
-      ...parsed,
-      ...(aiConfig ? { aiConfig } : {})
-    })
+    return repository.start(event.sender.id, parsed)
   })
   ipcMain.handle(
     MATCH_LOG_CHANNELS.append,

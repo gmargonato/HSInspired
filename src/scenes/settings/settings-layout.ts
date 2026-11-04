@@ -107,35 +107,35 @@ export const SETTINGS_LAYOUT = {
     }
   ),
 
-  aiModeTitle: placement(
+  aiDifficultyTitle: placement(
     { x: 1040, y: 335 },
     { width: 344, height: 54 },
     { anchor: TOP_LEFT, note: 'Difficulty heading in the Game section.' }
   ),
-  aiModeField: placement(
+  aiDifficultyField: placement(
     { x: 1212, y: 420 },
     { width: 377, height: 80 },
-    { anchor: CENTER, scale: 344 / 377, note: 'Closed AI mode selector.' }
+    { anchor: CENTER, scale: 344 / 377, note: 'Closed AI difficulty selector.' }
   ),
-  aiModeValue: placement(
+  aiDifficultyValue: placement(
     { x: 1170, y: 420 },
     { width: 208, height: 42 },
-    { anchor: CENTER, note: 'Selected AI mode within the field.' }
+    { anchor: CENTER, note: 'Selected AI difficulty within the field.' }
   ),
-  aiModeButton: placement(
+  aiDifficultyButton: placement(
     { x: 1301, y: 420 },
     { width: 69, height: 51 },
-    { anchor: CENTER, scale: 62 / 69, note: 'AI mode selector arrow.' }
+    { anchor: CENTER, scale: 62 / 69, note: 'AI difficulty selector arrow.' }
   ),
-  aiModeOptions: placement(
+  aiDifficultyOptions: placement(
     { x: 1092, y: 456 },
-    { width: 240, height: 156 },
-    { anchor: TOP_LEFT, note: 'Three-row Easy, Expert, and API mode dropdown.' }
+    { width: 240, height: 104 },
+    { anchor: TOP_LEFT, note: 'Two-row Easy and Expert difficulty dropdown.' }
   ),
-  aiModeOption: placement(
+  aiDifficultyOption: placement(
     { x: 20, y: 26 },
     { width: 200, height: 52 },
-    { anchor: CENTER, note: 'Local text placement within an AI mode option.' }
+    { anchor: CENTER, note: 'Local text placement within an AI difficulty option.' }
   ),
   cursorSizeTitle: placement(
     { x: 788, y: 730 },

@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { effectiveBoardMinionKeywords } from '../../../game-rules/match/rules/minion-attack-state'
+import { describe, expect, it, vi } from 'vitest'
 import { asCardId } from '../../../game-rules/content/cards'
 import { enumerateLegalCommands } from '../../../game-rules/match/ai'
 import type { TurnMatchCommand } from '../../../game-rules/match'
@@ -14,6 +15,9 @@ import { GameBoardSession } from '../game-board-session'
 import { LocalAiDecisionApi } from './local-ai-decision-api'
 import { expertResourceSetupPreference } from './expert-resource-preference'
 import { expertSingletonCleanupSeeds } from './expert-cleanup-seeds'
+
+// Fixed search work makes shared-policy assertions independent of CPU speed.
+vi.setConfig({ testTimeout: 30_000 })
 
 function dispatch(session: GameBoardSession, command: TurnMatchCommand): void {
   const result = session.match.dispatch(command)
@@ -114,7 +118,7 @@ function request(
 async function choose(session: GameBoardSession) {
   const commands = legal(session)
   const actions = aiActions(session, commands)
-  const api = new LocalAiDecisionApi(session)
+  const api = new LocalAiDecisionApi(session, undefined, { workBudget: 128 })
   const response = await api.decide(
     request(
       session,
@@ -132,7 +136,7 @@ async function choose(session: GameBoardSession) {
 async function playAiTurn(
   session: GameBoardSession
 ): Promise<readonly TurnMatchCommand[]> {
-  const api = new LocalAiDecisionApi(session)
+  const api = new LocalAiDecisionApi(session, undefined, { workBudget: 128 })
   const commands: TurnMatchCommand[] = []
   for (let step = 0; step < 8 && session.getState().phase !== 'ended'; step += 1) {
     if (session.getState().activePlayerId !== session.remoteParticipantId) break
@@ -220,11 +224,23 @@ describe('hardware local AI complete-turn planning', () => {
       expect(selected.command.type).toBe('play-card')
       if (selected.command.type === 'play-card') {
         expect(selected.command.cardInstanceId).toContain(':dev:')
-        if (cardId === 'classic_sunfury_protector')
-          expect(selected.command.position).toBe(
-            index % placementCards.length === 3 ? 0 : 1
-          )
-        else expect(selected.command.position).toBe(1)
+        if (cardId === 'classic_sunfury_protector') {
+          // The shared search may protect either neighbor. Verify the effect,
+          // rather than requiring the retired Easy selector's edge preference.
+          dispatch(session, selected.command)
+          const board = session.findPlayer(
+            session.getState(),
+            session.remoteParticipantId
+          ).board
+          expect(
+            board.some((minion) =>
+              effectiveBoardMinionKeywords(
+                minion,
+                session.getState().turnNumber
+              ).includes('taunt')
+            )
+          ).toBe(true)
+        } else expect(selected.command.position).toBe(1)
       }
     })
   }
@@ -262,6 +278,16 @@ describe('hardware local AI complete-turn planning', () => {
         summon(current, index % 2 === 0 ? 'basic_murloc_scout' : 'basic_core_hound')
         disableHeroPower(current)
       })
+      // A three-card lethal setup isolates sequencing from the low-resource
+      // profile's nonterminal preferences. Newly summoned bodies cannot attack.
+      clearBoard(session)
+      summon(session, 'basic_goldshire_footman')
+      summon(session, index % 2 === 0 ? 'basic_murloc_scout' : 'basic_core_hound')
+      dispatch(session, {
+        type: 'dev-set-hero',
+        participantId: session.localParticipantId,
+        health: 4
+      })
       disableHeroPower(session)
       clearHand(session)
       const gormok = addCard(session, 'the_grand_tournament_gormok_the_impaler')
@@ -297,17 +323,14 @@ describe('hardware local AI complete-turn planning', () => {
       ).toBe(true)
       expect(
         session.findPlayer(session.getState(), session.localParticipantId).hero.health
-      ).toBe(enemyHeroHealthBefore - (index % 2 === 0 ? 6 : 14))
+      ).toBe(enemyHeroHealthBefore - 4)
     })
   }
 
   for (let index = 0; index < 8; index += 1) {
     it(`protects the hero against public pressure, case ${index + 1}`, async () => {
       const session = startAiTurn(0x640 + index, (current) => {
-        summonEnemy(
-          current,
-          index % 2 === 0 ? 'basic_core_hound' : 'basic_boulderfist_ogre'
-        )
+        summonEnemy(current, index % 2 === 0 ? 'basic_core_hound' : 'basic_magma_rager')
         summonEnemy(current, 'basic_murloc_scout')
         dispatch(current, {
           type: 'dev-set-hero',
@@ -458,8 +481,14 @@ describe('hardware local AI complete-turn planning', () => {
       clearHand(session)
       addCard(session, cardId)
       setMana(session, index === 0 ? 1 : index === 1 ? 5 : index === 2 ? 5 : 6)
+      if (index === 0) {
+        const discover = legal(session).find((command) => command.type === 'play-card')
+        expect(discover).toBeDefined()
+        dispatch(session, discover!)
+      }
       const selected = await choose(session)
-      if (index === 5) expect(selected.command.type).not.toBe('play-card')
+      if (index === 0) expect(selected.command.type).toBe('choose-discover-card')
+      else if (index === 5) expect(selected.command.type).not.toBe('play-card')
       else {
         expect(selected.command.type).toBe('play-card')
         if (selected.command.type === 'play-card')

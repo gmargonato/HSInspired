@@ -2,24 +2,24 @@ import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import {
-  parseAiMode,
   parseGraphicsEnabled,
+  parseAiDifficulty,
   parseAiCheatsEnabled,
   parseCursorScale,
   parseLastPlayedDeckId,
-  type AiMode,
+  type AiDifficulty,
   type Preferences
 } from '../../contracts/ipc/preferences'
 
-const PREFERENCES_FILE_VERSION = 2
+const PREFERENCES_FILE_VERSION = 3
 
 interface PersistedPreferences {
   readonly version: typeof PREFERENCES_FILE_VERSION
   readonly lastPlayedDeckId: string | null
   readonly cursorScale: number
-  readonly aiMode: AiMode
   readonly enable3dElements: boolean
   readonly enableShadows: boolean
+  readonly aiDifficulty: AiDifficulty
   readonly aiCheatsEnabled: boolean
 }
 
@@ -38,7 +38,7 @@ function clonePreferences(preferences: Preferences): Preferences {
     lastPlayedDeckId: preferences.lastPlayedDeckId,
     cursorScale: preferences.cursorScale,
     aiCheatsEnabled: preferences.aiCheatsEnabled,
-    aiMode: preferences.aiMode
+    aiDifficulty: preferences.aiDifficulty
   }
 }
 
@@ -56,7 +56,7 @@ export class PreferencesRepository {
     return clonePreferences(
       this.preferences ?? {
         lastPlayedDeckId: null,
-        aiMode: 'api',
+        aiDifficulty: 'expert',
         cursorScale: 1,
         enable3dElements: true,
         enableShadows: true,
@@ -69,7 +69,7 @@ export class PreferencesRepository {
     parseLastPlayedDeckId(preferences.lastPlayedDeckId)
     parseGraphicsEnabled(preferences.enable3dElements)
     parseGraphicsEnabled(preferences.enableShadows)
-    parseAiMode(preferences.aiMode)
+    parseAiDifficulty(preferences.aiDifficulty)
     parseAiCheatsEnabled(preferences.aiCheatsEnabled)
     parseCursorScale(preferences.cursorScale)
     await this.ensureLoaded()
@@ -102,7 +102,9 @@ export class PreferencesRepository {
 
     if (
       isRecord(parsed) &&
-      (parsed.version === 1 || parsed.version === PREFERENCES_FILE_VERSION)
+      (parsed.version === 1 ||
+        parsed.version === 2 ||
+        parsed.version === PREFERENCES_FILE_VERSION)
     ) {
       try {
         this.preferences = {
@@ -122,14 +124,14 @@ export class PreferencesRepository {
             parsed.cursorScale <= 1
               ? parsed.cursorScale
               : 1,
-          aiMode:
-            parsed.version === 1
-              ? 'api'
-              : parsed.aiMode === 'hardware' ||
-                  parsed.aiMode === 'hardware-v2' ||
-                  parsed.aiMode === 'api'
-                ? parsed.aiMode
-                : 'api'
+          aiDifficulty:
+            parsed.version === PREFERENCES_FILE_VERSION
+              ? parsed.aiDifficulty === 'easy'
+                ? 'easy'
+                : 'expert'
+              : parsed.version === 2 && parsed.aiMode === 'hardware'
+                ? 'easy'
+                : 'expert'
         }
       } catch {
         console.warn('Saved preferences were invalid; using safe defaults.')
@@ -148,7 +150,7 @@ export class PreferencesRepository {
       lastPlayedDeckId: preferences.lastPlayedDeckId,
       cursorScale: preferences.cursorScale,
       aiCheatsEnabled: preferences.aiCheatsEnabled,
-      aiMode: preferences.aiMode
+      aiDifficulty: preferences.aiDifficulty
     }
     const temporaryPath = `${this.filePath}.${randomUUID()}.tmp`
     const write = this.writeQueue

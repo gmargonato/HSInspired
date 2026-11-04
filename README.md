@@ -24,6 +24,14 @@ disabling it uses the 2D hero-power and end-turn controls. The shadow setting ap
 immediately across the application to cast shadows, separate card-frame shadows,
 and UI/text drop shadows. Glows and shadows painted into artwork remain.
 
+Difficulty offers local Easy and Expert opponents; neither requires a network connection
+or an external AI account. Both use the same search policy with different compute
+budgets. Expert keeps its existing budget; Easy starts with a smaller allowance,
+not a calibrated strength target. Existing Easy/Expert choices are preserved. Retired API mode
+and missing or invalid difficulty settings default to Expert. Settings are saved as
+`aiDifficulty` in preferences version 3. Old AI credential files are left untouched
+and are no longer read or bundled.
+
 In-game settings blocks player input while the match, animations, and AI continue.
 It closes automatically at match end. Board choices use numbered labels and apply
 immediately for that match. Settings labels and dropdown text use Franklin Gothic

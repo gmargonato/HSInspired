@@ -140,7 +140,7 @@ describe('AI context fidelity', () => {
       api: {
         settings: async () => ({
           enabled: true,
-          provider: 'openrouter',
+          provider: 'none',
           modelId: 'stub',
           reasoningEffort: 'low',
           maxCompletionTokens: 1000
@@ -223,7 +223,7 @@ describe('AI context fidelity', () => {
     const api: AiDecisionApi = {
       settings: async () => ({
         enabled: true,
-        provider: 'openrouter',
+        provider: 'none',
         modelId: 'stub',
         reasoningEffort: 'low',
         maxCompletionTokens: 1000

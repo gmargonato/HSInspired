@@ -46,7 +46,6 @@ import type {
   DevMatchTarget
 } from '../../desktop/contracts/dev-menu'
 import { Scene } from '../../visual-components/lifecycle/scene'
-import type { AiDecisionApi } from '../../desktop/contracts/ipc/ai'
 import type { MatchEndedEvent } from '../../game-rules/match'
 import type { ConstructedMatchResult } from '../../game-rules/ranking/constructed-ranking'
 import { isArenaRunComplete } from '../../game-rules/arena'
@@ -65,8 +64,11 @@ import type {
   Preferences
 } from '../../desktop/contracts/ipc/preferences'
 import type { ExpertDeckStrategyBinding } from '../../game-rules/decks/expert-deck-strategy'
-import { ExpertAiDecisionApi } from './ai/expert-ai-decision-api'
-import { LocalAiDecisionApi } from './ai/local-ai-decision-api'
+import type { ExpertAiDecisionApi } from './ai/expert-ai-decision-api'
+import { createLocalAiDecisionApi } from './ai/expert-ai-decision-api'
+import { LOCAL_AI_RESOURCE_PROFILES } from './ai/local-ai-resources'
+import { EXPERT_AI_POLICY_REVISION } from './ai/expert-ai-worker-protocol'
+import type { AiDecisionApi } from '../../desktop/contracts/ipc/ai'
 
 /** Full-screen route adapter for the first playable opening sequence. */
 export class GameScene extends Scene {
@@ -115,7 +117,6 @@ export class GameScene extends Scene {
     private readonly arenaStore: ArenaStore,
     logger?: AppLogger,
     private readonly router?: SceneRouter,
-    private readonly ai?: AiDecisionApi,
     private readonly matchLogs?: MatchLogsApi,
     private readonly reportLogError: (
       message: string,
@@ -124,7 +125,9 @@ export class GameScene extends Scene {
     private readonly progression?: ProgressionStore,
     private readonly dialogs?: DialogService,
     private readonly preferences?: PreferencesApi,
-    private readonly windowAttention?: WindowAttentionApi
+    private readonly windowAttention?: WindowAttentionApi,
+    /** Local-only fixture injection used by the rendering performance harness. */
+    private readonly localAiOverride?: AiDecisionApi
   ) {
     super()
     this.route = route
@@ -239,13 +242,13 @@ export class GameScene extends Scene {
     )
 
     const aiPreferences = await this.readMatchPreferences()
-    const aiMode = aiPreferences.aiMode
+    const aiDifficulty = aiPreferences.aiDifficulty
     const profileId = this.route.curatedOpponent?.expertStrategyProfileId
     const aiParticipantId = this.route.setup.participants.find(
       (participant) => participant.controllerKind === 'ai'
     )?.participantId
     const deckStrategy: ExpertDeckStrategyBinding | undefined =
-      aiMode === 'hardware-v2' && !this.route.mode && profileId && aiParticipantId
+      !this.route.mode && profileId && aiParticipantId
         ? { participantId: aiParticipantId, profileId, version: 1 }
         : undefined
     const matchRoute: GameRoute = {
@@ -263,7 +266,12 @@ export class GameScene extends Scene {
           ? { curatedOpponent: this.route.curatedOpponent }
           : {}),
         aiRuntimeSettings: { ...AI_CONVERSATION_LIMITS },
-        aiMode,
+        aiDifficulty,
+        aiResources: LOCAL_AI_RESOURCE_PROFILES[aiDifficulty],
+        aiEngine: {
+          modelId: 'hardware-local-v2',
+          policyRevision: EXPERT_AI_POLICY_REVISION
+        },
         expertDeckStrategy: {
           enabled: true,
           applied: Boolean(deckStrategy),
@@ -293,25 +301,15 @@ export class GameScene extends Scene {
       opponentDeckStrategy: deckStrategy,
       recorder: this.recorder
     })
-    let aiApi: AiDecisionApi | undefined
-    if (aiMode === 'hardware') {
-      aiApi = new LocalAiDecisionApi(aiSession)
-    } else if (aiMode === 'hardware-v2') {
-      this.expertAiApi = new ExpertAiDecisionApi(aiSession)
-      aiApi = this.expertAiApi
-    } else {
-      aiApi = this.ai
-    }
+    const aiApi =
+      this.localAiOverride ??
+      (this.expertAiApi = createLocalAiDecisionApi(aiSession, aiDifficulty))
     const aiController = new AiTurnController({
       api: aiApi,
       candidates: this.expertAiApi ?? undefined,
       session: aiSession,
       logger: aiLogger,
-      recorder: this.recorder,
-      // Local hardware modes have no transport dependency and remain playable offline.
-      ...(aiMode === 'hardware' || aiMode === 'hardware-v2'
-        ? { online: () => true }
-        : {})
+      recorder: this.recorder
     })
 
     await this.reportLoading(0.08, 'Loading game assets')
@@ -469,7 +467,7 @@ export class GameScene extends Scene {
     if (!preferences)
       return {
         lastPlayedDeckId: null,
-        aiMode: 'api',
+        aiDifficulty: 'expert',
         cursorScale: 1,
         enable3dElements: true,
         enableShadows: true,
@@ -478,10 +476,13 @@ export class GameScene extends Scene {
     try {
       return await preferences.get()
     } catch (error) {
-      this.logger?.warn('[GameScene] AI mode preference unavailable; using API.', error)
+      this.logger?.warn(
+        '[GameScene] AI difficulty preference unavailable; using Expert.',
+        error
+      )
       return {
         lastPlayedDeckId: null,
-        aiMode: 'api',
+        aiDifficulty: 'expert',
         cursorScale: 1,
         enable3dElements: true,
         enableShadows: true,

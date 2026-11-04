@@ -1,3 +1,7 @@
+import {
+  LOCAL_AI_RESOURCE_PROFILES,
+  type LocalAiDifficulty
+} from './local-ai-resources'
 import { createOpeningMatchFromCheckpoint } from '../../../game-rules/match/opening-match'
 import type { AiCandidateUpdate } from './ai-attention-controller'
 import {
@@ -242,8 +246,8 @@ export function invalidatesExpertContinuation(
 }
 
 /**
- * Expert local AI runs only on a redacted match checkpoint in a disposable
- * module worker. The easy local opponent remains the in-renderer default.
+ * Shared local AI for both difficulties. Search runs only on a redacted match
+ * checkpoint in a disposable module worker; resource limits select difficulty.
  */
 export class ExpertAiDecisionApi implements AiDecisionApi {
   private readonly candidateListeners = new Set<
@@ -358,7 +362,10 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
             durationMs: Math.max(retained.durationMs, this.now() - startedAt)
           }
       }
-      throw error
+      throw new AiRequestError(
+        error instanceof Error ? error.message : 'Local AI worker could not start.',
+        { failureKind: 'worker-failure' }
+      )
     }
     remainingBudgetMs = this.remainingBudget(request)
     if (remainingBudgetMs <= 100) {
@@ -442,7 +449,15 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         if (!pending) return
         const continuedAction = this.takeApplicableContinuation(pending.request)
         if (continuedAction) pending.resolve(continuedAction)
-        else pending.reject(error)
+        else
+          pending.reject(
+            new AiRequestError(
+              error instanceof Error
+                ? error.message
+                : 'Local AI worker could not receive the request.',
+              { failureKind: 'worker-failure' }
+            )
+          )
       }
     })
   }
@@ -2782,4 +2797,19 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     }
     return pending
   }
+}
+
+/** Both difficulties share the Expert engine and differ only in search resources. */
+export function createLocalAiDecisionApi(
+  session: GameBoardSession,
+  difficulty: LocalAiDifficulty
+): ExpertAiDecisionApi {
+  return new ExpertAiDecisionApi(
+    session,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    LOCAL_AI_RESOURCE_PROFILES[difficulty]
+  )
 }

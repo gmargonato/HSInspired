@@ -6,7 +6,6 @@ import type {
   DevSceneId,
   CollectibleMode
 } from '../contracts/dev-menu'
-import type { AiDecisionBridge } from '../contracts/ipc/ai'
 import type { MatchLogsApi } from '../contracts/ipc/match-logs'
 import type { DecksApi } from '../contracts/ipc/decks'
 import type { WindowSettingsApi } from '../contracts/ipc/window-settings'
@@ -34,7 +33,6 @@ interface AppAPI {
   vfxTemplates?: VfxTemplatesApi
   arena: ArenaApi
   onSceneRequest(listener: (request: SceneRequest) => void): () => void
-  ai: AiDecisionBridge
   decks: DecksApi
   playerStats: PlayerStatsApi
   progression: ProgressionApi
