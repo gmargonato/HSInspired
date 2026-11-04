@@ -122,6 +122,99 @@ describe('Expert hidden-world consensus', () => {
       api.dispose()
     }
   })
+  it('replans cached opposing Healing Wave despite its random healing amount', async () => {
+    const fixture = createAiFixture({
+      seed: 100506,
+      aiHeroId: 'thrall',
+      opponentHeroId: 'garrosh',
+      aiMana: 10,
+      aiHealth: 20,
+      opponentHealth: 18,
+      aiHand: ['basic_chillwind_yeti', 'the_grand_tournament_healing_wave']
+    })
+    const session = new GameBoardSession({
+      setup: fixture.setup,
+      decks: fixture.decks,
+      checkpoint: fixture.checkpoint
+    })
+    const actions = () =>
+      aiActions(
+        session,
+        enumerateLegalCommands(
+          {
+            getState: session.match.getState,
+            getPlayInput: session.match.getPlayInput!,
+            getLegality: session.match.getLegality!
+          },
+          session.remoteParticipantId
+        )
+      )
+    const play = actions().find(
+      (a) => a.command.type === 'play-card' && !a.command.targets?.length
+    )!
+    const heal = actions().find(
+      (a) =>
+        a.command.type === 'play-card' &&
+        a.command.targets?.[0]?.kind === 'hero' &&
+        a.command.targets[0].participantId === session.localParticipantId
+    )!
+    let receive: ((event: MessageEvent<ExpertAiWorkerResponse>) => void) | undefined
+    let calls = 0
+    const worker = {
+      addEventListener(type: string, listener: unknown) {
+        if (type === 'message') receive = listener as typeof receive
+      },
+      postMessage(message: ExpertAiWorkerRequest) {
+        if (message.type !== 'decide') return
+        const selected =
+          calls++ === 0 ? play : actions().find((a) => a.command.type === 'end-turn')!
+        const response: AiDecisionResponse = {
+          matchId: message.request.matchId,
+          requestId: message.request.requestId,
+          expectedRevision: message.request.expectedRevision,
+          modelId: 'hardware-local-v2',
+          reason: 'Fixture line.',
+          durationMs: 0,
+          finishReason: 'fixture',
+          choice: {
+            actionId: selected.id,
+            intent: aiActionIntent(selected.command, session.localParticipantId),
+            expectedResult: 'Fixture.',
+            planUpdate: null
+          },
+          usage: {
+            plannedActionIntents: [play, heal].map((a) =>
+              aiActionIntent(a.command, session.localParticipantId)
+            )
+          } as unknown as JsonObject
+        }
+        receive?.({
+          data: { type: 'decision', requestId: message.request.requestId, response }
+        } as MessageEvent<ExpertAiWorkerResponse>)
+      },
+      terminate() {}
+    } as unknown as Worker
+    const api = new ExpertAiDecisionApi(session, () => worker)
+    const request = (id: string): AiDecisionRequest => ({
+      matchId: 'october',
+      requestId: id,
+      phase: 'action',
+      expectedRevision: session.getState().revision,
+      allowInspection: false,
+      messages: [],
+      actionIds: actions().map((a) => a.id)
+    })
+    try {
+      await api.decide(request('first'))
+      expect(session.match.dispatch(play.command).accepted).toBe(true)
+      const response = await api.decide(request('second'))
+      expect(calls).toBe(2)
+      expect(response.usage?.continuationRejection).toBe('opponent-heal')
+      expect(response.finishReason).not.toBe('expert-continuation')
+    } finally {
+      api.dispose()
+    }
+  })
   it('keeps proven wins ahead of positional scores and preserves their sequence across worlds', () => {
     const candidate = (actionId: string, score: number, provenWin = false) => ({
       actionId,
@@ -3546,28 +3639,34 @@ describe('Expert fresh friendly-target repair', () => {
     }
   })
 
-  it('repairs authored opponent healing to the useful same-card self-heal', () => {
-    const h = harness({
-      seed: 2026102010,
-      aiHeroId: 'uther',
-      opponentHeroId: 'guldan',
-      aiMana: 1,
-      aiHealth: 27,
-      opponentHealth: 20,
-      aiHand: ['whispers_of_the_old_gods_forbidden_healing']
-    })
-    const selected = h.target('enemy', 'hero')
-    const self = h.target('self', 'hero')
-    const before = h.session.match.getCheckpoint()
-    try {
-      const result = h.guard(h.request, h.responseFor(selected, [self]))
-      expect(result.choice).toMatchObject({ actionId: self.id })
-      expect(result.usage?.actionOutcomeReason).toBe('opponent-heal')
-      expect(h.session.match.getCheckpoint()).toEqual(before)
-    } finally {
-      h.api.dispose()
+  it.each([
+    ['whispers_of_the_old_gods_forbidden_healing', 1],
+    ['the_grand_tournament_healing_wave', 3]
+  ] as const)(
+    'repairs %s enemy healing to the useful same-card self-heal',
+    (card, mana) => {
+      const h = harness({
+        seed: 2026102010,
+        aiHeroId: 'uther',
+        opponentHeroId: 'guldan',
+        aiMana: mana,
+        aiHealth: 27,
+        opponentHealth: 20,
+        aiHand: [card]
+      })
+      const selected = h.target('enemy', 'hero')
+      const self = h.target('self', 'hero')
+      const before = h.session.match.getCheckpoint()
+      try {
+        const result = h.guard(h.request, h.responseFor(selected, [self]))
+        expect(result.choice).toMatchObject({ actionId: self.id })
+        expect(result.usage?.actionOutcomeReason).toBe('opponent-heal')
+        expect(h.session.match.getCheckpoint()).toEqual(before)
+      } finally {
+        h.api.dispose()
+      }
     }
-  })
+  )
 
   it('keeps enemy Attack gifts as soft search advice rather than a blanket target ban', () => {
     const h = harness({

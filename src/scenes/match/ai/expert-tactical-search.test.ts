@@ -9,13 +9,23 @@ import type {
 } from '../../../game-rules/match'
 import { canonicalCommandKey, enumerateLegalCommands } from '../../../game-rules/match'
 import { createFairHypothesisCheckpoint } from '../../../game-rules/match/ai/fair-hypothesis-checkpoint'
-import { searchTactics } from '../../../game-rules/match/ai/tactical-search'
-import { createAiFixture } from '../../../game-rules/match/testing/ai-scenario-builder'
+import {
+  searchTactics,
+  inspectTacticalLine,
+  revealsTacticalInformation
+} from '../../../game-rules/match/ai/tactical-search'
+import {
+  createAiFixture,
+  type AiFixtureOptions
+} from '../../../game-rules/match/testing/ai-scenario-builder'
 import { asPlayerId } from '../../../game-rules/match/match-types'
 import { GameBoardSession } from '../game-board-session'
 import { LocalAiDecisionApi } from './local-ai-decision-api'
 import { aiActions } from './ai-context'
 import recorded from './expert-tactical-recorded-states.json'
+import { runExpertAiWorkerDecision } from './expert-ai.worker'
+import { evaluateExpertAiWorld } from './expert-ai-world-runner'
+import { chooseExpertConsensus, type ExpertEvaluatedWorld } from './expert-ai-consensus'
 import {
   findExpertVisibleDefense,
   EXPERT_VISIBLE_SURVIVAL_MAX_DISPATCHES
@@ -1215,4 +1225,415 @@ it.each([
     session.remoteParticipantId
   )
   expect(result.stats.supported).toBe(supported)
+})
+
+describe('Public certainty across concealed summon pools', () => {
+  const base: AiFixtureOptions = {
+    seed: 8801,
+    aiHeroId: 'jaina',
+    opponentHeroId: 'jaina',
+    aiMana: 2,
+    aiHeroPowerAvailable: false,
+    aiHeroPowerUsesThisTurn: 1,
+    opponentHeroPowerAvailable: false,
+    opponentHeroPowerUsesThisTurn: 1,
+    opponentHealth: 3,
+    aiHealth: 6,
+    aiBoard: [{ cardId: 'classic_questing_adventurer', ready: true }],
+    aiHand: ['mean_streets_of_gadgetzan_dirty_rat'],
+    opponentHand: ['goblins_vs_gnomes_flamecannon'],
+    aiDeck: ['basic_chillwind_yeti'],
+    opponentDeck: ['basic_chillwind_yeti']
+  }
+  function session(
+    options: Partial<AiFixtureOptions> = {},
+    sample?: number,
+    knownHand = false
+  ) {
+    const f = createAiFixture({ ...base, ...options })
+    const checkpoint =
+      sample === undefined
+        ? f.checkpoint
+        : createFairHypothesisCheckpoint(f.checkpoint, f.aiParticipantId, sample)
+    if (knownHand)
+      for (const p of checkpoint.state.players)
+        if (p.participantId !== f.aiParticipantId)
+          for (const c of p.hand) Object.assign(c, { knownTo: [f.aiParticipantId] })
+    return new GameBoardSession({
+      setup: checkpoint.setup,
+      decks: checkpoint.decks,
+      checkpoint
+    })
+  }
+  function ratLine(s: GameBoardSession): TurnMatchCommand[] {
+    const me = s
+      .getState()
+      .players.find((p) => p.participantId === s.remoteParticipantId)!
+    return [
+      {
+        type: 'play-card',
+        participantId: s.remoteParticipantId,
+        cardInstanceId: me.hand[0]!.instanceId,
+        position: 0
+      },
+      {
+        type: 'attack-character',
+        participantId: s.remoteParticipantId,
+        attacker: { kind: 'minion', instanceId: me.board[0]!.instanceId },
+        defender: { kind: 'hero' }
+      }
+    ]
+  }
+  function prove(s: GameBoardSession) {
+    return s.match.analyze((fork) =>
+      searchTactics(fork, s.remoteParticipantId, { maxNodes: 256 })
+    )
+  }
+  function inspect(s: GameBoardSession, line: readonly TurnMatchCommand[]) {
+    return s.match.analyze((fork) =>
+      inspectTacticalLine(fork, s.remoteParticipantId, line)
+    )
+  }
+
+  it('rejects a Dirty Rat no-op proof across identical public observations', () => {
+    const lucky = session({}, 13),
+      taunt = session({}, 18)
+    expect(lucky.getAiObservation()).toEqual(taunt.getAiObservation())
+    const before = lucky.match.getCheckpoint(),
+      line = ratLine(lucky)
+    const action = lucky.match.analyze((fork) => {
+      const b = fork.getState(),
+        rng = JSON.stringify(fork.getRandomState?.()),
+        r = fork.dispatch(line[0]!)
+      return {
+        accepted: r.accepted,
+        rngUnchanged: rng === JSON.stringify(fork.getRandomState?.()),
+        uncertain: revealsTacticalInformation(r.events, false, {
+          before: b,
+          after: r.state,
+          playerId: lucky.remoteParticipantId
+        })
+      }
+    })
+    expect(action.accepted).toBe(true)
+    expect(action.rngUnchanged).toBe(true)
+    expect(action.uncertain).toBe(true)
+    expect(inspect(lucky, line).outcome).toBe('unknown')
+    expect(prove(lucky).win).toBeNull()
+    expect(lucky.match.getCheckpoint()).toEqual(before)
+    const replay = taunt.match.analyze((fork) =>
+      line.map((command) => fork.dispatch(command).accepted)
+    )
+    expect(replay).toEqual([true, false])
+  })
+  it.each([
+    ['empty hand', [], false],
+    ['publicly known spell', ['goblins_vs_gnomes_flamecannon'], true]
+  ] as const)(
+    'retains the deterministic win with %s',
+    (_label, opponentHand, known) => {
+      const s = session({ opponentHand }, undefined, known),
+        line = ratLine(s)
+      expect(inspect(s, line).outcome).toBe('win')
+      expect(prove(s).win?.proven).toBe(true)
+    }
+  )
+  it('rejects an independent Deathlord hidden-deck no-op proof', () => {
+    const spec: Partial<AiFixtureOptions> = {
+      aiMana: 0,
+      aiHand: [],
+      aiBoard: [
+        { cardId: 'naxxramas_deathlord', health: 1, ready: true },
+        { cardId: 'basic_boulderfist_ogre', ready: true }
+      ],
+      opponentHealth: 6,
+      opponentBoard: [{ cardId: 'basic_senjin_shieldmasta', health: 1 }],
+      opponentHand: [],
+      opponentDeck: ['goblins_vs_gnomes_flamecannon']
+    }
+    const s = session(spec),
+      me = s.getState().players.find((p) => p.participantId === s.remoteParticipantId)!,
+      enemy = s
+        .getState()
+        .players.find((p) => p.participantId !== s.remoteParticipantId)!
+    const line: TurnMatchCommand[] = [
+      {
+        type: 'attack-character',
+        participantId: s.remoteParticipantId,
+        attacker: { kind: 'minion', instanceId: me.board[0]!.instanceId },
+        defender: { kind: 'minion', instanceId: enemy.board[0]!.instanceId }
+      },
+      {
+        type: 'attack-character',
+        participantId: s.remoteParticipantId,
+        attacker: { kind: 'minion', instanceId: me.board[1]!.instanceId },
+        defender: { kind: 'hero' }
+      }
+    ]
+    expect(inspect(s, line).outcome).toBe('unknown')
+    expect(prove(s).win).toBeNull()
+    const taunt = session({ ...spec, opponentDeck: ['basic_senjin_shieldmasta'] })
+    expect(taunt.getAiObservation()).toEqual(s.getAiObservation())
+    expect(
+      taunt.match.analyze((fork) =>
+        line.map((command) => fork.dispatch(command).accepted)
+      )
+    ).toEqual([true, false])
+  })
+  it.each([
+    ['Ancestors Call', { aiMana: 4, aiHand: ['goblins_vs_gnomes_ancestors_call'] }],
+    [
+      'Desert Camel',
+      {
+        aiMana: 3,
+        aiHand: ['league_of_explorers_desert_camel'],
+        opponentHand: [],
+        opponentDeck: ['goblins_vs_gnomes_flamecannon']
+      }
+    ]
+  ] as const)('rejects the %s concealed empty-pool variant', (_label, options) => {
+    const s = session(options)
+    expect(inspect(s, ratLine(s)).outcome).toBe('unknown')
+    expect(prove(s).win).toBeNull()
+  })
+  it('retains Deathlord proof when the opponent deck is publicly empty', () => {
+    const s = session({
+      aiMana: 0,
+      aiHand: [],
+      aiBoard: [
+        { cardId: 'naxxramas_deathlord', health: 1, ready: true },
+        { cardId: 'basic_boulderfist_ogre', ready: true }
+      ],
+      opponentHealth: 6,
+      opponentBoard: [{ cardId: 'basic_senjin_shieldmasta', health: 1 }],
+      opponentHand: [],
+      opponentDeck: []
+    })
+    expect(prove(s).win?.proven).toBe(true)
+  })
+  it('does not propagate the lucky world as a verified consensus win', async () => {
+    const results: ExpertEvaluatedWorld[] = []
+    let actionIds: string[] = []
+    for (const seed of [13, 18]) {
+      const s = session({}, seed),
+        legal = aiActions(
+          s,
+          enumerateLegalCommands(s.match as Match, s.remoteParticipantId)
+        )
+      actionIds = legal.map((a) => a.id)
+      const api = new LocalAiDecisionApi(s, undefined, {
+        profile: 'expert',
+        fairHypothesis: true,
+        workBudget: 48
+      })
+      const response = await api.decide({
+        matchId: 'certain',
+        requestId: 'certain:8801',
+        phase: 'action',
+        expectedRevision: s.getState().revision,
+        allowInspection: false,
+        messages: [],
+        actionIds
+      })
+      results.push({ response, trace: api.getLastTrace() })
+    }
+    expect(
+      results.flatMap((r) => r.trace?.candidates ?? []).some((c) => c.provenWin)
+    ).toBe(false)
+    const consensus = chooseExpertConsensus(results, actionIds)
+    expect([...consensus.scores.values()].some((c) => c.provenWin)).toBe(false)
+  })
+  it('chooses the public Wisp lethal instead of the lucky Dirty Rat line', async () => {
+    const results: ExpertEvaluatedWorld[] = []
+    let actionIds: string[] = []
+    const actual = session({
+      aiHand: ['mean_streets_of_gadgetzan_dirty_rat', 'classic_wisp'],
+      opponentHand: ['goblins_vs_gnomes_annoy_o_tron']
+    })
+    for (const seed of [13, 18]) {
+      const s = session(
+          { aiHand: ['mean_streets_of_gadgetzan_dirty_rat', 'classic_wisp'] },
+          seed
+        ),
+        legal = aiActions(
+          s,
+          enumerateLegalCommands(s.match as Match, s.remoteParticipantId)
+        )
+      actionIds = legal.map((a) => a.id)
+      const api = new LocalAiDecisionApi(s, undefined, {
+        profile: 'expert',
+        fairHypothesis: true,
+        workBudget: 48
+      })
+      const response = await api.decide({
+        matchId: 'certain-choice',
+        requestId: 'certain-choice:8801',
+        phase: 'action',
+        expectedRevision: s.getState().revision,
+        allowInspection: false,
+        messages: [],
+        actionIds
+      })
+      results.push({ response, trace: api.getLastTrace() })
+    }
+    const consensus = chooseExpertConsensus(results, actionIds),
+      selected = consensus.scores.get(consensus.actionId!)?.trace
+    const me = actual
+      .getState()
+      .players.find((p) => p.participantId === actual.remoteParticipantId)!
+    expect(selected?.sequenceIntents?.[0]?.source).toBe(
+      me.hand.find((c) => c.cardId === 'classic_wisp')!.instanceId
+    )
+    const line: TurnMatchCommand[] = [
+      {
+        type: 'play-card',
+        participantId: actual.remoteParticipantId,
+        cardInstanceId: me.hand[1]!.instanceId,
+        position: 0
+      },
+      {
+        type: 'attack-character',
+        participantId: actual.remoteParticipantId,
+        attacker: { kind: 'minion', instanceId: me.board[0]!.instanceId },
+        defender: { kind: 'hero' }
+      }
+    ]
+    expect(inspect(actual, line).outcome).toBe('win')
+  })
+  it('keeps production worker aggregation on the public Wisp win', async () => {
+    const s = session({
+      aiHand: ['mean_streets_of_gadgetzan_dirty_rat', 'classic_wisp'],
+      opponentHand: ['goblins_vs_gnomes_annoy_o_tron']
+    })
+    const legal = aiActions(
+      s,
+      enumerateLegalCommands(s.match as Match, s.remoteParticipantId)
+    )
+    const checkpoint = createFairHypothesisCheckpoint(
+      s.match.getCheckpoint(),
+      s.remoteParticipantId,
+      8802
+    )
+    const response = await runExpertAiWorkerDecision(
+      {
+        type: 'decide',
+        checkpoint,
+        perspectivePlayerId: s.remoteParticipantId,
+        seed: (13 - 0x9e3779b9) >>> 0,
+        remainingSearchBudgetMs: 6000,
+        request: {
+          matchId: 'certain-worker',
+          requestId: 'certain-worker:8801',
+          phase: 'action',
+          expectedRevision: s.getState().revision,
+          allowInspection: false,
+          messages: [],
+          actionIds: legal.map((a) => a.id)
+        }
+      },
+      {
+        evaluateWorld: (request, index, budget) =>
+          evaluateExpertAiWorld(request, index, budget, { workBudget: 48 })
+      }
+    )
+    const me = s
+      .getState()
+      .players.find((p) => p.participantId === s.remoteParticipantId)!
+    expect(response?.usage?.worldsEvaluated).toBe(2)
+    expect(response?.usage?.decisionPriority).toBe('verified-win')
+    if (!response || !('actionId' in response.choice))
+      throw Error('Expected worker action')
+    expect(response.choice.intent?.source).toBe(
+      me.hand.find((c) => c.cardId === 'classic_wisp')!.instanceId
+    )
+  })
+  it('preserves pre-existing random-damage and secret safety', () => {
+    for (const options of [
+      {
+        aiHand: ['basic_arcane_missiles'],
+        opponentBoard: [{ cardId: 'basic_boulderfist_ogre' }]
+      },
+      { aiHand: ['basic_fireball'], opponentSecrets: [{ cardId: 'classic_ice_block' }] }
+    ]) {
+      const s = session({ aiBoard: [], opponentHealth: 1, aiMana: 4, ...options })
+      expect(prove(s).win).toBeNull()
+    }
+  })
+
+  it('known identity does not establish concealed hand attack', () => {
+    const sessions = [3, 5].map((attack) => {
+      const f = createAiFixture({
+        seed: 8809,
+        aiHeroId: 'jaina',
+        opponentHeroId: 'malfurion',
+        aiMana: 0,
+        aiHand: [],
+        opponentHand: ['basic_senjin_shieldmasta'],
+        aiHeroPowerAvailable: false,
+        aiHeroPowerUsesThisTurn: 1,
+        opponentHealth: 6,
+        aiBoard: [
+          { cardId: 'classic_wisp', ready: true },
+          { cardId: 'basic_boulderfist_ogre', ready: true }
+        ],
+        opponentBoard: [{ cardId: 'journey_to_ungoro_giant_anaconda', health: 1 }],
+        aiDeck: ['basic_chillwind_yeti'],
+        opponentDeck: ['basic_chillwind_yeti']
+      })
+      const card = f.checkpoint.state.players.find(
+        (p) => p.participantId === f.localParticipantId
+      )!.hand[0]!
+      Object.assign(card, {
+        knownTo: [f.aiParticipantId],
+        attack,
+        enchantments:
+          attack === 5
+            ? [
+                {
+                  id: 'known-stat-buff',
+                  sourceInstanceId: 'known-stat-source',
+                  sourceCardId: null,
+                  attackDelta: 2,
+                  duration: 'permanent'
+                }
+              ]
+            : []
+      })
+      return new GameBoardSession({
+        setup: f.setup,
+        decks: f.decks,
+        checkpoint: f.checkpoint
+      })
+    })
+    expect(sessions[0].getAiObservation()).toEqual(sessions[1].getAiObservation())
+    const s = sessions[0],
+      me = s.getState().players.find((p) => p.participantId === s.remoteParticipantId)!,
+      enemy = s
+        .getState()
+        .players.find((p) => p.participantId !== s.remoteParticipantId)!
+    const line: TurnMatchCommand[] = [
+      {
+        type: 'attack-character',
+        participantId: s.remoteParticipantId,
+        attacker: { kind: 'minion', instanceId: me.board[0].instanceId },
+        defender: { kind: 'minion', instanceId: enemy.board[0].instanceId }
+      },
+      {
+        type: 'attack-character',
+        participantId: s.remoteParticipantId,
+        attacker: { kind: 'minion', instanceId: me.board[1].instanceId },
+        defender: { kind: 'hero' }
+      }
+    ]
+    const rows = sessions.map((s) => ({
+      inspection: s.match.analyze((f) =>
+        inspectTacticalLine(f, s.remoteParticipantId, line)
+      ),
+      proof: s.match.analyze((f) => searchTactics(f, s.remoteParticipantId)),
+      replay: s.match.analyze((f) => line.map((c) => f.dispatch(c).accepted))
+    }))
+    expect(rows[0].inspection.outcome).toBe('unknown')
+    expect(rows[0].proof.win).toBeNull()
+    expect(rows[1].replay).toEqual([true, false])
+  })
 })

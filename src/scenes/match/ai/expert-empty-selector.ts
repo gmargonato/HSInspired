@@ -17,6 +17,9 @@ function usesCastOrHandResources(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false
   const entry = value as Record<string, unknown>
   if (
+    entry.type === 'combo-active' ||
+    entry.source === 'hand' ||
+    entry.zone === 'hand' ||
     entry.type === 'player-has-hand-count' ||
     entry.type === 'player-has-card-in-hand' ||
     entry.selection === 'other-player-hand' ||
@@ -26,6 +29,7 @@ function usesCastOrHandResources(value: unknown): boolean {
     (typeof entry.reference === 'string' &&
       [
         'friendly-spells-cast-this-game',
+        'cards-played-earlier-this-turn',
         'hand-size-difference',
         'other-cards-in-hand',
         'manaSpent'
@@ -33,6 +37,20 @@ function usesCastOrHandResources(value: unknown): boolean {
   )
     return true
   return Object.values(entry).some(usesCastOrHandResources)
+}
+
+/** Retain an empty cast when a visible follow-up might need its hand slot. */
+function usesHandCapacity(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  const entry = value as Record<string, unknown>
+  return (
+    entry.destination === 'hand' ||
+    (typeof entry.action === 'string' &&
+      (entry.action === 'draw' ||
+        entry.action.includes('hand') ||
+        entry.action.includes('discover'))) ||
+    Object.values(entry).some(usesHandCapacity)
+  )
 }
 
 /**
@@ -50,11 +68,10 @@ export function wastesEmptySelectorSpell(
   const stopped = shouldStop
   const state = root.getState()
   const self = state.players.find((player) => player.participantId === actorId)
-  const card = self?.hand[0]
+  const card = self?.hand.find((entry) => entry.instanceId === command.cardInstanceId)
   const definition = card && CARD_CATALOG.get(card.cardId)
   if (
     !self ||
-    self.hand.length !== 1 ||
     !card ||
     card.instanceId !== command.cardInstanceId ||
     definition?.type !== 'Spell' ||
@@ -70,7 +87,6 @@ export function wastesEmptySelectorSpell(
     state.pendingResolution ||
     state.scheduledEffects?.length ||
     state.extraTurnQueue?.length ||
-    self.heroPower.available ||
     !state.history ||
     !root.getAiObservation ||
     !root.getRandomState
@@ -79,12 +95,35 @@ export function wastesEmptySelectorSpell(
   const effect = definition.effects[0]!
   const action = effect.actions?.[0]
   const target = action?.target
+  // An empty enemy transform leaves friendly bodies intact. Unlike a bounce,
+  // it can be checked with other cards held, provided no visible setup consumes
+  // the freed hand slot or cast history and the complete state stays unchanged.
+  const emptyTransform =
+    action?.action === 'transform-random' &&
+    isCardEffectObject(target) &&
+    target.controller === 'opponent' &&
+    !state.players.some(
+      (player) => player.participantId !== actorId && player.board.length
+    ) &&
+    Object.keys(action).every((key) =>
+      ['action', 'target', 'filter', 'leaveUnchangedIfNoValidCost'].includes(key)
+    )
   if (
     Object.keys(effect).some((key) => !['trigger', 'actions'].includes(key)) ||
     effect.trigger !== 'cast' ||
     effect.actions?.length !== 1 ||
-    action?.action !== 'return-to-hand' ||
-    Object.keys(action).some((key) => !['action', 'target'].includes(key)) ||
+    (!emptyTransform &&
+      (action?.action !== 'return-to-hand' ||
+        Object.keys(action).some((key) => !['action', 'target'].includes(key)) ||
+        self.hand.length !== 1 ||
+        self.heroPower.available)) ||
+    (emptyTransform &&
+      (self.hand.length >= 10 ||
+        [...self.hand, ...self.board, ...(self.weapon ? [self.weapon] : [])].some(
+          (entry) =>
+            entry.instanceId !== card.instanceId &&
+            usesHandCapacity(CARD_CATALOG.get(entry.cardId)?.effects)
+        ))) ||
     !isCardEffectObject(target) ||
     target.type !== 'minion' ||
     target.selection !== 'all' ||
@@ -100,8 +139,8 @@ export function wastesEmptySelectorSpell(
     state.players.some((player) => {
       const power = HERO_POWER_CATALOG.get(player.heroPower.id)
       return (
-        player.board.length ||
-        player.quest ||
+        (!emptyTransform && player.board.length) ||
+        (player.quest && (!emptyTransform || player.participantId === actorId)) ||
         player.secrets?.length ||
         player.hero.enchantments?.length ||
         player.heroPower.enchantments?.length ||
@@ -113,9 +152,11 @@ export function wastesEmptySelectorSpell(
           'damage-character',
           'restore-character',
           'equip-weapon',
-          'gain-armor'
+          'gain-armor',
+          ...(emptyTransform ? ['summon-random-totem'] : [])
         ].includes(power.effect.kind) ||
-        (player.weapon &&
+        (!emptyTransform &&
+          player.weapon &&
           (CARD_CATALOG.get(player.weapon.cardId)?.effects.length !== 0 ||
             player.weapon.enchantments?.length)) ||
         player.pendingCostModifiers?.length ||
@@ -141,9 +182,12 @@ export function wastesEmptySelectorSpell(
   if (observation.players.some((player) => player.secrets.length)) return false
   const known = new Set([
     ...observation.selfOriginalDeck.cards.map((entry) => entry.cardId),
-    ...observation.players.flatMap((player) =>
-      player.hand.map((entry) => entry.cardId)
-    ),
+    ...observation.players.flatMap((player) => [
+      ...player.hand.map((entry) => entry.cardId),
+      ...player.board.map((entry) => entry.cardId),
+      ...(player.weapon ? [player.weapon.cardId] : []),
+      ...(player.quest ? [player.quest.cardId] : [])
+    ]),
     ...(self.graveyard?.map((entry) => entry.minion.cardId) ?? []),
     ...self.deck
       .filter((entry) => entry.knownTo?.includes(actorId))
@@ -152,6 +196,14 @@ export function wastesEmptySelectorSpell(
     ...(self.discardedCards?.map((entry) => entry.cardId) ?? [])
   ])
   if (
+    usesCastOrHandResources(
+      state.players.map((player) => [
+        player.hero.enchantments,
+        player.heroPower.enchantments,
+        player.board.map((minion) => minion.enchantments),
+        player.weapon?.enchantments
+      ])
+    ) ||
     known.size > 80 ||
     [...known].some((id) => {
       const knownCard = CARD_CATALOG.get(id)
@@ -185,7 +237,7 @@ export function wastesEmptySelectorSpell(
           ? player
           : {
               ...player,
-              hand: [],
+              hand: player.hand.filter((entry) => entry.instanceId !== card.instanceId),
               mana: { ...player.mana, available: player.mana.available - cost },
               discardedCards: [
                 ...(player.discardedCards ?? []),

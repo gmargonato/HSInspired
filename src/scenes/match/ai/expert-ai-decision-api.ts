@@ -44,6 +44,10 @@ import { reviewEquivalentTrade } from './expert-equivalent-trade'
 import { reviewCompletedAttackOrder } from './expert-completed-attack-order'
 import { reviewRedundantHealingPrefix } from './expert-redundant-healing'
 import {
+  isRedundantAttackPrefixCandidate,
+  reviewRedundantAttackPrefix
+} from './expert-redundant-attack'
+import {
   isRedundantSpellPrefixCandidate,
   reviewRedundantSpellPrefix
 } from './expert-redundant-spell'
@@ -1264,10 +1268,14 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     resourceReviewCheckpoint?: OpeningMatchCheckpoint
   ): AiDecisionResponse {
     response = this.guardEquivalentTrade(request, response)
-    response = this.guardRedundantSpell(request, response, resourceReviewCheckpoint)
+    response = this.guardRedundantResourcePrefix(
+      request,
+      response,
+      resourceReviewCheckpoint
+    )
     // A successful omission can expose a healing prefix; do not stack a second
     // resource review onto the same decision's bounded review allowance.
-    if (!response.usage?.redundantSpellReview)
+    if (!response.usage?.redundantSpellReview && !response.usage?.redundantAttackReview)
       response = this.guardRedundantHealing(request, response)
     response = this.guardSingletonAttackOrder(request, response)
     if (response.usage?.actionOutcomeReason === 'committed-singleton-attack-order')
@@ -1395,7 +1403,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     }
   }
 
-  private guardRedundantSpell(
+  private guardRedundantResourcePrefix(
     request: AiDecisionRequest,
     response: AiDecisionResponse,
     resourceReviewCheckpoint?: OpeningMatchCheckpoint
@@ -1416,11 +1424,16 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       !planned.every(isAiActionIntent) ||
       planned.length > intents.length ||
       !planned.every((intent, index) => sameAiIntent(intent, intents[index]!)) ||
-      !isRedundantSpellPrefixCandidate(
+      (!isRedundantSpellPrefixCandidate(
         this.session.getState(),
         this.perspectiveParticipantId,
         intents
-      )
+      ) &&
+        !isRedundantAttackPrefixCandidate(
+          this.session.getState(),
+          this.perspectiveParticipantId,
+          intents
+        ))
     )
       return response
     const selectedId =
@@ -1447,7 +1460,15 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       this.searchUsedMs += elapsed
       return { ...response, durationMs: response.durationMs + elapsed }
     }
-    const review = reviewRedundantSpellPrefix(
+    const attackPrefix = isRedundantAttackPrefixCandidate(
+      this.session.getState(),
+      this.perspectiveParticipantId,
+      intents
+    )
+    const reviewKey = attackPrefix ? 'redundantAttackReview' : 'redundantSpellReview'
+    const review = (
+      attackPrefix ? reviewRedundantAttackPrefix : reviewRedundantSpellPrefix
+    )(
       this.session.match.getCheckpoint(),
       this.perspectiveParticipantId,
       intents,
@@ -1470,14 +1491,15 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
         durationMs: response.durationMs + elapsed,
         usage: {
           ...response.usage,
-          redundantSpellReview: {
+          [reviewKey]: {
             ...review.stats,
             abstained: review.stats.abstained || expired
           }
         }
       }
-    const reason =
-      'The reviewed continuation reaches the same board while retaining this spell.'
+    const reason = attackPrefix
+      ? 'The reviewed bounce preserves a friendly minion instead of sacrificing it first.'
+      : 'The reviewed continuation reaches the same board while retaining this spell.'
     const sequence = commands.map((command) => aiActionIntent(command, opponent))
     const plan = 'plan' in response.choice ? response.choice.plan : null
     return {
@@ -1513,13 +1535,15 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
             ? 'tactical-safety'
             : 'tactical-preference',
         tacticalOverride: true,
-        actionOutcomeReason: 'redundant-spell-prefix',
+        actionOutcomeReason: attackPrefix
+          ? 'redundant-attack-prefix'
+          : 'redundant-spell-prefix',
         resourceReviewIntents: null,
         plannedActionIntents: sequence.map((intent) => ({
           ...intent,
           targets: [...intent.targets]
         })),
-        redundantSpellReview: {
+        [reviewKey]: {
           ...review.stats,
           fromActionId: selected.id,
           toActionId: replacement.id
