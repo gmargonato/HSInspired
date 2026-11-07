@@ -4057,6 +4057,18 @@ export class EffectRuntime {
           ).includes('spell-immune')
         })
       }
+      if (
+        ref.kind === 'minion' &&
+        (keyword === 'windfury' || keyword === 'mega-windfury')
+      ) {
+        // Continuous keyword auras run after the base attack limit is derived.
+        // Publish the effective limit so legality and AI see the extra attacks.
+        this.updateMinion(ref, (minion) => {
+          minion.maxAttacksPerTurn = attacksPerTurnForKeywords(
+            new Set(effectiveBoardMinionKeywords(minion, this.draft.turnNumber))
+          )
+        })
+      }
       if (ref.kind === 'hero' && keyword === 'spell-damage') {
         const hero = this.player(ref.participantId).hero
         hero.spellDamage = enabled ? (hero.spellDamage ?? 0) + amount : 0
@@ -4235,6 +4247,7 @@ export class EffectRuntime {
     }
     let actualDamage = displayAmount
     let effectiveDamage: number
+    let minionLifestealDamage: number | undefined
     if (ref.kind === 'hero') {
       const player = this.player(ref.participantId)
       const armorDamage = Math.min(player.hero.armor, actualDamage)
@@ -4321,6 +4334,12 @@ export class EffectRuntime {
           0
         )
       )
+      // Lifesteal includes overkill, but cannot include damage prevented by a
+      // minimum-health effect. Keep health-loss accounting unchanged.
+      minionLifestealDamage =
+        minimumHealth > 0
+          ? Math.min(actualDamage, Math.max(0, minion.health - minimumHealth))
+          : actualDamage
       actualDamage = Math.min(actualDamage, Math.max(0, minion.health - minimumHealth))
       minion.health = Math.max(minimumHealth, minion.health - actualDamage)
       minion.damageTaken = Math.max(0, minion.maxHealth - minion.health)
@@ -4390,7 +4409,7 @@ export class EffectRuntime {
             participantId: frame.controllerId,
             zone: 'hero'
           },
-          effectiveDamage,
+          minionLifestealDamage ?? effectiveDamage,
           lifestealFrame,
           `${path}.lifesteal`,
           {

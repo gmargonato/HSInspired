@@ -1,0 +1,668 @@
+[
+  {
+    "id": "kobolds_and_catacombs_aluneth",
+    "expansionId": "kobolds-and-catacombs",
+    "name": "Aluneth",
+    "rarity": "Legendary",
+    "cardClass": "Mage",
+    "type": "Weapon",
+    "subtype": "General",
+    "cost": 6,
+    "attack": 0,
+    "health": 3,
+    "rulesText": "At the end of your turn, draw 3 cards.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 3
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "saviors_of_uldum_ancient_mysteries",
+    "expansionId": "saviors-of-uldum",
+    "name": "Ancient Mysteries",
+    "rarity": "Common",
+    "cardClass": "Mage",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "Draw a Secret from your deck. It costs (0).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1,
+            "source": {
+              "controller": "self",
+              "type": "card",
+              "zone": "deck",
+              "selection": "random",
+              "filter": {
+                "keyword": "secret"
+              }
+            },
+            "modifyDrawnCard": {
+              "setCost": 0
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true,
+    "spellSchool": "Arcane"
+  },
+  {
+    "id": "saviors_of_uldum_arcane_flakmage",
+    "expansionId": "saviors-of-uldum",
+    "name": "Arcane Flakmage",
+    "rarity": "Rare",
+    "cardClass": "Mage",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 2,
+    "attack": 3,
+    "health": 2,
+    "rulesText": "After you play a Secret, deal 2 damage to all enemy minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-secret-played",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": 2
+          }
+        ],
+        "event": {
+          "type": "secret-played",
+          "controller": "self",
+          "playedFromHand": true
+        }
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "saviors_of_uldum_cloud_prince",
+    "expansionId": "saviors-of-uldum",
+    "name": "Cloud Prince",
+    "rarity": "Common",
+    "cardClass": "Mage",
+    "type": "Minion",
+    "subtype": "Elemental",
+    "cost": 5,
+    "attack": 4,
+    "health": 4,
+    "rulesText": "Battlecry: If you control a Secret, deal 6 damage.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "character",
+              "selection": "chosen"
+            },
+            "amount": 6
+          }
+        ],
+        "condition": {
+          "type": "player-controls-secret",
+          "player": "self"
+        }
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "saviors_of_uldum_flame_ward",
+    "expansionId": "saviors-of-uldum",
+    "name": "Flame Ward",
+    "rarity": "Common",
+    "cardClass": "Mage",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 3,
+    "attack": null,
+    "health": null,
+    "rulesText": "Secret: After a minion attacks your hero, deal 3 damage to all enemy minions.",
+    "keywords": ["secret"],
+    "effects": [
+      {
+        "trigger": "secret",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": 3
+          }
+        ],
+        "event": {
+          "type": "attack-resolved",
+          "source": {
+            "type": "minion",
+            "controller": "opponent",
+            "selection": "event-source"
+          },
+          "target": {
+            "type": "hero",
+            "controller": "self",
+            "selection": "event-target"
+          }
+        },
+        "condition": {
+          "type": "player-health-gt",
+          "player": "self",
+          "value": 0
+        }
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true,
+    "spellSchool": "Fire"
+  },
+  {
+    "id": "madness_at_the_darkmoon_faire_occult_conjurer",
+    "expansionId": "madness-at-the-darkmoon-faire",
+    "name": "Occult Conjurer",
+    "rarity": "Epic",
+    "cardClass": "Mage",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 4,
+    "attack": 4,
+    "health": 4,
+    "rulesText": "Battlecry: If you control a Secret, summon a copy of this.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon-copy",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "count": 1,
+            "exactCopy": true
+          }
+        ],
+        "condition": {
+          "type": "player-controls-secret",
+          "player": "self"
+        }
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "madness_at_the_darkmoon_faire_prize_plunderer",
+    "expansionId": "madness-at-the-darkmoon-faire",
+    "name": "Prize Plunderer",
+    "rarity": "Rare",
+    "cardClass": "Rogue",
+    "type": "Minion",
+    "subtype": "Pirate",
+    "cost": 1,
+    "attack": 2,
+    "health": 1,
+    "rulesText": "Combo: Deal 1 damage to a minion for each other card you've played this turn.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "amount": {
+              "reference": "cards-played-earlier-this-turn"
+            }
+          }
+        ],
+        "condition": {
+          "type": "combo-active"
+        }
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "voyage_to_the_sunken_city_click_clocker",
+    "expansionId": "voyage-to-the-sunken-city",
+    "name": "Click-Clocker",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Mech",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Divine Shield. Battlecry: Give a random Mech in your hand +1/+1.",
+    "keywords": ["divine-shield"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "random",
+              "zone": "hand",
+              "filter": {
+                "tribe": "Mech"
+              }
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true,
+    "tribes": ["Mech", "Beast"]
+  },
+  {
+    "id": "voyage_to_the_sunken_city_security_automaton",
+    "expansionId": "voyage-to-the-sunken-city",
+    "name": "Security Automaton",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Mech",
+    "cost": 2,
+    "attack": 1,
+    "health": 3,
+    "rulesText": "After you summon a Mech, gain +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-summon",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ],
+        "event": {
+          "type": "minion-summoned",
+          "controller": "self",
+          "filter": {
+            "tribe": "Mech"
+          }
+        }
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "voyage_to_the_sunken_city_mecha_shark",
+    "expansionId": "voyage-to-the-sunken-city",
+    "name": "Mecha-Shark",
+    "rarity": "Common",
+    "cardClass": "Mage",
+    "type": "Minion",
+    "subtype": "Mech",
+    "cost": 3,
+    "attack": 4,
+    "health": 3,
+    "rulesText": "After you summon a Mech, deal 3 damage randomly split among all enemies.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-summon",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "opponent",
+              "type": "character",
+              "selection": "random"
+            },
+            "amount": 1,
+            "hits": 3
+          }
+        ],
+        "event": {
+          "type": "minion-summoned",
+          "controller": "self",
+          "filter": {
+            "tribe": "Mech"
+          }
+        }
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true,
+    "tribes": ["Mech", "Beast"]
+  },
+  {
+    "id": "voyage_to_the_sunken_city_seafloor_gateway",
+    "expansionId": "voyage-to-the-sunken-city",
+    "name": "Seafloor Gateway",
+    "rarity": "Rare",
+    "cardClass": "Mage",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 3,
+    "attack": null,
+    "health": null,
+    "rulesText": "Draw a Mech. Reduce the Cost of Mechs in your hand by (1).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1,
+            "source": {
+              "controller": "self",
+              "type": "card",
+              "zone": "deck",
+              "selection": "random",
+              "filter": {
+                "tribe": "Mech"
+              }
+            }
+          },
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "all",
+              "zone": "hand",
+              "filter": {
+                "tribe": "Mech"
+              }
+            },
+            "amount": -1,
+            "minimum": 0,
+            "duration": "while-in-hand"
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "the_boomsday_project_mecharoo",
+    "expansionId": "the-boomsday-project",
+    "name": "Mecharoo",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Mech",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Deathrattle: Summon a 1/1 Jo-E Bot.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "the_boomsday_project_jo_e_bot",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true,
+    "tribes": ["Mech", "Beast"]
+  },
+  {
+    "id": "the_boomsday_project_galvanizer",
+    "expansionId": "the-boomsday-project",
+    "name": "Galvanizer",
+    "rarity": "Rare",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Mech",
+    "cost": 2,
+    "attack": 1,
+    "health": 2,
+    "rulesText": "Battlecry: Reduce the Cost of Mechs in your hand by (1).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "card",
+              "selection": "all",
+              "zone": "hand",
+              "filter": {
+                "tribe": "Mech"
+              }
+            },
+            "amount": -1,
+            "minimum": 0,
+            "duration": "while-in-hand"
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "the_witchwood_hench_clan_thug",
+    "expansionId": "the-witchwood",
+    "name": "Hench-Clan Thug",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Quilboar",
+    "cost": 3,
+    "attack": 3,
+    "health": 3,
+    "rulesText": "After your hero attacks, give this minion +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-attack",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "self",
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ],
+        "event": {
+          "type": "attack-resolved",
+          "source": {
+            "controller": "self",
+            "type": "hero",
+            "selection": "event-source"
+          }
+        }
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "rastakhans_rumble_raiding_party",
+    "expansionId": "rastakhans-rumble",
+    "name": "Raiding Party",
+    "rarity": "Rare",
+    "cardClass": "Rogue",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 3,
+    "attack": null,
+    "health": null,
+    "rulesText": "Draw 2 Pirates from your deck. Combo: And a weapon.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 2,
+            "source": {
+              "controller": "self",
+              "type": "card",
+              "zone": "deck",
+              "selection": "random",
+              "filter": {
+                "tribe": "Pirate"
+              }
+            }
+          }
+        ],
+        "then": {
+          "condition": {
+            "type": "combo-active"
+          },
+          "actions": [
+            {
+              "action": "draw",
+              "player": "self",
+              "count": 1,
+              "source": {
+                "controller": "self",
+                "type": "card",
+                "zone": "deck",
+                "selection": "random",
+                "filter": {
+                  "cardType": "Weapon"
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "scholomance_academy_cutting_class",
+    "expansionId": "scholomance-academy",
+    "name": "Cutting Class",
+    "rarity": "Common",
+    "cardClass": "Rogue",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 5,
+    "attack": null,
+    "health": null,
+    "rulesText": "Draw 2 cards. Costs (1) less per Attack of your weapon.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 2
+          }
+        ]
+      },
+      {
+        "trigger": "while-in-hand",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "type": "card",
+              "selection": "source"
+            },
+            "amount": {
+              "reference": "source.weapon.attack",
+              "operation": "subtract"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true,
+    "allowedClasses": ["Rogue", "Warrior"]
+  },
+  {
+    "id": "the_boomsday_project_jo_e_bot",
+    "expansionId": "the-boomsday-project",
+    "name": "Jo-E Bot",
+    "rarity": "None",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Mech",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false,
+    "deckLegal": false
+  }
+]

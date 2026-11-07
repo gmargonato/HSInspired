@@ -8,6 +8,7 @@ import {
   BLACKROCK_MOUNTAIN_CARD_SOURCE,
   CLASSIC_CARD_SOURCE,
   FUTURE_PAST_CARD_SOURCE,
+  SHORTLIST_CARD_SOURCE,
   GOBLINS_VS_GNOMES_CARD_SOURCE,
   JOURNEY_TO_UNGORO_CARD_SOURCE,
   KNIGHTS_OF_THE_FROZEN_THRONE_CARD_SOURCE,
@@ -104,7 +105,145 @@ export const EXPANSION_DEFINITIONS: readonly ExpansionDefinition[] = [
     11,
     KNIGHTS_OF_THE_FROZEN_THRONE_CARD_SOURCE
   ),
-  expansion('future-past', 'Future Past', 12, FUTURE_PAST_CARD_SOURCE)
+  expansion('future-past', 'Future Past', 12, FUTURE_PAST_CARD_SOURCE),
+  expansion(
+    'kobolds-and-catacombs',
+    'Kobolds & Catacombs',
+    13,
+    SHORTLIST_CARD_SOURCE.filter((card) => card.expansionId === 'kobolds-and-catacombs')
+  ),
+  expansion(
+    'the-witchwood',
+    'The Witchwood',
+    14,
+    SHORTLIST_CARD_SOURCE.filter((card) => card.expansionId === 'the-witchwood')
+  ),
+  expansion(
+    'the-boomsday-project',
+    'The Boomsday Project',
+    15,
+    SHORTLIST_CARD_SOURCE.filter((card) => card.expansionId === 'the-boomsday-project')
+  ),
+  expansion(
+    'rastakhans-rumble',
+    "Rastakhan's Rumble",
+    16,
+    SHORTLIST_CARD_SOURCE.filter((card) => card.expansionId === 'rastakhans-rumble')
+  ),
+  expansion(
+    'rise-of-shadows',
+    'Rise of Shadows',
+    17,
+    SHORTLIST_CARD_SOURCE.filter((card) => card.expansionId === 'rise-of-shadows')
+  ),
+  expansion(
+    'saviors-of-uldum',
+    'Saviors of Uldum',
+    18,
+    SHORTLIST_CARD_SOURCE.filter((card) => card.expansionId === 'saviors-of-uldum')
+  ),
+  expansion(
+    'descent-of-dragons',
+    'Descent of Dragons',
+    19,
+    SHORTLIST_CARD_SOURCE.filter((card) => card.expansionId === 'descent-of-dragons')
+  ),
+  expansion(
+    'galakronds-awakening',
+    "Galakrond's Awakening",
+    20,
+    SHORTLIST_CARD_SOURCE.filter((card) => card.expansionId === 'galakronds-awakening')
+  ),
+  expansion(
+    'ashes-of-outland',
+    'Ashes of Outland',
+    21,
+    SHORTLIST_CARD_SOURCE.filter((card) => card.expansionId === 'ashes-of-outland')
+  ),
+  expansion(
+    'scholomance-academy',
+    'Scholomance Academy',
+    22,
+    SHORTLIST_CARD_SOURCE.filter((card) => card.expansionId === 'scholomance-academy')
+  ),
+  expansion(
+    'madness-at-the-darkmoon-faire',
+    'Madness at the Darkmoon Faire',
+    23,
+    SHORTLIST_CARD_SOURCE.filter(
+      (card) => card.expansionId === 'madness-at-the-darkmoon-faire'
+    )
+  ),
+  expansion(
+    'forged-in-the-barrens',
+    'Forged in the Barrens',
+    24,
+    SHORTLIST_CARD_SOURCE.filter((card) => card.expansionId === 'forged-in-the-barrens')
+  ),
+  expansion(
+    'united-in-stormwind',
+    'United in Stormwind',
+    25,
+    SHORTLIST_CARD_SOURCE.filter((card) => card.expansionId === 'united-in-stormwind')
+  ),
+  expansion(
+    'voyage-to-the-sunken-city',
+    'Voyage to the Sunken City',
+    26,
+    SHORTLIST_CARD_SOURCE.filter(
+      (card) => card.expansionId === 'voyage-to-the-sunken-city'
+    )
+  ),
+  expansion(
+    'murder-at-castle-nathria',
+    'Murder at Castle Nathria',
+    27,
+    SHORTLIST_CARD_SOURCE.filter(
+      (card) => card.expansionId === 'murder-at-castle-nathria'
+    )
+  ),
+  expansion(
+    'march-of-the-lich-king',
+    'March of the Lich King',
+    28,
+    SHORTLIST_CARD_SOURCE.filter(
+      (card) => card.expansionId === 'march-of-the-lich-king'
+    )
+  ),
+  expansion(
+    'titans',
+    'TITANS',
+    29,
+    SHORTLIST_CARD_SOURCE.filter((card) => card.expansionId === 'titans')
+  ),
+  expansion(
+    'showdown-in-the-badlands',
+    'Showdown in the Badlands',
+    30,
+    SHORTLIST_CARD_SOURCE.filter(
+      (card) => card.expansionId === 'showdown-in-the-badlands'
+    )
+  ),
+  expansion(
+    'whizbangs-workshop',
+    "Whizbang's Workshop",
+    31,
+    SHORTLIST_CARD_SOURCE.filter((card) => card.expansionId === 'whizbangs-workshop')
+  ),
+  expansion(
+    'perils-in-paradise',
+    'Perils in Paradise',
+    32,
+    SHORTLIST_CARD_SOURCE.filter((card) => card.expansionId === 'perils-in-paradise')
+  ),
+  expansion(
+    'into-the-emerald-dream',
+    'Into the Emerald Dream',
+    33,
+    SHORTLIST_CARD_SOURCE.filter(
+      (card) => card.expansionId === 'into-the-emerald-dream'
+    )
+  )
 ]
 
 export class ExpansionCatalog {

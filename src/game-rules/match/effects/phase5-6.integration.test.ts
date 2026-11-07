@@ -532,7 +532,9 @@ describe('Phase 5/6 real-card integration', () => {
       ])
     )
     expect(generated?.costAdjustments).toEqual(
-      expect.arrayContaining([expect.objectContaining({ amount: -3 })])
+      expect.arrayContaining([
+        expect.objectContaining({ amount: -Math.min(3, generated?.baseCost ?? 0) })
+      ])
     )
     expect(effectActions(portalResult)).toEqual(
       expect.arrayContaining(['add-to-hand', 'change-cost'])

@@ -27,7 +27,7 @@ export interface CuratedOpponentSelection {
 
 const CURATED_OPPONENT_SEED_SALT = 0x63757261
 
-/** Select one class uniformly, then one of its four curated lists uniformly. */
+/** Select one class uniformly, then one of its curated lists uniformly. */
 export function selectCuratedConstructedOpponent(
   seed: number,
   /** Explicit development selection; ordinary selection remains seeded. */
@@ -38,8 +38,7 @@ export function selectCuratedConstructedOpponent(
   const rng = createSeededRng(seed ^ CURATED_OPPONENT_SEED_SALT)
   const classId = PLAYABLE_CLASSES[Math.floor(rng.next() * PLAYABLE_CLASSES.length)]
   const candidates = getCuratedOpponentDecksForClass(classId)
-  if (candidates.length !== 4)
-    throw new Error(`Expected four curated ${classId} decks.`)
+  if (!candidates.length) throw new Error(`No curated ${classId} decks are available.`)
   const selected = deckId
     ? PLAYABLE_CLASSES.flatMap(getCuratedOpponentDecksForClass).find(
         (candidate) => candidate.definition.id === deckId

@@ -10,7 +10,8 @@ const optionNames = new Map([
   ['--max-actions', 'LOCAL_AI_BENCHMARK_MAX_ACTIONS'],
   ['--turn-budget-ms', 'LOCAL_AI_BENCHMARK_TURN_BUDGET_MS'],
   ['--work-budget', 'LOCAL_AI_BENCHMARK_WORK_BUDGET'],
-  ['--baseline', 'LOCAL_AI_BENCHMARK_BASELINE']
+  ['--baseline', 'LOCAL_AI_BENCHMARK_BASELINE'],
+  ['--opponent-deck-id', 'LOCAL_AI_BENCHMARK_OPPONENT_DECK_ID']
 ])
 
 const environment = {

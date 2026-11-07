@@ -67,6 +67,7 @@ interface BenchmarkOptions {
   readonly baseline: 'easy' | 'random'
   readonly curated: boolean
   readonly easyMirror: boolean
+  readonly opponentDeckId?: string
   readonly curatedDeckIds: readonly string[]
   readonly maxActions: number
   readonly turnBudgetMs: number
@@ -144,6 +145,7 @@ interface MatchResult {
   readonly seed: number
   readonly expertPlayer: string | null
   readonly candidateDeckId: string | null
+  readonly candidateParticipantId: string | null
   readonly startingParticipantId: string
   readonly winnerParticipantId: string | null
   readonly decisionCoverage: readonly {
@@ -1148,6 +1150,16 @@ function readOptions(): BenchmarkOptions {
   const games = positiveInteger('LOCAL_AI_BENCHMARK_GAMES', 2, 100)
   const curated = process.env.LOCAL_AI_BENCHMARK_CURATED === '1'
   const easyMirror = process.env.LOCAL_AI_BENCHMARK_EASY_MIRROR === '1'
+  const opponentDeckId = process.env.LOCAL_AI_BENCHMARK_OPPONENT_DECK_ID
+  if (opponentDeckId && (!curated || !easyMirror || games % 2 !== 0))
+    throw new Error(
+      'Cross-deck capability checks require curated Easy mode and an even game count.'
+    )
+  if (
+    opponentDeckId &&
+    !CURATED_OPPONENT_DECKS.some((entry) => entry.definition.id === opponentDeckId)
+  )
+    throw new Error('Unknown cross-deck opponent ID.')
   const curatedDeckIds = (process.env.LOCAL_AI_BENCHMARK_DECK_IDS ?? '')
     .split(',')
     .map((id) => id.trim())
@@ -1162,7 +1174,7 @@ function readOptions(): BenchmarkOptions {
   })()
   if (curated && !easyMirror && games !== 4)
     throw new Error('Curated deck evaluation requires exactly four games per deck.')
-  if (easyMirror && (!curated || games !== 1))
+  if (easyMirror && !opponentDeckId && (!curated || games !== 1))
     throw new Error(
       'Easy mirror checks require curated mode and exactly one game per deck.'
     )
@@ -1179,6 +1191,7 @@ function readOptions(): BenchmarkOptions {
     baseline,
     curated,
     easyMirror,
+    ...(opponentDeckId ? { opponentDeckId } : {}),
     curatedDeckIds,
     maxActions: positiveInteger('LOCAL_AI_BENCHMARK_MAX_ACTIONS', 300, 10_000),
     turnBudgetMs: positiveInteger(
@@ -1415,9 +1428,11 @@ async function runBenchmark(options: BenchmarkOptions) {
     const candidateIndex = options.curated ? Math.floor(gameIndex / options.games) : -1
     const candidateGameIndex = options.curated ? gameIndex % options.games : gameIndex
     const curatedCandidate = options.curated ? curatedDecks[candidateIndex] : undefined
-    const seed = options.curated
-      ? uint32(options.seed + (candidateGameIndex % 2) * 0x9e3779b9)
-      : uint32(options.seed + Math.floor(gameIndex / 2) * 0x9e3779b9)
+    const seed = options.opponentDeckId
+      ? uint32(options.seed + Math.floor(candidateGameIndex / 2) * 0x9e3779b9)
+      : options.curated
+        ? uint32(options.seed + (candidateGameIndex % 2) * 0x9e3779b9)
+        : uint32(options.seed + Math.floor(gameIndex / 2) * 0x9e3779b9)
     let firstDeck: ReturnType<typeof generateConstructedOpponent>['deck']
     let secondDeck: ReturnType<typeof generateConstructedOpponent>['deck']
     let firstArchetype: string
@@ -1427,12 +1442,17 @@ async function runBenchmark(options: BenchmarkOptions) {
         ...curatedCandidate.deck,
         id: 'benchmark-local-' + curatedCandidate.definition.id
       }
+      const opponent = options.opponentDeckId
+        ? CURATED_OPPONENT_DECKS.find(
+            (entry) => entry.definition.id === options.opponentDeckId
+          )!
+        : curatedCandidate
       secondDeck = {
-        ...curatedCandidate.deck,
-        id: 'benchmark-remote-' + curatedCandidate.definition.id
+        ...opponent.deck,
+        id: 'benchmark-remote-' + opponent.definition.id
       }
       firstArchetype = curatedCandidate.definition.id
-      secondArchetype = curatedCandidate.definition.id
+      secondArchetype = options.opponentDeckId ?? curatedCandidate.definition.id
     } else {
       const firstGenerated = generateConstructedOpponent(seed, {
         archetypeId: 'beast-hunter'
@@ -1444,6 +1464,12 @@ async function runBenchmark(options: BenchmarkOptions) {
       secondDeck = { ...secondGenerated.deck, id: 'benchmark-second-' + seed }
       firstArchetype = firstGenerated.metadata.archetype
       secondArchetype = secondGenerated.metadata.archetype
+    }
+    const candidateParticipantId =
+      options.opponentDeckId && candidateGameIndex % 2 === 1 ? SECOND_ID : FIRST_ID
+    if (options.opponentDeckId && candidateParticipantId === SECOND_ID) {
+      ;[firstDeck, secondDeck] = [secondDeck, firstDeck]
+      ;[firstArchetype, secondArchetype] = [secondArchetype, firstArchetype]
     }
     const expertPlayerId = options.easyMirror
       ? null
@@ -1466,8 +1492,11 @@ async function runBenchmark(options: BenchmarkOptions) {
           [FIRST_ID, expertPlayerId === FIRST_ID ? 'expert' : options.baseline],
           [SECOND_ID, expertPlayerId === SECOND_ID ? 'expert' : options.baseline]
         ])
-    const startingParticipantId =
-      options.curated && candidateGameIndex >= 2 ? SECOND_ID : FIRST_ID
+    const startingParticipantId = options.opponentDeckId
+      ? FIRST_ID
+      : options.curated && candidateGameIndex >= 2
+        ? SECOND_ID
+        : FIRST_ID
     // Curated runs disable this AI-only bonus; the generated mirror keeps it fixed
     // to seat one so each profile receives the same benefit once per pair.
     const setup: MatchSetup = {
@@ -1910,6 +1939,7 @@ async function runBenchmark(options: BenchmarkOptions) {
       seed,
       expertPlayer: expertPlayerId,
       candidateDeckId: curatedCandidate?.definition.id ?? null,
+      candidateParticipantId: curatedCandidate ? candidateParticipantId : null,
       startingParticipantId,
       winnerParticipantId: finalState.winnerId ?? null,
       decisionCoverage,
@@ -2147,12 +2177,14 @@ async function runBenchmark(options: BenchmarkOptions) {
   sampleMemory()
   const endingMemory = process.memoryUsage()
   return {
-    benchmark: options.easyMirror
-      ? 'local-ai-curated-easy-mirror-capability'
-      : options.curated
-        ? 'local-ai-curated-deck-mirror-screen'
-        : 'local-ai-midrange-vs-baseline',
-    benchmarkVersion: 9,
+    benchmark: options.opponentDeckId
+      ? 'local-ai-curated-cross-deck-capability'
+      : options.easyMirror
+        ? 'local-ai-curated-easy-mirror-capability'
+        : options.curated
+          ? 'local-ai-curated-deck-mirror-screen'
+          : 'local-ai-midrange-vs-baseline',
+    benchmarkVersion: 10,
     engine: {
       id: 'shared-expert-worker-resource-profiles',
       policyRevision: EXPERT_AI_POLICY_REVISION,

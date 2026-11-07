@@ -2081,7 +2081,7 @@ describe('spell Lifesteal damage resolution', () => {
     }
   )
 
-  it('counts applied damage after Spell Damage and overkill caps, including a dying spellpower source', () => {
+  it('heals full damage including overkill after Spell Damage and a dying spellpower source', () => {
     const scenario = ready({ seed: 2103 })
     const [own, enemy] = activePlayers(scenario)
     summon(scenario, own, 'classic_bloodmage_thalnos')
@@ -2097,7 +2097,7 @@ describe('spell Lifesteal damage resolution', () => {
     expect(damageEvents(result, lash).map((event) => event.data?.actualDamage)).toEqual(
       [1, 1, 2]
     )
-    expect(player(scenario, own).hero.health).toBe(14)
+    expect(player(scenario, own).hero.health).toBe(16)
     expect(player(scenario, own).board).toHaveLength(0)
     expect(player(scenario, own).deck).toHaveLength(deckBefore - 1)
   })
@@ -2572,11 +2572,11 @@ describe('Prophet Velen continuous multipliers', () => {
   )
 
   it.each([
-    ['classic_wisp', 1, 2],
+    ['classic_wisp', 1, 12],
     ['classic_argent_squire', 0, 0],
     ['basic_boulderfist_ogre', 6, 12]
   ] as const)(
-    'uses applied damage for Velen + Drain Soul against %s',
+    'includes overkill but excludes prevented damage for Velen + Drain Soul against %s',
     (cardId, damage, healing) => {
       const scenario = ready({ seed: 2207 })
       const [own, enemy] = activePlayers(scenario)
@@ -2651,8 +2651,8 @@ describe('Prophet Velen continuous multipliers', () => {
     )
     expect(
       outcomes(result, 'restore').map((event) => event.data?.displayAmount)
-    ).toEqual([2, 4])
-    expect(player(fixture, own).hero.health).toBe(16)
+    ).toEqual([4, 4])
+    expect(player(fixture, own).hero.health).toBe(18)
     expect(player(fixture, own).board).toHaveLength(0)
     expect(spellDamageMultiplier(player(fixture, own))).toBe(1)
   })

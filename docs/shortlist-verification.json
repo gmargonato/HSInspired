@@ -1,0 +1,78 @@
+{
+  "baseCommit": "dce7fef2995cf73f842949afa5a08536cc938721",
+  "branch": "feature/shortlist-cards-and-ai-decks",
+  "baseline": {
+    "passed": 3635,
+    "failed": 29,
+    "skipped": 1
+  },
+  "final": {
+    "passed": 3895,
+    "failed": 28,
+    "skipped": 1,
+    "testFiles": 124,
+    "durationSeconds": 453.17
+  },
+  "newFailedTestNames": [],
+  "baselineFailureNamesNotFailingInFinal": [
+    "src/scenes/match/ai/local-ai-artifact-scenarios.test.ts > Expert tactical priority regressions from September 29 > plays Wyrm before Frostbolt and pings Wickerflame before killing it"
+  ],
+  "remainingBaselineFailureNames": [
+    "src/application/ai-controller-recovery.test.ts > local decision controller recovery > accepts extra targets on a targeted play without format repair",
+    "src/desktop/contracts/ipc/outline-tuning.test.ts > adds dust to version 12 without changing saved ray or other shader values",
+    "src/desktop/contracts/ipc/outline-tuning.test.ts > adds god rays to version 11 without changing existing shader tuning",
+    "src/desktop/contracts/ipc/outline-tuning.test.ts > migrates Windfury defaults and round-trips saved adjustments without changing other effects",
+    "src/desktop/contracts/ipc/outline-tuning.test.ts > round-trips fractional god rays values and copies its color channels",
+    "src/desktop/contracts/ipc/outline-tuning.test.ts > shader tuning IPC > clones both shaders without sharing mutable nested values",
+    "src/desktop/contracts/ipc/outline-tuning.test.ts > shader tuning IPC > rejects incompatible shapes and versions",
+    "src/desktop/contracts/ipc/outline-tuning.test.ts > shader tuning IPC > round-trips independent toggles, colors and frozen mist speed",
+    "src/game-rules/match/effects/audit-regressions.integration.test.ts > remaining approved audit rules > Coldarra permits more than 99 Hero Power uses and silence restores the limit",
+    "src/game-rules/match/effects/effect-runtime.integration.test.ts > shared effect runtime > converts Circle of Healing and Lesser Heal into damage, including on full-health targets",
+    "src/game-rules/match/effects/effect-runtime.integration.test.ts > shared effect runtime > limits Auchenai replacement to the controller of the replacement source",
+    "src/game-rules/match/opening-match-checkpoint.test.ts > opening match checkpoints > matches the seeded command, event, visibility, and checkpoint baseline",
+    "src/scenes/match/ai/expert-ai-decision-api.test.ts > Expert AI worker boundary > uses Vanish instead of partial removal against a lethal public board",
+    "src/scenes/match/ai/local-ai-artifact-scenarios.test.ts > hardware local AI artifact scenarios > DEV-112: keeps Spell Damage out of a damage Battlecry",
+    "src/scenes/match/ai/local-ai-artifact-scenarios.test.ts > hardware local AI artifact scenarios > DEV-176: uses the already-qualified CThun seven-mana payoff",
+    "src/scenes/match/ai/local-ai-artifact-scenarios.test.ts > hardware local AI artifact scenarios > DEV-180: gives an existing Elemental Lifesteal before making its trade",
+    "src/scenes/match/ai/local-ai-turn-planning.test.ts > Expert singleton cleanup rollout seeds > keeps one best seed per root and observes the shared deadline",
+    "src/scenes/match/ai/local-ai-turn-planning.test.ts > Expert singleton cleanup rollout seeds > reviews at most eight candidate lines",
+    "src/scenes/match/ai/local-ai-turn-planning.test.ts > Expert singleton cleanup rollout seeds > seeds a real singleton cleanup without changing its unproven status",
+    "src/scenes/match/board/board-ability-layout.test.ts > board ability badge layouts > keeps badges inside the canvas and shares the enlarged immunity cocoon",
+    "src/scenes/match/board/board-ability-layout.test.ts > board ability badge layouts > places Aura at the top of the minion instead of in the bottom badge row",
+    "src/scenes/match/board/board-ability-layout.test.ts > board ability badge layouts > shares one bottom-center minion slot without clipping any badge",
+    "src/scenes/match/presentation/presentation-queue.test.ts > board lifecycle preservation > refreshes the current pointer after a lock without hovering through an overlay",
+    "src/scenes/match/presentation/presentation-queue.test.ts > match layer and inspection contract > contains the announcement disappearance below hands and restores its control on reuse",
+    "src/scenes/match/presentation/presentation-queue.test.ts > match layer and inspection contract > contains the choice disappearance below hands and restores its control on reuse",
+    "src/scenes/match/presentation/presentation-queue.test.ts > match layer and inspection contract > contains the confirm disappearance below hands and restores its control on reuse",
+    "src/scenes/match/presentation/presentation-queue.test.ts > match layer and inspection contract > contains the waiting disappearance below hands and restores its control on reuse",
+    "src/visual-components/cards/card-cost-presentation.test.ts > runtime card stat presentation > coalesces opted-in card snapshots while preserving immediate appearance snapshots"
+  ],
+  "shortlistScenarios": {
+    "files": 8,
+    "passed": 256,
+    "failed": 0,
+    "cardEffectAndMetadataChecks": 215,
+    "deckRegistrationChecks": 15,
+    "aiStrategyCases": 26,
+    "aiScoredSuccessfulOutcomes": 24,
+    "aiUnscoredDiagnostics": 2
+  },
+  "checks": {
+    "typecheck": "passed",
+    "dependencyBoundaries": "passed",
+    "buildSmoke": "passed",
+    "changedFileLint": "passed",
+    "changedFileFormatting": "passed",
+    "fullLint": "failed: existing unused deriveSourceFiles in scripts/card-testing.cjs:2786",
+    "fullFormatting": "failed: same five pre-existing files",
+    "assets": "failed: same 43 missing Future Past PNGs in Git checkout; no artwork added",
+    "verify": "stops at existing formatting failures; remaining stages run separately"
+  },
+  "limits": [
+    "All remaining failure names also failed on clean main. Some catalog-dependent fixtures were explicitly corrected; see shortlist-regression-notes.md.",
+    "Twenty-six primary full AI games completed legally at a small fixed work budget, with 61 legal timeout fallbacks.",
+    "Ramp preference and concealed Mirror Entity sequencing remain documented AI limitations.",
+    "Only 48 of 57 new cards were played in full candidate matches; all 57 have effect scenarios.",
+    "No desktop/manual playtest or artwork QA. No production AI policy change."
+  ]
+}

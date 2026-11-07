@@ -38,7 +38,7 @@ describe('deck name validation', () => {
 
 describe('approved curated opponent roster', () => {
   it('pins the exact version 2 roster, heroes, names and card counts', () => {
-    expect(CURATED_OPPONENT_CATALOG_VERSION).toBe(3)
+    expect(CURATED_OPPONENT_CATALOG_VERSION).toBe(4)
     expect(
       CURATED_OPPONENT_DECKS.slice(0, 27).map(({ definition, deck }) => ({
         id: definition.id,
@@ -51,6 +51,7 @@ describe('approved curated opponent roster', () => {
   })
 
   it('contains four legal historical-pool adaptations per class with valid unique names', () => {
+    const historicalDecks = CURATED_OPPONENT_DECKS.slice(0, 36)
     const historicalExpansions = new Set([
       'basic',
       'classic',
@@ -66,20 +67,19 @@ describe('approved curated opponent roster', () => {
       'knights-of-the-frozen-throne'
     ])
     const rules = new DeckRules()
-    expect(CURATED_OPPONENT_DECKS).toHaveLength(36)
+    expect(historicalDecks).toHaveLength(36)
+    expect(new Set(historicalDecks.map(({ definition }) => definition.id)).size).toBe(
+      36
+    )
+    expect(new Set(historicalDecks.map(({ deck }) => deck.name)).size).toBe(36)
     expect(
-      new Set(CURATED_OPPONENT_DECKS.map(({ definition }) => definition.id)).size
-    ).toBe(36)
-    expect(new Set(CURATED_OPPONENT_DECKS.map(({ deck }) => deck.name)).size).toBe(36)
-    expect(
-      CURATED_OPPONENT_DECKS.reduce(
-        (total, { deck }) => total + countDeckCards(deck),
-        0
-      )
+      historicalDecks.reduce((total, { deck }) => total + countDeckCards(deck), 0)
     ).toBe(1080)
     for (const classId of PLAYABLE_CLASSES)
-      expect(getCuratedOpponentDecksForClass(classId)).toHaveLength(4)
-    for (const { definition, deck, strategy } of CURATED_OPPONENT_DECKS) {
+      expect(
+        historicalDecks.filter(({ definition }) => definition.classId === classId)
+      ).toHaveLength(4)
+    for (const { definition, deck, strategy } of historicalDecks) {
       expect(countDeckCards(deck), definition.id).toBe(30)
       expect(deck.name.length).toBeLessThanOrEqual(MAX_DECK_NAME_LENGTH)
       expect(parseDeck(deck)).toEqual(deck)
@@ -109,7 +109,7 @@ describe('approved curated opponent roster', () => {
       expect(selected).toEqual(selectCuratedConstructedOpponent(seed))
       expect(selected.deck).toEqual(expected.deck)
       expect(selected.metadata).toMatchObject({
-        catalogVersion: 3,
+        catalogVersion: 4,
         seed,
         classId,
         deckId: expected.definition.id,
@@ -185,14 +185,14 @@ describe('Future Past Uther OTK player recipe', () => {
     expect(deck.cards.future_past_snake_oil).toBeUndefined()
   })
 
-  it('keeps Snake Oil out of decks and leaves the curated AI roster unchanged', () => {
+  it('keeps Snake Oil out of decks and leaves the historical AI roster unchanged', () => {
     const token = CARD_CATALOG.require('future_past_snake_oil')
     const rules = new DeckRules()
     expect(isCollectibleDeckCard(token)).toBe(false)
     expect(rules.isCardAllowedInDeck(FUTURE_PAST_UTHER_OTK_DECK, token)).toBe(false)
-    expect(CURATED_OPPONENT_DECKS).toHaveLength(36)
+    expect(CURATED_OPPONENT_DECKS).toHaveLength(49)
     expect(
-      CURATED_OPPONENT_DECKS.every(({ deck }) =>
+      CURATED_OPPONENT_DECKS.slice(0, 36).every(({ deck }) =>
         Object.keys(deck.cards).every((id) => !id.startsWith('future_past_'))
       )
     ).toBe(true)

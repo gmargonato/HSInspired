@@ -1,7 +1,10 @@
 import { CARD_CATALOG } from '../../content/cards'
 import { createAiFixture, type AiFixtureOptions } from '../testing/ai-scenario-builder'
 import { createOpeningMatchFromCheckpoint } from '../opening-match'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { SHORTLIST_CARD_SOURCE } from '../../content/cards/sets/shortlist'
+
+afterEach(() => vi.restoreAllMocks())
 import { createMatchScenario } from '../testing/match-scenario-builder'
 
 type Scenario = ReturnType<typeof createMatchScenario>
@@ -1403,6 +1406,11 @@ describe('Yore: Fyrakk randomized Fire budgets', () => {
 
 describe('Yore: Fyrakk Fire budget', () => {
   it('Fyrakk reduced to 1/1 can die to its own Fire AoE without stopping subsequent casts', () => {
+    // Preserve the recorded Hellfire sequence while the live Fire pool expands.
+    const addedIds = new Set(SHORTLIST_CARD_SOURCE.map((card) => card.id))
+    vi.spyOn(CARD_CATALOG, 'all', 'get').mockReturnValue(
+      CARD_CATALOG.all.filter((card) => !addedIds.has(card.id))
+    )
     let proven = false
     for (let seed = 1; seed <= 100 && !proven; seed++) {
       const s = createYoreScenario({

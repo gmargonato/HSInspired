@@ -1,3 +1,4 @@
+import { SHORTLIST_CARD_SOURCE } from '../../../game-rules/content/cards/sets/shortlist'
 import { reviewEquivalentTrade } from './expert-equivalent-trade'
 import { expertAttackSetupPreference } from './expert-resource-preference'
 import { createExpertActionInspector } from './expert-action-outcome'
@@ -78,6 +79,14 @@ function inspect(session: GameBoardSession, command: TurnMatchCommand) {
 }
 
 afterEach(() => vi.restoreAllMocks())
+
+// Recorded search choices depend on the hidden-card hypothesis pool.
+function pinRecordedCatalog(): void {
+  const addedIds = new Set(SHORTLIST_CARD_SOURCE.map((card) => card.id))
+  vi.spyOn(CARD_CATALOG, 'all', 'get').mockReturnValue(
+    CARD_CATALOG.all.filter((card) => !addedIds.has(card.id))
+  )
+}
 
 describe('Bounded cached attack-order review', () => {
   it.each(['auraBeforeAttack', 'summonBeforeTrade'] as const)(
@@ -575,16 +584,45 @@ describe('Selected redundant healing prefix', () => {
     const selected = actions.find(
       (action) => 'actionId' in result.choice && action.id === result.choice.actionId
     )!
-    expect(selected.command.type).toBe('play-card')
-    expect(f.session.dispatch(selected.command).accepted).toBe(true)
+    const line = api
+      .getLastTrace()!
+      .candidates.find(
+        (candidate) => candidate.actionId === selected.id
+      )!.sequenceIntents!
+    expect(line.length).toBeGreaterThan(0)
+    for (const intent of line) {
+      if (intent.type === 'end-turn') break
+      const command = enumerateLegalCommands(
+        {
+          getState: f.session.match.getState,
+          getPlayInput: f.session.match.getPlayInput!,
+          getLegality: f.session.match.getLegality!
+        },
+        f.actor
+      ).find(
+        (candidate) =>
+          JSON.stringify(aiActionIntent(candidate, f.session.localParticipantId)) ===
+          JSON.stringify(intent)
+      )
+      expect(command).toBeDefined()
+      expect(f.session.dispatch(command!).accepted).toBe(true)
+    }
+    const self = f.session
+      .getState()
+      .players.find((player) => player.participantId === f.actor)!
+    expect(self.hero.health).toBe(30)
+    expect(
+      self.board.some((minion) => minion.cardId === 'league_of_explorers_reno_jackson')
+    ).toBe(true)
   }, 30_000)
 
   it('shortens the historical real fixed-work choice only in the Expert controller', async () => {
     vi.restoreAllMocks()
+    pinRecordedCatalog()
     // This controller regression needs the historical search to emit its redundant
     // heal prefix. Pin only Future Past to the catalog present when recorded:
     // new cards legitimately change seeded hidden-card hypotheses and the line.
-    // The unmocked expanded-catalog case below checks current search behavior.
+    // The Future Past-expanded recording below uses its own original pool.
     const historicalFuturePast = new Set([
       'future_past_animated_broomstick',
       'future_past_armor_vendor',
@@ -725,8 +763,9 @@ describe('Selected redundant healing prefix', () => {
     ])
   }, 60_000)
 
-  it('keeps the expanded-catalog historical line legal without redundant healing', async () => {
+  it('keeps the Future Past-expanded recorded line legal without redundant healing', async () => {
     vi.restoreAllMocks()
+    pinRecordedCatalog()
     const checkpoint = healingRecorded.checkpoint as unknown as OpeningMatchCheckpoint
     const session = new GameBoardSession({
       setup: checkpoint.setup,
@@ -2523,6 +2562,7 @@ describe('Bounded attack omission before a complete board bounce', () => {
   })
 
   it('abstains when the prepared hypothesis has a death-sensitive hand cost', () => {
+    pinRecordedCatalog()
     const { session, actor, intents } = bounceFixture()
     const checkpoint = session.match.getCheckpoint()
     const fair = createFairHypothesisCheckpoint(checkpoint, actor, 1212)

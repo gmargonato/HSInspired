@@ -1,0 +1,454 @@
+[
+  {
+    "id": "galakronds_awakening_bomb_wrangler",
+    "expansionId": "galakronds-awakening",
+    "name": "Bomb Wrangler",
+    "rarity": "Rare",
+    "cardClass": "Warrior",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 3,
+    "attack": 2,
+    "health": 3,
+    "rulesText": "Whenever this minion takes damage, summon a 1/1 Boom Bot.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-damage",
+        "actions": [
+          {
+            "action": "summon",
+            "player": "self",
+            "cardId": "goblins_vs_gnomes_boom_bot",
+            "count": 1
+          }
+        ],
+        "event": {
+          "type": "damage-dealt",
+          "target": {
+            "selection": "source"
+          }
+        }
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "united_in_stormwind_canal_slogger",
+    "expansionId": "united-in-stormwind",
+    "name": "Canal Slogger",
+    "rarity": "Common",
+    "cardClass": "Shaman",
+    "type": "Minion",
+    "subtype": "Elemental",
+    "cost": 4,
+    "attack": 6,
+    "health": 4,
+    "rulesText": "Rush, Lifesteal. Overload: (1)",
+    "keywords": ["rush", "lifesteal"],
+    "effects": [
+      {
+        "trigger": "on-play",
+        "actions": [
+          {
+            "action": "overload",
+            "player": "self",
+            "amount": 1
+          }
+        ],
+        "event": {
+          "type": "card-played",
+          "controller": "self",
+          "source": {
+            "selection": "source"
+          }
+        }
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "kobolds_and_catacombs_duskbreaker",
+    "expansionId": "kobolds-and-catacombs",
+    "name": "Duskbreaker",
+    "rarity": "Rare",
+    "cardClass": "Priest",
+    "type": "Minion",
+    "subtype": "Dragon",
+    "cost": 4,
+    "attack": 3,
+    "health": 3,
+    "rulesText": "Battlecry: If you're holding a Dragon, deal 3 damage to all other minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all",
+              "exclude": "source"
+            },
+            "amount": 3
+          }
+        ],
+        "condition": {
+          "type": "player-has-card-in-hand",
+          "player": "self",
+          "filter": {
+            "tribe": "Dragon"
+          }
+        }
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "united_in_stormwind_granite_forgeborn",
+    "expansionId": "united-in-stormwind",
+    "name": "Granite Forgeborn",
+    "rarity": "Rare",
+    "cardClass": "Shaman",
+    "type": "Minion",
+    "subtype": "Elemental",
+    "cost": 4,
+    "attack": 4,
+    "health": 5,
+    "rulesText": "Battlecry: Reduce the Cost of Elementals in your hand and deck by (1).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "minion-card",
+              "selection": "all",
+              "zone": "hand",
+              "filter": {
+                "tribe": "Elemental"
+              }
+            },
+            "amount": -1,
+            "duration": "permanent"
+          },
+          {
+            "action": "change-cost",
+            "target": {
+              "controller": "self",
+              "type": "minion-card",
+              "selection": "all",
+              "zone": "deck",
+              "filter": {
+                "tribe": "Elemental"
+              }
+            },
+            "amount": -1,
+            "duration": "permanent"
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "kobolds_and_catacombs_kobold_librarian",
+    "expansionId": "kobolds-and-catacombs",
+    "name": "Kobold Librarian",
+    "rarity": "Common",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 1,
+    "attack": 2,
+    "health": 1,
+    "rulesText": "Battlecry: Draw a card. Deal 2 damage to your hero.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          },
+          {
+            "action": "damage",
+            "target": {
+              "type": "hero",
+              "controller": "self"
+            },
+            "amount": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "the_witchwood_lord_godfrey",
+    "expansionId": "the-witchwood",
+    "name": "Lord Godfrey",
+    "rarity": "Legendary",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "Undead",
+    "cost": 7,
+    "attack": 4,
+    "health": 4,
+    "rulesText": "Battlecry: Deal 2 damage to all other minions. If any die, repeat this Battlecry.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all",
+              "exclude": "source"
+            },
+            "amount": 2
+          }
+        ],
+        "repeat": {
+          "until": "repeat-ended-without-minion-death",
+          "maxCount": 14,
+          "actions": [
+            {
+              "action": "damage",
+              "target": {
+                "controller": "any",
+                "type": "minion",
+                "selection": "all",
+                "exclude": "source"
+              },
+              "amount": 2
+            }
+          ]
+        }
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "kobolds_and_catacombs_possessed_lackey",
+    "expansionId": "kobolds-and-catacombs",
+    "name": "Possessed Lackey",
+    "rarity": "Rare",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "Deathrattle: Recruit a Demon.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "put-into-play",
+            "player": "self",
+            "source": "deck",
+            "filter": {
+              "cardType": "Minion",
+              "tribe": "Demon"
+            },
+            "selection": "random",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "galakronds_awakening_risky_skipper",
+    "expansionId": "galakronds-awakening",
+    "name": "Risky Skipper",
+    "rarity": "Rare",
+    "cardClass": "Warrior",
+    "type": "Minion",
+    "subtype": "Pirate",
+    "cost": 1,
+    "attack": 1,
+    "health": 3,
+    "rulesText": "After you play a minion, deal 1 damage to all minions.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-card-played",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "all"
+            },
+            "amount": 1
+          }
+        ],
+        "event": {
+          "type": "minion-played",
+          "controller": "self"
+        }
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "kobolds_and_catacombs_skull_of_the_man_ari",
+    "expansionId": "kobolds-and-catacombs",
+    "name": "Skull of the Man'ari",
+    "rarity": "Legendary",
+    "cardClass": "Warlock",
+    "type": "Weapon",
+    "subtype": "General",
+    "cost": 5,
+    "attack": 0,
+    "health": 3,
+    "rulesText": "At the start of your turn, summon a Demon from your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "start-of-turn",
+        "actions": [
+          {
+            "action": "put-into-play",
+            "player": "self",
+            "source": "hand",
+            "filter": {
+              "cardType": "Minion",
+              "tribe": "Demon"
+            },
+            "selection": "random",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "murder_at_castle_nathria_the_light_it_burns",
+    "expansionId": "murder-at-castle-nathria",
+    "name": "The Light! It Burns!",
+    "rarity": "Common",
+    "cardClass": "Priest",
+    "type": "Spell",
+    "subtype": "General",
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Deal damage to a minion equal to its Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "type": "minion",
+              "controller": "any",
+              "selection": "chosen"
+            },
+            "amount": {
+              "reference": "target.attack"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true,
+    "spellSchool": "Holy"
+  },
+  {
+    "id": "kobolds_and_catacombs_voidlord",
+    "expansionId": "kobolds-and-catacombs",
+    "name": "Voidlord",
+    "rarity": "Epic",
+    "cardClass": "Warlock",
+    "type": "Minion",
+    "subtype": "Demon",
+    "cost": 9,
+    "attack": 3,
+    "health": 9,
+    "rulesText": "Taunt. Deathrattle: Summon three 1/3 Demons with Taunt.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "player": "self",
+            "cardId": "basic_voidwalker",
+            "count": 3
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "forged_in_the_barrens_wailing_vapor",
+    "expansionId": "forged-in-the-barrens",
+    "name": "Wailing Vapor",
+    "rarity": "Common",
+    "cardClass": "Shaman",
+    "type": "Minion",
+    "subtype": "Elemental",
+    "cost": 1,
+    "attack": 1,
+    "health": 3,
+    "rulesText": "After you play an Elemental, gain +1 Attack.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "on-card-played",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "attack": 1
+          }
+        ],
+        "event": {
+          "type": "minion-played",
+          "controller": "self",
+          "filter": {
+            "tribe": "Elemental"
+          }
+        }
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  }
+]
