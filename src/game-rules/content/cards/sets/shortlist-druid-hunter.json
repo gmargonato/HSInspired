@@ -1,7 +1,7 @@
 [
   {
     "id": "rise_of_shadows_acornbearer",
-    "expansionId": "rise-of-shadows",
+    "expansionId": "future-past",
     "name": "Acornbearer",
     "rarity": "Common",
     "cardClass": "Druid",
@@ -31,7 +31,7 @@
   },
   {
     "id": "scholomance_academy_adorable_infestation",
-    "expansionId": "scholomance-academy",
+    "expansionId": "future-past",
     "name": "Adorable Infestation",
     "rarity": "Common",
     "cardClass": "Druid",
@@ -77,7 +77,7 @@
   },
   {
     "id": "titans_awakening_tremors",
-    "expansionId": "titans",
+    "expansionId": "future-past",
     "name": "Awakening Tremors",
     "rarity": "Common",
     "cardClass": "Hunter",
@@ -107,7 +107,7 @@
   },
   {
     "id": "descent_of_dragons_breath_of_dreams",
-    "expansionId": "descent-of-dragons",
+    "expansionId": "future-past",
     "name": "Breath of Dreams",
     "rarity": "Rare",
     "cardClass": "Druid",
@@ -153,7 +153,7 @@
   },
   {
     "id": "showdown_in_the_badlands_desert_nestmatron",
-    "expansionId": "showdown-in-the-badlands",
+    "expansionId": "future-past",
     "name": "Desert Nestmatron",
     "rarity": "Rare",
     "cardClass": "Druid",
@@ -189,7 +189,7 @@
   },
   {
     "id": "showdown_in_the_badlands_dragon_golem",
-    "expansionId": "showdown-in-the-badlands",
+    "expansionId": "future-past",
     "name": "Dragon Golem",
     "rarity": "Epic",
     "cardClass": "Druid",
@@ -232,7 +232,7 @@
   },
   {
     "id": "rise_of_shadows_dreamway_guardians",
-    "expansionId": "rise-of-shadows",
+    "expansionId": "future-past",
     "name": "Dreamway Guardians",
     "rarity": "Rare",
     "cardClass": "Druid",
@@ -261,7 +261,7 @@
   },
   {
     "id": "descent_of_dragons_emerald_explorer",
-    "expansionId": "descent-of-dragons",
+    "expansionId": "future-past",
     "name": "Emerald Explorer",
     "rarity": "Common",
     "cardClass": "Druid",
@@ -294,7 +294,7 @@
   },
   {
     "id": "ashes_of_outland_glowfly_swarm",
-    "expansionId": "ashes-of-outland",
+    "expansionId": "future-past",
     "name": "Glowfly Swarm",
     "rarity": "Epic",
     "cardClass": "Druid",
@@ -334,7 +334,7 @@
   },
   {
     "id": "march_of_the_lich_king_lingering_zombie",
-    "expansionId": "march-of-the-lich-king",
+    "expansionId": "future-past",
     "name": "Lingering Zombie",
     "rarity": "Common",
     "cardClass": "Druid",
@@ -363,7 +363,7 @@
   },
   {
     "id": "ashes_of_outland_scavengers_ingenuity",
-    "expansionId": "ashes-of-outland",
+    "expansionId": "future-past",
     "name": "Scavenger's Ingenuity",
     "rarity": "Common",
     "cardClass": "Hunter",
@@ -411,7 +411,7 @@
   },
   {
     "id": "showdown_in_the_badlands_splishsplash_whelp",
-    "expansionId": "showdown-in-the-badlands",
+    "expansionId": "future-past",
     "name": "Splish-Splash Whelp",
     "rarity": "Rare",
     "cardClass": "Druid",
@@ -448,7 +448,7 @@
   },
   {
     "id": "rastakhans_rumble_springpaw",
-    "expansionId": "rastakhans-rumble",
+    "expansionId": "future-past",
     "name": "Springpaw",
     "rarity": "Common",
     "cardClass": "Hunter",
@@ -478,7 +478,7 @@
   },
   {
     "id": "rise_of_shadows_squirrel",
-    "expansionId": "rise-of-shadows",
+    "expansionId": "future-past",
     "name": "Squirrel",
     "rarity": "None",
     "cardClass": "Druid",
@@ -496,7 +496,7 @@
   },
   {
     "id": "rise_of_shadows_crystal_dryad",
-    "expansionId": "rise-of-shadows",
+    "expansionId": "future-past",
     "name": "Crystal Dryad",
     "rarity": "None",
     "cardClass": "Druid",
@@ -514,7 +514,7 @@
   },
   {
     "id": "ashes_of_outland_glowfly",
-    "expansionId": "ashes-of-outland",
+    "expansionId": "future-past",
     "name": "Glowfly",
     "rarity": "None",
     "cardClass": "Druid",
@@ -532,7 +532,7 @@
   },
   {
     "id": "march_of_the_lich_king_disarmed_zombie",
-    "expansionId": "march-of-the-lich-king",
+    "expansionId": "future-past",
     "name": "Disarmed Zombie",
     "rarity": "None",
     "cardClass": "Druid",
@@ -561,7 +561,7 @@
   },
   {
     "id": "march_of_the_lich_king_zombie",
-    "expansionId": "march-of-the-lich-king",
+    "expansionId": "future-past",
     "name": "Zombie",
     "rarity": "None",
     "cardClass": "Druid",
@@ -579,7 +579,7 @@
   },
   {
     "id": "rastakhans_rumble_lynx",
-    "expansionId": "rastakhans-rumble",
+    "expansionId": "future-past",
     "name": "Lynx",
     "rarity": "None",
     "cardClass": "Hunter",
@@ -597,7 +597,7 @@
   },
   {
     "id": "scholomance_academy_marsuul_cub",
-    "expansionId": "scholomance-academy",
+    "expansionId": "future-past",
     "name": "Marsuul Cub",
     "rarity": "None",
     "cardClass": "Druid",
@@ -616,7 +616,7 @@
   },
   {
     "id": "titans_worm",
-    "expansionId": "titans",
+    "expansionId": "future-past",
     "name": "Worm",
     "rarity": "None",
     "cardClass": "Hunter",

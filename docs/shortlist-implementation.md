@@ -4,7 +4,7 @@ Source: **HSInspired reduced 57-card visual shortlist** and **HSInspired first p
 
 ## Scope
 
-- 57 collectible cards, all registered in the normal card catalog and their original expansions.
+- 57 collectible cards, all registered in the normal card catalog under Future Past. All 12 new tokens also belong to Future Past; existing card IDs and artwork names are preserved.
 - 12 new noncollectible, non-deck-legal token definitions; reuse existing Boom Bot, Voidwalker, and Light’s Justice.
 - 13 exact, legal 30-card shortlist decks added to the normal AI pool. The previous 36 lists remain unchanged (49 total).
 - All 69 new card/token illustrations are imported from the existing local extraction archive and registered in `scripts/card-artwork-sources.json`.

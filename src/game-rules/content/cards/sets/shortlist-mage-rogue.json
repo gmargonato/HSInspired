@@ -1,7 +1,7 @@
 [
   {
     "id": "kobolds_and_catacombs_aluneth",
-    "expansionId": "kobolds-and-catacombs",
+    "expansionId": "future-past",
     "name": "Aluneth",
     "rarity": "Legendary",
     "cardClass": "Mage",
@@ -29,7 +29,7 @@
   },
   {
     "id": "saviors_of_uldum_ancient_mysteries",
-    "expansionId": "saviors-of-uldum",
+    "expansionId": "future-past",
     "name": "Ancient Mysteries",
     "rarity": "Common",
     "cardClass": "Mage",
@@ -70,7 +70,7 @@
   },
   {
     "id": "saviors_of_uldum_arcane_flakmage",
-    "expansionId": "saviors-of-uldum",
+    "expansionId": "future-past",
     "name": "Arcane Flakmage",
     "rarity": "Rare",
     "cardClass": "Mage",
@@ -107,7 +107,7 @@
   },
   {
     "id": "saviors_of_uldum_cloud_prince",
-    "expansionId": "saviors-of-uldum",
+    "expansionId": "future-past",
     "name": "Cloud Prince",
     "rarity": "Common",
     "cardClass": "Mage",
@@ -143,7 +143,7 @@
   },
   {
     "id": "saviors_of_uldum_flame_ward",
-    "expansionId": "saviors-of-uldum",
+    "expansionId": "future-past",
     "name": "Flame Ward",
     "rarity": "Common",
     "cardClass": "Mage",
@@ -194,7 +194,7 @@
   },
   {
     "id": "madness_at_the_darkmoon_faire_occult_conjurer",
-    "expansionId": "madness-at-the-darkmoon-faire",
+    "expansionId": "future-past",
     "name": "Occult Conjurer",
     "rarity": "Epic",
     "cardClass": "Mage",
@@ -231,7 +231,7 @@
   },
   {
     "id": "madness_at_the_darkmoon_faire_prize_plunderer",
-    "expansionId": "madness-at-the-darkmoon-faire",
+    "expansionId": "future-past",
     "name": "Prize Plunderer",
     "rarity": "Rare",
     "cardClass": "Rogue",
@@ -268,7 +268,7 @@
   },
   {
     "id": "voyage_to_the_sunken_city_click_clocker",
-    "expansionId": "voyage-to-the-sunken-city",
+    "expansionId": "future-past",
     "name": "Click-Clocker",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -306,7 +306,7 @@
   },
   {
     "id": "voyage_to_the_sunken_city_security_automaton",
-    "expansionId": "voyage-to-the-sunken-city",
+    "expansionId": "future-past",
     "name": "Security Automaton",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -346,7 +346,7 @@
   },
   {
     "id": "voyage_to_the_sunken_city_mecha_shark",
-    "expansionId": "voyage-to-the-sunken-city",
+    "expansionId": "future-past",
     "name": "Mecha-Shark",
     "rarity": "Common",
     "cardClass": "Mage",
@@ -387,7 +387,7 @@
   },
   {
     "id": "voyage_to_the_sunken_city_seafloor_gateway",
-    "expansionId": "voyage-to-the-sunken-city",
+    "expansionId": "future-past",
     "name": "Seafloor Gateway",
     "rarity": "Rare",
     "cardClass": "Mage",
@@ -439,7 +439,7 @@
   },
   {
     "id": "the_boomsday_project_mecharoo",
-    "expansionId": "the-boomsday-project",
+    "expansionId": "future-past",
     "name": "Mecharoo",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -468,7 +468,7 @@
   },
   {
     "id": "the_boomsday_project_galvanizer",
-    "expansionId": "the-boomsday-project",
+    "expansionId": "future-past",
     "name": "Galvanizer",
     "rarity": "Rare",
     "cardClass": "Neutral",
@@ -506,7 +506,7 @@
   },
   {
     "id": "the_witchwood_hench_clan_thug",
-    "expansionId": "the-witchwood",
+    "expansionId": "future-past",
     "name": "Hench-Clan Thug",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -547,7 +547,7 @@
   },
   {
     "id": "rastakhans_rumble_raiding_party",
-    "expansionId": "rastakhans-rumble",
+    "expansionId": "future-past",
     "name": "Raiding Party",
     "rarity": "Rare",
     "cardClass": "Rogue",
@@ -605,7 +605,7 @@
   },
   {
     "id": "scholomance_academy_cutting_class",
-    "expansionId": "scholomance-academy",
+    "expansionId": "future-past",
     "name": "Cutting Class",
     "rarity": "Common",
     "cardClass": "Rogue",
@@ -650,7 +650,7 @@
   },
   {
     "id": "the_boomsday_project_jo_e_bot",
-    "expansionId": "the-boomsday-project",
+    "expansionId": "future-past",
     "name": "Jo-E Bot",
     "rarity": "None",
     "cardClass": "Neutral",

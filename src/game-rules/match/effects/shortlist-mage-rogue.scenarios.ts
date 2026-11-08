@@ -98,7 +98,7 @@ describe('Selected Mage/Rogue content metadata', () => {
       const c = CARD_CATALOG.require(id)
       expect(c.collectible).toBe(name !== 'bot')
       expect(c.deckLegal).toBe(name !== 'bot')
-      expect(id.startsWith(c.expansionId.replaceAll('-', '_'))).toBe(true)
+      expect(c.expansionId).toBe('future-past')
     }
     expect(CARD_CATALOG.require(ids.party).cost).toBe(3)
     expect(cardHasClass(CARD_CATALOG.require(ids.cutting), 'Warrior')).toBe(true)

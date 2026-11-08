@@ -1,6 +1,6 @@
 # Selected Mage, Mech, and Rogue card scenarios
 
-The selected renders are the numeric/text authority. This slice adds 16 collectible cards and the uncollectible Jo-E Bot, using each card's original expansion and expansion-prefixed identifier. No artwork is added.
+The selected renders are the numeric/text authority. This slice adds 16 collectible cards and the uncollectible Jo-E Bot, all assigned to Future Past while preserving their existing identifiers. Artwork imports are documented in the implementation summary.
 
 Run the durable scenarios with:
 

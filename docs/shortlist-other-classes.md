@@ -1,6 +1,6 @@
 # Priest, Warrior, Shaman and Warlock shortlist scenarios
 
-The twelve entries in `shortlist-priest-warrior-shaman-warlock.json` use the selected printed versions: Possessed Lackey costs 5; Granite Forgeborn costs 4 and is 4/5; Lord Godfrey is Undead. Wailing Vapor belongs to Forged in the Barrens (Wailing Caverns mini-set). No artwork is changed.
+The twelve entries in `shortlist-priest-warrior-shaman-warlock.json` use the selected printed versions: Possessed Lackey costs 5; Granite Forgeborn costs 4 and is 4/5; Lord Godfrey is Undead. The selected Wailing Vapor version originated in Forged in the Barrens (Wailing Caverns mini-set). All twelve entries are registered under Future Past; existing card IDs and artwork names are preserved. Artwork imports are documented in the implementation summary.
 
 Existing `goblins_vs_gnomes_boom_bot` is the exact 1-mana 1/1 Mech with random-enemy 1–4 damage Deathrattle. Existing `basic_voidwalker` is the exact 1-mana 1/3 Demon with Taunt. No duplicate tokens are needed.
 

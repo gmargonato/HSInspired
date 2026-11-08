@@ -94,7 +94,7 @@ function setup(options: Partial<AiFixtureOptions> = {}) {
 }
 
 describe('shortlist Druid and Hunter behavior', () => {
-  it('registers every card and token with native expansion, legality and selected balance', () => {
+  it('registers every card and token with Future Past membership, legality and selected balance', () => {
     for (const id of Object.values(C)) expect(CARD_CATALOG.get(id), id).toBeDefined()
     for (const id of [
       C.squirrel,

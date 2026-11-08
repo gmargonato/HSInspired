@@ -1,7 +1,7 @@
 [
   {
     "id": "ashes_of_outland_aldor_attendant",
-    "expansionId": "ashes-of-outland",
+    "expansionId": "future-past",
     "name": "Aldor Attendant",
     "rarity": "Common",
     "cardClass": "Paladin",
@@ -69,7 +69,7 @@
   },
   {
     "id": "ashes_of_outland_aldor_truthseeker",
-    "expansionId": "ashes-of-outland",
+    "expansionId": "future-past",
     "name": "Aldor Truthseeker",
     "rarity": "Rare",
     "cardClass": "Paladin",
@@ -137,7 +137,7 @@
   },
   {
     "id": "ashes_of_outland_libram_of_wisdom",
-    "expansionId": "ashes-of-outland",
+    "expansionId": "future-past",
     "name": "Libram of Wisdom",
     "rarity": "Rare",
     "cardClass": "Paladin",
@@ -185,7 +185,7 @@
   },
   {
     "id": "ashes_of_outland_libram_of_justice",
-    "expansionId": "ashes-of-outland",
+    "expansionId": "future-past",
     "name": "Libram of Justice",
     "rarity": "Common",
     "cardClass": "Paladin",
@@ -220,7 +220,7 @@
   },
   {
     "id": "ashes_of_outland_libram_of_hope",
-    "expansionId": "ashes-of-outland",
+    "expansionId": "future-past",
     "name": "Libram of Hope",
     "rarity": "Epic",
     "cardClass": "Paladin",
@@ -256,7 +256,7 @@
   },
   {
     "id": "the_boomsday_project_crystology",
-    "expansionId": "the-boomsday-project",
+    "expansionId": "future-past",
     "name": "Crystology",
     "rarity": "Rare",
     "cardClass": "Paladin",
@@ -294,7 +294,7 @@
   },
   {
     "id": "united_in_stormwind_alliance_bannerman",
-    "expansionId": "united-in-stormwind",
+    "expansionId": "future-past",
     "name": "Alliance Bannerman",
     "rarity": "Common",
     "cardClass": "Paladin",
@@ -341,7 +341,7 @@
   },
   {
     "id": "united_in_stormwind_battleground_battlemaster",
-    "expansionId": "united-in-stormwind",
+    "expansionId": "future-past",
     "name": "Battleground Battlemaster",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -374,7 +374,7 @@
   },
   {
     "id": "whizbangs_workshop_painters_virtue",
-    "expansionId": "whizbangs-workshop",
+    "expansionId": "future-past",
     "name": "Painter's Virtue",
     "rarity": "Common",
     "cardClass": "Paladin",
@@ -416,7 +416,7 @@
   },
   {
     "id": "the_witchwood_vicious_scalehide",
-    "expansionId": "the-witchwood",
+    "expansionId": "future-past",
     "name": "Vicious Scalehide",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -433,7 +433,7 @@
   },
   {
     "id": "showdown_in_the_badlands_hi_ho_silverwing",
-    "expansionId": "showdown-in-the-badlands",
+    "expansionId": "future-past",
     "name": "Hi Ho Silverwing",
     "rarity": "Rare",
     "cardClass": "Paladin",
@@ -471,7 +471,7 @@
   },
   {
     "id": "showdown_in_the_badlands_gold_panner",
-    "expansionId": "showdown-in-the-badlands",
+    "expansionId": "future-past",
     "name": "Gold Panner",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -499,7 +499,7 @@
   },
   {
     "id": "showdown_in_the_badlands_showdown",
-    "expansionId": "showdown-in-the-badlands",
+    "expansionId": "future-past",
     "name": "Showdown!",
     "rarity": "Epic",
     "cardClass": "Paladin",
@@ -542,7 +542,7 @@
   },
   {
     "id": "showdown_in_the_badlands_prismatic_beam",
-    "expansionId": "showdown-in-the-badlands",
+    "expansionId": "future-past",
     "name": "Prismatic Beam",
     "rarity": "Common",
     "cardClass": "Paladin",
@@ -594,7 +594,7 @@
   },
   {
     "id": "into_the_emerald_dream_mother_duck",
-    "expansionId": "into-the-emerald-dream",
+    "expansionId": "future-past",
     "name": "Mother Duck",
     "rarity": "Common",
     "cardClass": "Neutral",
@@ -622,7 +622,7 @@
   },
   {
     "id": "perils_in_paradise_busy_bot",
-    "expansionId": "perils-in-paradise",
+    "expansionId": "future-past",
     "name": "Busy-Bot",
     "rarity": "Common",
     "cardClass": "Paladin",
@@ -671,7 +671,7 @@
     "rulesText": "Taunt. Divine-Shield",
     "rarity": "Summon",
     "cardClass": "Paladin",
-    "expansionId": "ashes-of-outland",
+    "expansionId": "future-past",
     "collectible": false,
     "deckLegal": false
   },
@@ -688,7 +688,7 @@
     "rulesText": "Rush",
     "rarity": "Summon",
     "cardClass": "Neutral",
-    "expansionId": "into-the-emerald-dream",
+    "expansionId": "future-past",
     "collectible": false,
     "deckLegal": false
   },
@@ -705,7 +705,7 @@
     "rulesText": "",
     "rarity": "Summon",
     "cardClass": "Paladin",
-    "expansionId": "showdown-in-the-badlands",
+    "expansionId": "future-past",
     "collectible": false,
     "deckLegal": false
   }

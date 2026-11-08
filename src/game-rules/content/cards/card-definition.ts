@@ -75,28 +75,7 @@ export const EXPANSION_IDS = [
   'mean-streets-of-gadgetzan',
   'journey-to-ungoro',
   'knights-of-the-frozen-throne',
-  'future-past',
-  'kobolds-and-catacombs',
-  'the-witchwood',
-  'the-boomsday-project',
-  'rastakhans-rumble',
-  'rise-of-shadows',
-  'saviors-of-uldum',
-  'descent-of-dragons',
-  'galakronds-awakening',
-  'ashes-of-outland',
-  'scholomance-academy',
-  'madness-at-the-darkmoon-faire',
-  'forged-in-the-barrens',
-  'united-in-stormwind',
-  'voyage-to-the-sunken-city',
-  'murder-at-castle-nathria',
-  'march-of-the-lich-king',
-  'titans',
-  'showdown-in-the-badlands',
-  'whizbangs-workshop',
-  'perils-in-paradise',
-  'into-the-emerald-dream'
+  'future-past'
 ] as const
 export type KnownExpansionId = (typeof EXPANSION_IDS)[number]
 
@@ -237,28 +216,7 @@ export function formatExpansionName(expansionId: ExpansionId | string): string {
     'mean-streets-of-gadgetzan': 'Mean Streets of Gadgetzan',
     'journey-to-ungoro': "Journey to Un'Goro",
     'knights-of-the-frozen-throne': 'Knights of the Frozen Throne',
-    'future-past': 'Future Past',
-    'kobolds-and-catacombs': 'Kobolds & Catacombs',
-    'the-witchwood': 'The Witchwood',
-    'the-boomsday-project': 'The Boomsday Project',
-    'rastakhans-rumble': "Rastakhan's Rumble",
-    'rise-of-shadows': 'Rise of Shadows',
-    'saviors-of-uldum': 'Saviors of Uldum',
-    'descent-of-dragons': 'Descent of Dragons',
-    'galakronds-awakening': "Galakrond's Awakening",
-    'ashes-of-outland': 'Ashes of Outland',
-    'scholomance-academy': 'Scholomance Academy',
-    'madness-at-the-darkmoon-faire': 'Madness at the Darkmoon Faire',
-    'forged-in-the-barrens': 'Forged in the Barrens',
-    'united-in-stormwind': 'United in Stormwind',
-    'voyage-to-the-sunken-city': 'Voyage to the Sunken City',
-    'murder-at-castle-nathria': 'Murder at Castle Nathria',
-    'march-of-the-lich-king': 'March of the Lich King',
-    titans: 'TITANS',
-    'showdown-in-the-badlands': 'Showdown in the Badlands',
-    'whizbangs-workshop': "Whizbang's Workshop",
-    'perils-in-paradise': 'Perils in Paradise',
-    'into-the-emerald-dream': 'Into the Emerald Dream'
+    'future-past': 'Future Past'
   }
   const knownLabel = labels[expansionId]
   if (knownLabel) return knownLabel

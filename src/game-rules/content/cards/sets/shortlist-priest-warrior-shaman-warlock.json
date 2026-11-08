@@ -1,7 +1,7 @@
 [
   {
     "id": "galakronds_awakening_bomb_wrangler",
-    "expansionId": "galakronds-awakening",
+    "expansionId": "future-past",
     "name": "Bomb Wrangler",
     "rarity": "Rare",
     "cardClass": "Warrior",
@@ -36,7 +36,7 @@
   },
   {
     "id": "united_in_stormwind_canal_slogger",
-    "expansionId": "united-in-stormwind",
+    "expansionId": "future-past",
     "name": "Canal Slogger",
     "rarity": "Common",
     "cardClass": "Shaman",
@@ -71,7 +71,7 @@
   },
   {
     "id": "kobolds_and_catacombs_duskbreaker",
-    "expansionId": "kobolds-and-catacombs",
+    "expansionId": "future-past",
     "name": "Duskbreaker",
     "rarity": "Rare",
     "cardClass": "Priest",
@@ -111,7 +111,7 @@
   },
   {
     "id": "united_in_stormwind_granite_forgeborn",
-    "expansionId": "united-in-stormwind",
+    "expansionId": "future-past",
     "name": "Granite Forgeborn",
     "rarity": "Rare",
     "cardClass": "Shaman",
@@ -162,7 +162,7 @@
   },
   {
     "id": "kobolds_and_catacombs_kobold_librarian",
-    "expansionId": "kobolds-and-catacombs",
+    "expansionId": "future-past",
     "name": "Kobold Librarian",
     "rarity": "Common",
     "cardClass": "Warlock",
@@ -198,7 +198,7 @@
   },
   {
     "id": "the_witchwood_lord_godfrey",
-    "expansionId": "the-witchwood",
+    "expansionId": "future-past",
     "name": "Lord Godfrey",
     "rarity": "Legendary",
     "cardClass": "Warlock",
@@ -247,7 +247,7 @@
   },
   {
     "id": "kobolds_and_catacombs_possessed_lackey",
-    "expansionId": "kobolds-and-catacombs",
+    "expansionId": "future-past",
     "name": "Possessed Lackey",
     "rarity": "Rare",
     "cardClass": "Warlock",
@@ -281,7 +281,7 @@
   },
   {
     "id": "galakronds_awakening_risky_skipper",
-    "expansionId": "galakronds-awakening",
+    "expansionId": "future-past",
     "name": "Risky Skipper",
     "rarity": "Rare",
     "cardClass": "Warrior",
@@ -317,7 +317,7 @@
   },
   {
     "id": "kobolds_and_catacombs_skull_of_the_man_ari",
-    "expansionId": "kobolds-and-catacombs",
+    "expansionId": "future-past",
     "name": "Skull of the Man'ari",
     "rarity": "Legendary",
     "cardClass": "Warlock",
@@ -351,7 +351,7 @@
   },
   {
     "id": "murder_at_castle_nathria_the_light_it_burns",
-    "expansionId": "murder-at-castle-nathria",
+    "expansionId": "future-past",
     "name": "The Light! It Burns!",
     "rarity": "Common",
     "cardClass": "Priest",
@@ -386,7 +386,7 @@
   },
   {
     "id": "kobolds_and_catacombs_voidlord",
-    "expansionId": "kobolds-and-catacombs",
+    "expansionId": "future-past",
     "name": "Voidlord",
     "rarity": "Epic",
     "cardClass": "Warlock",
@@ -415,7 +415,7 @@
   },
   {
     "id": "forged_in_the_barrens_wailing_vapor",
-    "expansionId": "forged-in-the-barrens",
+    "expansionId": "future-past",
     "name": "Wailing Vapor",
     "rarity": "Common",
     "cardClass": "Shaman",

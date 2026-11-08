@@ -1,6 +1,6 @@
 # Shortlisted Druid and Hunter cards
 
-The selected gallery versions are implemented in `src/game-rules/content/cards/sets/shortlist-druid-hunter.json`: 13 collectible cards and eight noncollectible, non-deck-legal tokens. Every record retains its original expansion. Existing card balance and artwork are untouched.
+The selected gallery versions are implemented in `src/game-rules/content/cards/sets/shortlist-druid-hunter.json`: 13 collectible cards and eight noncollectible, non-deck-legal tokens. Every record belongs to Future Past. Original expansion prefixes remain in stable card IDs for deck and artwork compatibility. Existing card balance is unchanged; artwork imports are documented in the implementation summary.
 
 ## Version decisions
 

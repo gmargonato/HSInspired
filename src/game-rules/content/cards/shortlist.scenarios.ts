@@ -16,7 +16,7 @@ const selected = [
     spellSchool: null,
     attack: 2,
     health: 1,
-    expansionId: 'rise-of-shadows'
+    expansionId: 'future-past'
   },
   {
     name: 'Adorable Infestation',
@@ -26,7 +26,7 @@ const selected = [
     classes: ['Druid', 'Hunter'],
     tribes: [],
     spellSchool: null,
-    expansionId: 'scholomance-academy'
+    expansionId: 'future-past'
   },
   {
     name: 'Aldor Attendant',
@@ -38,7 +38,7 @@ const selected = [
     spellSchool: null,
     attack: 1,
     health: 3,
-    expansionId: 'ashes-of-outland'
+    expansionId: 'future-past'
   },
   {
     name: 'Aldor Truthseeker',
@@ -50,7 +50,7 @@ const selected = [
     spellSchool: null,
     attack: 4,
     health: 6,
-    expansionId: 'ashes-of-outland'
+    expansionId: 'future-past'
   },
   {
     name: 'Alliance Bannerman',
@@ -62,7 +62,7 @@ const selected = [
     spellSchool: null,
     attack: 2,
     health: 2,
-    expansionId: 'united-in-stormwind'
+    expansionId: 'future-past'
   },
   {
     name: 'Aluneth',
@@ -74,7 +74,7 @@ const selected = [
     spellSchool: null,
     attack: 0,
     durability: 3,
-    expansionId: 'kobolds-and-catacombs'
+    expansionId: 'future-past'
   },
   {
     name: 'Ancient Mysteries',
@@ -84,7 +84,7 @@ const selected = [
     classes: ['Mage'],
     tribes: [],
     spellSchool: 'Arcane',
-    expansionId: 'saviors-of-uldum'
+    expansionId: 'future-past'
   },
   {
     name: 'Arcane Flakmage',
@@ -96,7 +96,7 @@ const selected = [
     spellSchool: null,
     attack: 3,
     health: 2,
-    expansionId: 'saviors-of-uldum'
+    expansionId: 'future-past'
   },
   {
     name: 'Awakening Tremors',
@@ -106,7 +106,7 @@ const selected = [
     classes: ['Hunter'],
     tribes: [],
     spellSchool: null,
-    expansionId: 'titans'
+    expansionId: 'future-past'
   },
   {
     name: 'Battleground Battlemaster',
@@ -118,7 +118,7 @@ const selected = [
     spellSchool: null,
     attack: 5,
     health: 5,
-    expansionId: 'united-in-stormwind'
+    expansionId: 'future-past'
   },
   {
     name: 'Bomb Wrangler',
@@ -130,7 +130,7 @@ const selected = [
     spellSchool: null,
     attack: 2,
     health: 3,
-    expansionId: 'galakronds-awakening'
+    expansionId: 'future-past'
   },
   {
     name: 'Breath of Dreams',
@@ -140,7 +140,7 @@ const selected = [
     classes: ['Druid'],
     tribes: [],
     spellSchool: 'Nature',
-    expansionId: 'descent-of-dragons'
+    expansionId: 'future-past'
   },
   {
     name: 'Busy-Bot',
@@ -152,7 +152,7 @@ const selected = [
     spellSchool: null,
     attack: 3,
     health: 2,
-    expansionId: 'perils-in-paradise'
+    expansionId: 'future-past'
   },
   {
     name: 'Canal Slogger',
@@ -164,7 +164,7 @@ const selected = [
     spellSchool: null,
     attack: 6,
     health: 4,
-    expansionId: 'united-in-stormwind'
+    expansionId: 'future-past'
   },
   {
     name: 'Click-Clocker',
@@ -176,7 +176,7 @@ const selected = [
     spellSchool: null,
     attack: 1,
     health: 1,
-    expansionId: 'voyage-to-the-sunken-city'
+    expansionId: 'future-past'
   },
   {
     name: 'Cloud Prince',
@@ -188,7 +188,7 @@ const selected = [
     spellSchool: null,
     attack: 4,
     health: 4,
-    expansionId: 'saviors-of-uldum'
+    expansionId: 'future-past'
   },
   {
     name: 'Crystology',
@@ -198,7 +198,7 @@ const selected = [
     classes: ['Paladin'],
     tribes: [],
     spellSchool: null,
-    expansionId: 'the-boomsday-project'
+    expansionId: 'future-past'
   },
   {
     name: 'Cutting Class',
@@ -208,7 +208,7 @@ const selected = [
     classes: ['Rogue', 'Warrior'],
     tribes: [],
     spellSchool: null,
-    expansionId: 'scholomance-academy'
+    expansionId: 'future-past'
   },
   {
     name: 'Desert Nestmatron',
@@ -220,7 +220,7 @@ const selected = [
     spellSchool: null,
     attack: 3,
     health: 5,
-    expansionId: 'showdown-in-the-badlands'
+    expansionId: 'future-past'
   },
   {
     name: 'Dragon Golem',
@@ -232,7 +232,7 @@ const selected = [
     spellSchool: null,
     attack: 3,
     health: 4,
-    expansionId: 'showdown-in-the-badlands'
+    expansionId: 'future-past'
   },
   {
     name: 'Dreamway Guardians',
@@ -242,7 +242,7 @@ const selected = [
     classes: ['Druid'],
     tribes: [],
     spellSchool: null,
-    expansionId: 'rise-of-shadows'
+    expansionId: 'future-past'
   },
   {
     name: 'Duskbreaker',
@@ -254,7 +254,7 @@ const selected = [
     spellSchool: null,
     attack: 3,
     health: 3,
-    expansionId: 'kobolds-and-catacombs'
+    expansionId: 'future-past'
   },
   {
     name: 'Emerald Explorer',
@@ -266,7 +266,7 @@ const selected = [
     spellSchool: null,
     attack: 4,
     health: 8,
-    expansionId: 'descent-of-dragons'
+    expansionId: 'future-past'
   },
   {
     name: 'Flame Ward',
@@ -276,7 +276,7 @@ const selected = [
     classes: ['Mage'],
     tribes: [],
     spellSchool: 'Fire',
-    expansionId: 'saviors-of-uldum'
+    expansionId: 'future-past'
   },
   {
     name: 'Galvanizer',
@@ -288,7 +288,7 @@ const selected = [
     spellSchool: null,
     attack: 1,
     health: 2,
-    expansionId: 'the-boomsday-project'
+    expansionId: 'future-past'
   },
   {
     name: 'Glowfly Swarm',
@@ -298,7 +298,7 @@ const selected = [
     classes: ['Druid'],
     tribes: [],
     spellSchool: null,
-    expansionId: 'ashes-of-outland'
+    expansionId: 'future-past'
   },
   {
     name: 'Gold Panner',
@@ -310,7 +310,7 @@ const selected = [
     spellSchool: null,
     attack: 1,
     health: 2,
-    expansionId: 'showdown-in-the-badlands'
+    expansionId: 'future-past'
   },
   {
     name: 'Granite Forgeborn',
@@ -322,7 +322,7 @@ const selected = [
     spellSchool: null,
     attack: 4,
     health: 5,
-    expansionId: 'united-in-stormwind'
+    expansionId: 'future-past'
   },
   {
     name: 'Hench-Clan Thug',
@@ -334,7 +334,7 @@ const selected = [
     spellSchool: null,
     attack: 3,
     health: 3,
-    expansionId: 'the-witchwood'
+    expansionId: 'future-past'
   },
   {
     name: 'Hi Ho Silverwing',
@@ -346,7 +346,7 @@ const selected = [
     spellSchool: null,
     attack: 2,
     health: 1,
-    expansionId: 'showdown-in-the-badlands'
+    expansionId: 'future-past'
   },
   {
     name: 'Kobold Librarian',
@@ -358,7 +358,7 @@ const selected = [
     spellSchool: null,
     attack: 2,
     health: 1,
-    expansionId: 'kobolds-and-catacombs'
+    expansionId: 'future-past'
   },
   {
     name: 'Libram of Hope',
@@ -368,7 +368,7 @@ const selected = [
     classes: ['Paladin'],
     tribes: [],
     spellSchool: 'Holy',
-    expansionId: 'ashes-of-outland'
+    expansionId: 'future-past'
   },
   {
     name: 'Libram of Justice',
@@ -378,7 +378,7 @@ const selected = [
     classes: ['Paladin'],
     tribes: [],
     spellSchool: 'Holy',
-    expansionId: 'ashes-of-outland'
+    expansionId: 'future-past'
   },
   {
     name: 'Libram of Wisdom',
@@ -388,7 +388,7 @@ const selected = [
     classes: ['Paladin'],
     tribes: [],
     spellSchool: 'Holy',
-    expansionId: 'ashes-of-outland'
+    expansionId: 'future-past'
   },
   {
     name: 'Lingering Zombie',
@@ -400,7 +400,7 @@ const selected = [
     spellSchool: null,
     attack: 1,
     health: 1,
-    expansionId: 'march-of-the-lich-king'
+    expansionId: 'future-past'
   },
   {
     name: 'Lord Godfrey',
@@ -412,7 +412,7 @@ const selected = [
     spellSchool: null,
     attack: 4,
     health: 4,
-    expansionId: 'the-witchwood'
+    expansionId: 'future-past'
   },
   {
     name: 'Mecha-Shark',
@@ -424,7 +424,7 @@ const selected = [
     spellSchool: null,
     attack: 4,
     health: 3,
-    expansionId: 'voyage-to-the-sunken-city'
+    expansionId: 'future-past'
   },
   {
     name: 'Mecharoo',
@@ -436,7 +436,7 @@ const selected = [
     spellSchool: null,
     attack: 1,
     health: 1,
-    expansionId: 'the-boomsday-project'
+    expansionId: 'future-past'
   },
   {
     name: 'Mother Duck',
@@ -448,7 +448,7 @@ const selected = [
     spellSchool: null,
     attack: 2,
     health: 3,
-    expansionId: 'into-the-emerald-dream'
+    expansionId: 'future-past'
   },
   {
     name: 'Occult Conjurer',
@@ -460,7 +460,7 @@ const selected = [
     spellSchool: null,
     attack: 4,
     health: 4,
-    expansionId: 'madness-at-the-darkmoon-faire'
+    expansionId: 'future-past'
   },
   {
     name: "Painter's Virtue",
@@ -472,7 +472,7 @@ const selected = [
     spellSchool: null,
     attack: 2,
     durability: 3,
-    expansionId: 'whizbangs-workshop'
+    expansionId: 'future-past'
   },
   {
     name: 'Possessed Lackey',
@@ -484,7 +484,7 @@ const selected = [
     spellSchool: null,
     attack: 2,
     health: 2,
-    expansionId: 'kobolds-and-catacombs'
+    expansionId: 'future-past'
   },
   {
     name: 'Prismatic Beam',
@@ -494,7 +494,7 @@ const selected = [
     classes: ['Paladin'],
     tribes: [],
     spellSchool: null,
-    expansionId: 'showdown-in-the-badlands'
+    expansionId: 'future-past'
   },
   {
     name: 'Prize Plunderer',
@@ -506,7 +506,7 @@ const selected = [
     spellSchool: null,
     attack: 2,
     health: 1,
-    expansionId: 'madness-at-the-darkmoon-faire'
+    expansionId: 'future-past'
   },
   {
     name: 'Raiding Party',
@@ -516,7 +516,7 @@ const selected = [
     classes: ['Rogue'],
     tribes: [],
     spellSchool: null,
-    expansionId: 'rastakhans-rumble'
+    expansionId: 'future-past'
   },
   {
     name: 'Risky Skipper',
@@ -528,7 +528,7 @@ const selected = [
     spellSchool: null,
     attack: 1,
     health: 3,
-    expansionId: 'galakronds-awakening'
+    expansionId: 'future-past'
   },
   {
     name: "Scavenger's Ingenuity",
@@ -538,7 +538,7 @@ const selected = [
     classes: ['Hunter'],
     tribes: [],
     spellSchool: null,
-    expansionId: 'ashes-of-outland'
+    expansionId: 'future-past'
   },
   {
     name: 'Seafloor Gateway',
@@ -548,7 +548,7 @@ const selected = [
     classes: ['Mage'],
     tribes: [],
     spellSchool: null,
-    expansionId: 'voyage-to-the-sunken-city'
+    expansionId: 'future-past'
   },
   {
     name: 'Security Automaton',
@@ -560,7 +560,7 @@ const selected = [
     spellSchool: null,
     attack: 1,
     health: 3,
-    expansionId: 'voyage-to-the-sunken-city'
+    expansionId: 'future-past'
   },
   {
     name: 'Showdown!',
@@ -570,7 +570,7 @@ const selected = [
     classes: ['Paladin'],
     tribes: [],
     spellSchool: null,
-    expansionId: 'showdown-in-the-badlands'
+    expansionId: 'future-past'
   },
   {
     name: "Skull of the Man'ari",
@@ -582,7 +582,7 @@ const selected = [
     spellSchool: null,
     attack: 0,
     durability: 3,
-    expansionId: 'kobolds-and-catacombs'
+    expansionId: 'future-past'
   },
   {
     name: 'Splish-Splash Whelp',
@@ -594,7 +594,7 @@ const selected = [
     spellSchool: null,
     attack: 2,
     health: 1,
-    expansionId: 'showdown-in-the-badlands'
+    expansionId: 'future-past'
   },
   {
     name: 'Springpaw',
@@ -606,7 +606,7 @@ const selected = [
     spellSchool: null,
     attack: 1,
     health: 1,
-    expansionId: 'rastakhans-rumble'
+    expansionId: 'future-past'
   },
   {
     name: 'The Light! It Burns!',
@@ -616,7 +616,7 @@ const selected = [
     classes: ['Priest'],
     tribes: [],
     spellSchool: 'Holy',
-    expansionId: 'murder-at-castle-nathria'
+    expansionId: 'future-past'
   },
   {
     name: 'Vicious Scalehide',
@@ -628,7 +628,7 @@ const selected = [
     spellSchool: null,
     attack: 1,
     health: 3,
-    expansionId: 'the-witchwood'
+    expansionId: 'future-past'
   },
   {
     name: 'Voidlord',
@@ -640,7 +640,7 @@ const selected = [
     spellSchool: null,
     attack: 3,
     health: 9,
-    expansionId: 'kobolds-and-catacombs'
+    expansionId: 'future-past'
   },
   {
     name: 'Wailing Vapor',
@@ -652,11 +652,26 @@ const selected = [
     spellSchool: null,
     attack: 1,
     health: 3,
-    expansionId: 'forged-in-the-barrens'
+    expansionId: 'future-past'
   }
 ] as const
 
 describe('selected 57-card content snapshot', () => {
+  it('groups every new card and token under Future Past without adding expansion filters', () => {
+    const futurePast = EXPANSION_CATALOG.require('future-past')
+    expect(EXPANSION_CATALOG.all).toHaveLength(13)
+    for (const card of SHORTLIST_CARD_SOURCE) {
+      expect(card.expansionId).toBe('future-past')
+      expect(card.set).toBe('future-past')
+      expect(futurePast.source).toContainEqual(card)
+    }
+    expect(futurePast.source.map((card) => card.id)).toEqual(
+      CARD_CATALOG.all
+        .filter((card) => card.expansionId === 'future-past')
+        .map((card) => card.id)
+    )
+  })
+
   it('registers exactly the selected collectible names and 12 generated tokens', () => {
     const collectible = SHORTLIST_CARD_SOURCE.filter((card) => card.collectible)
     expect(collectible.map((card) => card.name).sort()).toEqual(

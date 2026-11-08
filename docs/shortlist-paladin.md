@@ -13,7 +13,7 @@ This package implements the selected historical renders, not current balance val
 - Into the Emerald Dream: Mother Duck and Duckling.
 - Perils in Paradise (Traveling Travel Agency mini-set): Busy-Bot.
 
-Each record carries its original expansion ID. The original Librams are used: Wisdom returns through an attached Deathrattle and the Aldors reduce Libram costs for the rest of the game. Bannerman is 3 mana 2/2; Battlemaster is 6 mana; Beam is 7 mana and damages all enemy characters, including the hero. No spell school is inferred when absent from the selected render.
+Every record belongs to Future Past. The historical expansions listed above identify the source versions, not Collection categories. Existing card IDs and artwork names are preserved. The original Librams are used: Wisdom returns through an attached Deathrattle and the Aldors reduce Libram costs for the rest of the game. Bannerman is 3 mana 2/2; Battlemaster is 6 mana; Beam is 7 mana and damages all enemy characters, including the hero. No spell school is inferred when absent from the selected render.
 
 Permanent Libram discounts use existing non-consuming pending cost modifiers, one exact card-ID filter per implemented Libram. They stack, survive the source leaving play, survive checkpoint restoration, and affect future copies. Adding another Libram later must extend those three-card filter lists or introduce a general family selector with tests.
 
