@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { CARD_CATALOG, HERO_CATALOG, asCardId, type CardDefinition } from '../content'
+import {
+  CARD_CATALOG,
+  HERO_CATALOG,
+  asCardId,
+  isCardAllowedForClass,
+  type CardDefinition
+} from '../content'
 import type { Deck } from '../decks'
 import { ArenaOpponentPool } from './arena-opponent-pool'
 import { countDeckCards } from '../decks'
@@ -200,7 +206,7 @@ describe('Arena opponent composition', () => {
       for (const id of Object.keys(deck.cards)) {
         const card = CARD_CATALOG.require(id)
         expect(card.collectible && card.deckLegal).toBe(true)
-        expect(['Neutral', heroClass]).toContain(card.cardClass)
+        expect(isCardAllowedForClass(card, heroClass), id).toBe(true)
       }
     }
     expect(classes.size).toBe(9)

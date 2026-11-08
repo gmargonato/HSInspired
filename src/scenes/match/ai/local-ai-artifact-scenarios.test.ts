@@ -7109,7 +7109,7 @@ describe('hardware local AI artifact scenarios', () => {
     }
   })
 
-  it('DEV-120: resolves the singleton Healing Wave Joust before OPP-1', async () => {
+  it('DEV-120: resolves the publicly known singleton Healing Wave Joust before OPP-1', async () => {
     const options: AiFixtureOptions = {
       seed: 0xde0120,
       aiHeroId: 'thrall',
@@ -7126,7 +7126,32 @@ describe('hardware local AI artifact scenarios', () => {
         { cardId: 'basic_chillwind_yeti', attack: 4, health: 5, ready: true }
       ]
     }
-    const reference = createSession(options)
+    // Joust is guaranteed only when the opponent's singleton identity is public.
+    const knownSingletonSession = () => {
+      const fixture = createAiFixture(options)
+      const checkpoint = fixture.checkpoint
+      const actorId = checkpoint.state.activePlayerId!
+      const players = checkpoint.state.players.map((player) =>
+        player.participantId === actorId
+          ? player
+          : {
+              ...player,
+              deck: player.deck.map((card) => ({ ...card, knownTo: [actorId] }))
+            }
+      )
+      return new GameBoardSession({
+        setup: fixture.setup,
+        decks: fixture.decks,
+        checkpoint: {
+          ...checkpoint,
+          state: {
+            ...checkpoint.state,
+            players: [players[0]!, players[1]!]
+          }
+        }
+      })
+    }
+    const reference = knownSingletonSession()
     dispatch(
       reference,
       playCommand(
@@ -7147,7 +7172,7 @@ describe('hardware local AI artifact scenarios', () => {
       )
     ).toBe(true)
 
-    const actual = createSession(options)
+    const actual = knownSingletonSession()
     await runAiTurn(actual)
     expect(aiPlayer(actual).hero.health).toBeGreaterThan(3)
     expect(
@@ -8068,7 +8093,7 @@ describe('hardware local AI artifact scenarios', () => {
     ).toBe(true)
   }, 120_000)
 
-  it('DEV-144: baits Mirror Entity before developing Ragnaros', async () => {
+  it('DEV-144: sequences Ragnaros lethal around publicly known Secrets', async () => {
     for (const secretId of ['classic_mirror_entity', 'classic_counterspell']) {
       const actual = createSession({
         seed: 0xde0144,
@@ -8079,7 +8104,8 @@ describe('hardware local AI artifact scenarios', () => {
         aiMana: 10,
         aiMaximumMana: 10,
         aiHand: ['league_of_explorers_murloc_tinyfin', 'classic_ragnaros_the_firelord'],
-        opponentSecrets: [{ cardId: secretId }]
+        // Known-secret sequencing, not a guarantee about concealed identities.
+        opponentSecrets: [{ cardId: secretId, revealed: true }]
       })
       await runAiTurn(actual)
       expect(aiWon(actual)).toBe(true)

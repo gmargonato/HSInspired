@@ -215,7 +215,8 @@ export function formatExpansionName(expansionId: ExpansionId | string): string {
     'whispers-of-the-old-gods': 'Whispers of the Old Gods',
     'mean-streets-of-gadgetzan': 'Mean Streets of Gadgetzan',
     'journey-to-ungoro': "Journey to Un'Goro",
-    'knights-of-the-frozen-throne': 'Knights of the Frozen Throne'
+    'knights-of-the-frozen-throne': 'Knights of the Frozen Throne',
+    'future-past': 'Future Past'
   }
   const knownLabel = labels[expansionId]
   if (knownLabel) return knownLabel

@@ -8,6 +8,7 @@ import {
   BLACKROCK_MOUNTAIN_CARD_SOURCE,
   CLASSIC_CARD_SOURCE,
   FUTURE_PAST_CARD_SOURCE,
+  SHORTLIST_CARD_SOURCE,
   GOBLINS_VS_GNOMES_CARD_SOURCE,
   JOURNEY_TO_UNGORO_CARD_SOURCE,
   KNIGHTS_OF_THE_FROZEN_THRONE_CARD_SOURCE,
@@ -104,7 +105,10 @@ export const EXPANSION_DEFINITIONS: readonly ExpansionDefinition[] = [
     11,
     KNIGHTS_OF_THE_FROZEN_THRONE_CARD_SOURCE
   ),
-  expansion('future-past', 'Future Past', 12, FUTURE_PAST_CARD_SOURCE)
+  expansion('future-past', 'Future Past', 12, [
+    ...FUTURE_PAST_CARD_SOURCE,
+    ...SHORTLIST_CARD_SOURCE
+  ])
 ]
 
 export class ExpansionCatalog {

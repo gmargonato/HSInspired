@@ -113,7 +113,7 @@ export function runSummonAction(
       const count =
         action.source !== undefined
           ? 1
-          : Math.max(1, context.queries.evaluate(action.count ?? 1, frame))
+          : Math.max(0, context.queries.evaluate(action.count ?? 1, frame))
       const placement =
         typeof action.placement === 'string'
           ? (action.placement as CardSummonPlacement)

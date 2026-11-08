@@ -28,7 +28,7 @@ describe('event presentation policy', () => {
       Object.values(record).forEach(visit)
     }
     visit(CARD_CATALOG.all)
-    expect(actions).toBe(61)
+    expect(actions).toBe(62)
     for (const power of HERO_POWER_CATALOG.all) {
       if (
         power.effect.kind === 'restore-character' ||

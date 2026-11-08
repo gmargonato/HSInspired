@@ -31,7 +31,7 @@ describe('replacement curated roster routing', () => {
         ({ definition }) => definition.id === id
       )!
       expect(route.curatedOpponent).toMatchObject({
-        catalogVersion: 3,
+        catalogVersion: 4,
         deckId: id,
         deckName: label,
         classId: 'Druid'

@@ -1,7 +1,8 @@
 import { resolve } from 'node:path'
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 
 export default defineConfig({
+  test: { include: [...configDefaults.include, 'src/**/*.scenarios.ts'] },
   resolve: {
     // Match renderer resolution for component lifecycle tests; no app is launched.
     alias: {

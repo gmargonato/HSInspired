@@ -1296,8 +1296,9 @@ describe('Public certainty across concealed summon pools', () => {
   }
 
   it('rejects a Dirty Rat no-op proof across identical public observations', () => {
-    const lucky = session({}, 13),
-      taunt = session({}, 18)
+    // Pin concealed identities: this checks public uncertainty, not catalog RNG.
+    const lucky = session(),
+      taunt = session({ opponentHand: ['basic_senjin_shieldmasta'] })
     expect(lucky.getAiObservation()).toEqual(taunt.getAiObservation())
     const before = lucky.match.getCheckpoint(),
       line = ratLine(lucky)

@@ -1,0 +1,635 @@
+[
+  {
+    "id": "rise_of_shadows_acornbearer",
+    "expansionId": "future-past",
+    "name": "Acornbearer",
+    "rarity": "Common",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": null,
+    "spellSchool": null,
+    "cost": 1,
+    "attack": 2,
+    "health": 1,
+    "rulesText": "Deathrattle: Add two 1/1 Squirrels to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "cardId": "rise_of_shadows_squirrel",
+            "count": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "scholomance_academy_adorable_infestation",
+    "expansionId": "future-past",
+    "name": "Adorable Infestation",
+    "rarity": "Common",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": null,
+    "spellSchool": null,
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Give a minion +1/+1. Summon a 1/1 Cub. Add a Cub to your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "controller": "any",
+              "type": "minion",
+              "selection": "chosen"
+            },
+            "attack": 1,
+            "health": 1
+          },
+          {
+            "action": "summon",
+            "cardId": "scholomance_academy_marsuul_cub",
+            "count": 1
+          },
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "cardId": "scholomance_academy_marsuul_cub",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true,
+    "allowedClasses": ["Druid", "Hunter"]
+  },
+  {
+    "id": "titans_awakening_tremors",
+    "expansionId": "future-past",
+    "name": "Awakening Tremors",
+    "rarity": "Common",
+    "cardClass": "Hunter",
+    "type": "Spell",
+    "subtype": null,
+    "spellSchool": null,
+    "cost": 1,
+    "attack": null,
+    "health": null,
+    "rulesText": "Get three 4/1 Worms. They cost (1).",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "cardId": "titans_worm",
+            "count": 3
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "descent_of_dragons_breath_of_dreams",
+    "expansionId": "future-past",
+    "name": "Breath of Dreams",
+    "rarity": "Rare",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": null,
+    "spellSchool": "Nature",
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "Draw a card. If you're holding a Dragon, gain an empty Mana Crystal.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ],
+        "then": {
+          "condition": {
+            "type": "player-has-card-in-hand",
+            "player": "self",
+            "filter": {
+              "tribe": "Dragon"
+            }
+          },
+          "actions": [
+            {
+              "action": "gain-mana",
+              "player": "self",
+              "amount": 1,
+              "crystal": "empty"
+            }
+          ]
+        }
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "showdown_in_the_badlands_desert_nestmatron",
+    "expansionId": "future-past",
+    "name": "Desert Nestmatron",
+    "rarity": "Rare",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "Dragon",
+    "spellSchool": null,
+    "cost": 4,
+    "attack": 3,
+    "health": 5,
+    "rulesText": "Taunt. Battlecry: If you're holding a Dragon, refresh 4 Mana Crystals.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "refresh-mana",
+            "player": "self",
+            "amount": 4
+          }
+        ],
+        "condition": {
+          "type": "player-has-card-in-hand",
+          "player": "self",
+          "filter": {
+            "tribe": "Dragon"
+          }
+        }
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "showdown_in_the_badlands_dragon_golem",
+    "expansionId": "future-past",
+    "name": "Dragon Golem",
+    "rarity": "Epic",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "Dragon",
+    "spellSchool": null,
+    "cost": 7,
+    "attack": 3,
+    "health": 4,
+    "rulesText": "Taunt. Battlecry: Summon a copy of this for each Dragon in your hand.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon-copy",
+            "target": {
+              "type": "minion",
+              "selection": "source"
+            },
+            "count": {
+              "reference": "matching-entity-count",
+              "selector": {
+                "controller": "self",
+                "type": "card",
+                "zone": "hand",
+                "selection": "all",
+                "filter": {
+                  "tribe": "Dragon"
+                }
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "rise_of_shadows_dreamway_guardians",
+    "expansionId": "future-past",
+    "name": "Dreamway Guardians",
+    "rarity": "Rare",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": null,
+    "spellSchool": null,
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "Summon two 1/2 Dryads with Lifesteal.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "rise_of_shadows_crystal_dryad",
+            "count": 2
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "descent_of_dragons_emerald_explorer",
+    "expansionId": "future-past",
+    "name": "Emerald Explorer",
+    "rarity": "Common",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "Dragon",
+    "spellSchool": null,
+    "cost": 6,
+    "attack": 4,
+    "health": 8,
+    "rulesText": "Taunt. Battlecry: Discover a Dragon.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "discover",
+            "player": "self",
+            "count": 3,
+            "source": "random-card",
+            "filter": {
+              "tribe": "Dragon"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "ashes_of_outland_glowfly_swarm",
+    "expansionId": "future-past",
+    "name": "Glowfly Swarm",
+    "rarity": "Epic",
+    "cardClass": "Druid",
+    "type": "Spell",
+    "subtype": null,
+    "spellSchool": null,
+    "cost": 5,
+    "attack": null,
+    "health": null,
+    "rulesText": "Summon a 2/2 Glowfly for each spell in your hand.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "ashes_of_outland_glowfly",
+            "count": {
+              "reference": "matching-entity-count",
+              "selector": {
+                "controller": "self",
+                "type": "card",
+                "zone": "hand",
+                "selection": "all",
+                "filter": {
+                  "cardType": "Spell"
+                }
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "march_of_the_lich_king_lingering_zombie",
+    "expansionId": "future-past",
+    "name": "Lingering Zombie",
+    "rarity": "Common",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "Undead",
+    "spellSchool": null,
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Deathrattle: Summon a 1/1 Disarmed Zombie with \"Deathrattle: Summon a 1/1 Zombie.\"",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "march_of_the_lich_king_disarmed_zombie",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "ashes_of_outland_scavengers_ingenuity",
+    "expansionId": "future-past",
+    "name": "Scavenger's Ingenuity",
+    "rarity": "Common",
+    "cardClass": "Hunter",
+    "type": "Spell",
+    "subtype": null,
+    "spellSchool": null,
+    "cost": 2,
+    "attack": null,
+    "health": null,
+    "rulesText": "Draw a Beast. Give it +3/+3.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1,
+            "source": {
+              "controller": "self",
+              "type": "minion-card",
+              "selection": "random",
+              "zone": "deck",
+              "count": 1,
+              "filter": {
+                "tribe": "Beast"
+              }
+            }
+          },
+          {
+            "action": "modify",
+            "target": {
+              "type": "drawn-card",
+              "selection": "all"
+            },
+            "attack": 3,
+            "health": 3
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "showdown_in_the_badlands_splishsplash_whelp",
+    "expansionId": "future-past",
+    "name": "Splish-Splash Whelp",
+    "rarity": "Rare",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "Dragon",
+    "spellSchool": null,
+    "cost": 2,
+    "attack": 2,
+    "health": 1,
+    "rulesText": "Battlecry: If you're holding a Dragon, gain an empty Mana Crystal.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "gain-mana",
+            "player": "self",
+            "amount": 1,
+            "crystal": "empty"
+          }
+        ],
+        "condition": {
+          "type": "player-has-card-in-hand",
+          "player": "self",
+          "filter": {
+            "tribe": "Dragon"
+          }
+        }
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "rastakhans_rumble_springpaw",
+    "expansionId": "future-past",
+    "name": "Springpaw",
+    "rarity": "Common",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "Beast",
+    "spellSchool": null,
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Rush. Battlecry: Add a 1/1 Lynx with Rush to your hand.",
+    "keywords": ["rush"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "add-to-hand",
+            "player": "self",
+            "cardId": "rastakhans_rumble_lynx",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "rise_of_shadows_squirrel",
+    "expansionId": "future-past",
+    "name": "Squirrel",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "Beast",
+    "spellSchool": null,
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "rise_of_shadows_crystal_dryad",
+    "expansionId": "future-past",
+    "name": "Crystal Dryad",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": null,
+    "spellSchool": null,
+    "cost": 1,
+    "attack": 1,
+    "health": 2,
+    "rulesText": "Lifesteal.",
+    "keywords": ["lifesteal"],
+    "effects": [],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "ashes_of_outland_glowfly",
+    "expansionId": "future-past",
+    "name": "Glowfly",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "Beast",
+    "spellSchool": null,
+    "cost": 2,
+    "attack": 2,
+    "health": 2,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "march_of_the_lich_king_disarmed_zombie",
+    "expansionId": "future-past",
+    "name": "Disarmed Zombie",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "Undead",
+    "spellSchool": null,
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Deathrattle: Summon a 1/1 Zombie.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "march_of_the_lich_king_zombie",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "march_of_the_lich_king_zombie",
+    "expansionId": "future-past",
+    "name": "Zombie",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "Undead",
+    "spellSchool": null,
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "rastakhans_rumble_lynx",
+    "expansionId": "future-past",
+    "name": "Lynx",
+    "rarity": "None",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "Beast",
+    "spellSchool": null,
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "Rush.",
+    "keywords": ["rush"],
+    "effects": [],
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "scholomance_academy_marsuul_cub",
+    "expansionId": "future-past",
+    "name": "Marsuul Cub",
+    "rarity": "None",
+    "cardClass": "Druid",
+    "type": "Minion",
+    "subtype": "Beast",
+    "spellSchool": null,
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false,
+    "deckLegal": false,
+    "allowedClasses": ["Druid", "Hunter"]
+  },
+  {
+    "id": "titans_worm",
+    "expansionId": "future-past",
+    "name": "Worm",
+    "rarity": "None",
+    "cardClass": "Hunter",
+    "type": "Minion",
+    "subtype": "Beast",
+    "spellSchool": null,
+    "cost": 1,
+    "attack": 4,
+    "health": 1,
+    "rulesText": "",
+    "keywords": [],
+    "effects": [],
+    "collectible": false,
+    "deckLegal": false
+  }
+]

@@ -1,3 +1,4 @@
+import { SHORTLISTED_OPPONENT_DECK_DEFINITIONS } from './shortlisted-opponent-decks'
 import {
   CARD_CATALOG,
   isCardAllowedForClass,
@@ -12,7 +13,7 @@ import { DeckRules, isCollectibleDeckCard } from './deck-rules'
 import type { OpponentStrategyBrief } from './opponent-strategy'
 import type { ExpertDeckStrategyProfileId } from './expert-deck-strategy'
 
-export const CURATED_OPPONENT_CATALOG_VERSION = 3
+export const CURATED_OPPONENT_CATALOG_VERSION = 4
 
 const HISTORICAL_EXPANSIONS: ReadonlySet<string> = new Set([
   'basic',
@@ -41,6 +42,8 @@ export interface CuratedOpponentSource {
 export interface CuratedOpponentDeckDefinition {
   readonly id: string
   readonly name: string
+  /** Optional compact name for the persisted fifteen-character deck-name limit. */
+  readonly deckName?: string
   readonly classId: DeckClass
   readonly source: CuratedOpponentSource
   readonly plan: string
@@ -74,7 +77,7 @@ const source = (
  * Replacement lists deliberately use general Expert evaluation: no old pilot
  * profile is inherited solely because a new list replaces its catalog slot.
  */
-export const CURATED_OPPONENT_DECK_DEFINITIONS: readonly CuratedOpponentDeckDefinition[] =
+const LEGACY_CURATED_OPPONENT_DECK_DEFINITIONS: readonly CuratedOpponentDeckDefinition[] =
   [
     {
       id: 'druid-aggro-token',
@@ -1183,6 +1186,15 @@ export const CURATED_OPPONENT_DECK_DEFINITIONS: readonly CuratedOpponentDeckDefi
     }
   ]
 
+export const CURATED_OPPONENT_DECK_DEFINITIONS: readonly CuratedOpponentDeckDefinition[] =
+  [
+    ...LEGACY_CURATED_OPPONENT_DECK_DEFINITIONS,
+    ...SHORTLISTED_OPPONENT_DECK_DEFINITIONS
+  ]
+const shortlistedIds = new Set<string>(
+  SHORTLISTED_OPPONENT_DECK_DEFINITIONS.map(({ id }) => id)
+)
+
 function normalizeName(name: string): string {
   return name
     .normalize('NFKD')
@@ -1198,13 +1210,14 @@ function resolveSourceCard(
   name: string,
   classId: DeckClass,
   rules: DeckRules,
-  deck: Pick<Deck, 'heroId'>
+  deck: Pick<Deck, 'heroId'>,
+  supportedPool: boolean
 ): CardDefinition {
   const normalizedName = normalizeName(name)
   const candidates = CARD_CATALOG.all.filter(
     (card) =>
       normalizeName(card.name) === normalizedName &&
-      allowedExpansions.has(card.expansionId) &&
+      (supportedPool || allowedExpansions.has(card.expansionId)) &&
       isCardAllowedForClass(card, classId) &&
       isCollectibleDeckCard(card) &&
       rules.isCardAllowedInDeck(deck, card)
@@ -1226,12 +1239,18 @@ function buildDeck(definition: CuratedOpponentDeckDefinition): CuratedOpponentDe
   for (const [cardName, count] of Object.entries(definition.cardList)) {
     if (!Number.isInteger(count) || count < 1)
       throw new Error(`Invalid copy count for ${cardName} in ${definition.id}.`)
-    const card = resolveSourceCard(cardName, definition.classId, rules, deckBase)
+    const card = resolveSourceCard(
+      cardName,
+      definition.classId,
+      rules,
+      deckBase,
+      shortlistedIds.has(definition.id)
+    )
     cards[card.id] = count
   }
   const deck: Deck = {
     id: `curated-opponent-${definition.id}`,
-    name: definition.name,
+    name: definition.deckName ?? definition.name,
     heroId: hero.id,
     cards,
     createdAt: '1970-01-01T00:00:00.000Z',
@@ -1249,13 +1268,13 @@ function buildDeck(definition: CuratedOpponentDeckDefinition): CuratedOpponentDe
       strategy: 'constructed',
       theme: definition.id,
       text:
-        `Historical inspiration: ${definition.source.title}. ${definition.plan} ` +
+        `${shortlistedIds.has(definition.id) ? 'Approved custom shortlist' : 'Historical inspiration'}: ${definition.source.title}. ${definition.plan} ` +
         'Adapt to the visible board, hand, and opponent threats; this deck plan is a prior, not a rule.'
     }
   }
 }
 
-if (CURATED_OPPONENT_DECK_DEFINITIONS.length !== PLAYABLE_CLASSES.length * 4) {
+if (LEGACY_CURATED_OPPONENT_DECK_DEFINITIONS.length !== PLAYABLE_CLASSES.length * 4) {
   throw new Error(
     'Curated opponent catalog must contain exactly four decks per playable class.'
   )
@@ -1268,7 +1287,7 @@ if (definitionIds.size !== CURATED_OPPONENT_DECK_DEFINITIONS.length) {
   throw new Error('Curated opponent deck IDs must be unique.')
 }
 for (const classId of PLAYABLE_CLASSES) {
-  const classDeckCount = CURATED_OPPONENT_DECK_DEFINITIONS.filter(
+  const classDeckCount = LEGACY_CURATED_OPPONENT_DECK_DEFINITIONS.filter(
     (definition) => definition.classId === classId
   ).length
   if (classDeckCount !== 4) {

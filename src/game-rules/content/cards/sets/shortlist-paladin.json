@@ -1,0 +1,712 @@
+[
+  {
+    "id": "ashes_of_outland_aldor_attendant",
+    "expansionId": "future-past",
+    "name": "Aldor Attendant",
+    "rarity": "Common",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "Draenei",
+    "cost": 1,
+    "rulesText": "Battlecry: Reduce the Cost of your Librams by (1) this game.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "type": "card",
+              "controller": "self",
+              "selection": "all",
+              "zone": "hand",
+              "filter": {
+                "cardId": "ashes_of_outland_libram_of_wisdom"
+              }
+            },
+            "amount": -1,
+            "duration": "this-game",
+            "deferUntil": "matching-cards-until-expiry"
+          },
+          {
+            "action": "change-cost",
+            "target": {
+              "type": "card",
+              "controller": "self",
+              "selection": "all",
+              "zone": "hand",
+              "filter": {
+                "cardId": "ashes_of_outland_libram_of_justice"
+              }
+            },
+            "amount": -1,
+            "duration": "this-game",
+            "deferUntil": "matching-cards-until-expiry"
+          },
+          {
+            "action": "change-cost",
+            "target": {
+              "type": "card",
+              "controller": "self",
+              "selection": "all",
+              "zone": "hand",
+              "filter": {
+                "cardId": "ashes_of_outland_libram_of_hope"
+              }
+            },
+            "amount": -1,
+            "duration": "this-game",
+            "deferUntil": "matching-cards-until-expiry"
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true,
+    "attack": 1,
+    "health": 3
+  },
+  {
+    "id": "ashes_of_outland_aldor_truthseeker",
+    "expansionId": "future-past",
+    "name": "Aldor Truthseeker",
+    "rarity": "Rare",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "Draenei",
+    "cost": 5,
+    "rulesText": "Taunt. Battlecry: Reduce the Cost of your Librams by (2) this game.",
+    "keywords": ["taunt"],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "type": "card",
+              "controller": "self",
+              "selection": "all",
+              "zone": "hand",
+              "filter": {
+                "cardId": "ashes_of_outland_libram_of_wisdom"
+              }
+            },
+            "amount": -2,
+            "duration": "this-game",
+            "deferUntil": "matching-cards-until-expiry"
+          },
+          {
+            "action": "change-cost",
+            "target": {
+              "type": "card",
+              "controller": "self",
+              "selection": "all",
+              "zone": "hand",
+              "filter": {
+                "cardId": "ashes_of_outland_libram_of_justice"
+              }
+            },
+            "amount": -2,
+            "duration": "this-game",
+            "deferUntil": "matching-cards-until-expiry"
+          },
+          {
+            "action": "change-cost",
+            "target": {
+              "type": "card",
+              "controller": "self",
+              "selection": "all",
+              "zone": "hand",
+              "filter": {
+                "cardId": "ashes_of_outland_libram_of_hope"
+              }
+            },
+            "amount": -2,
+            "duration": "this-game",
+            "deferUntil": "matching-cards-until-expiry"
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true,
+    "attack": 4,
+    "health": 6
+  },
+  {
+    "id": "ashes_of_outland_libram_of_wisdom",
+    "expansionId": "future-past",
+    "name": "Libram of Wisdom",
+    "rarity": "Rare",
+    "cardClass": "Paladin",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 2,
+    "rulesText": "Give a minion +1/+1 and \"Deathrattle: Add a 'Libram of Wisdom' spell to your hand.\"",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "controller": "any",
+              "selection": "chosen"
+            },
+            "attack": 1,
+            "health": 1
+          },
+          {
+            "action": "grant-deathrattle",
+            "target": {
+              "type": "minion",
+              "controller": "any",
+              "selection": "chosen"
+            },
+            "actions": [
+              {
+                "action": "add-to-hand",
+                "player": "self",
+                "cardId": "ashes_of_outland_libram_of_wisdom",
+                "count": 1
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true,
+    "spellSchool": "Holy"
+  },
+  {
+    "id": "ashes_of_outland_libram_of_justice",
+    "expansionId": "future-past",
+    "name": "Libram of Justice",
+    "rarity": "Common",
+    "cardClass": "Paladin",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 5,
+    "rulesText": "Equip a 1/4 weapon. Change the Health of all enemy minions to 1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "equip",
+            "cardId": "classic_lights_justice"
+          },
+          {
+            "action": "set-health",
+            "target": {
+              "type": "minion",
+              "controller": "opponent",
+              "selection": "all"
+            },
+            "amount": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true,
+    "spellSchool": "Holy"
+  },
+  {
+    "id": "ashes_of_outland_libram_of_hope",
+    "expansionId": "future-past",
+    "name": "Libram of Hope",
+    "rarity": "Epic",
+    "cardClass": "Paladin",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 9,
+    "rulesText": "Restore 8 Health. Summon an 8/8 Guardian with Taunt and Divine Shield.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "restore",
+            "vfx": "heal-target",
+            "target": {
+              "type": "character",
+              "controller": "any",
+              "selection": "chosen"
+            },
+            "amount": 8
+          },
+          {
+            "action": "summon",
+            "cardId": "ashes_of_outland_ancient_guardian"
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true,
+    "spellSchool": "Holy"
+  },
+  {
+    "id": "the_boomsday_project_crystology",
+    "expansionId": "future-past",
+    "name": "Crystology",
+    "rarity": "Rare",
+    "cardClass": "Paladin",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 1,
+    "rulesText": "Draw two 1-Attack minions from your deck.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 2,
+            "source": {
+              "type": "minion-card",
+              "controller": "self",
+              "selection": "random",
+              "zone": "deck",
+              "count": 2,
+              "filter": {
+                "stat": "attack",
+                "operator": "eq",
+                "value": 1
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "united_in_stormwind_alliance_bannerman",
+    "expansionId": "future-past",
+    "name": "Alliance Bannerman",
+    "rarity": "Common",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": null,
+    "cost": 3,
+    "rulesText": "Battlecry: Draw a minion. Give minions in your hand +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1,
+            "source": {
+              "type": "minion-card",
+              "controller": "self",
+              "selection": "random",
+              "zone": "deck",
+              "count": 1,
+              "filter": {}
+            }
+          },
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion-card",
+              "controller": "self",
+              "selection": "all",
+              "zone": "hand"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true,
+    "attack": 2,
+    "health": 2
+  },
+  {
+    "id": "united_in_stormwind_battleground_battlemaster",
+    "expansionId": "future-past",
+    "name": "Battleground Battlemaster",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": null,
+    "cost": 6,
+    "rulesText": "Adjacent minions have Windfury.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "aura",
+        "actions": [
+          {
+            "action": "grant-keyword",
+            "target": {
+              "type": "minion",
+              "controller": "self",
+              "selection": "adjacent",
+              "exclude": "source"
+            },
+            "keyword": "windfury"
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true,
+    "attack": 5,
+    "health": 5
+  },
+  {
+    "id": "whizbangs_workshop_painters_virtue",
+    "expansionId": "future-past",
+    "name": "Painter's Virtue",
+    "rarity": "Common",
+    "cardClass": "Paladin",
+    "type": "Weapon",
+    "subtype": null,
+    "cost": 4,
+    "rulesText": "Lifesteal. After your hero attacks, give minions in your hand +1/+1.",
+    "keywords": ["lifesteal"],
+    "effects": [
+      {
+        "trigger": "on-attack",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion-card",
+              "controller": "self",
+              "selection": "all",
+              "zone": "hand"
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ],
+        "event": {
+          "type": "attack-resolved",
+          "source": {
+            "type": "hero",
+            "controller": "self",
+            "selection": "event-source"
+          }
+        }
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true,
+    "attack": 2,
+    "health": 3
+  },
+  {
+    "id": "the_witchwood_vicious_scalehide",
+    "expansionId": "future-past",
+    "name": "Vicious Scalehide",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 2,
+    "rulesText": "Lifesteal. Rush.",
+    "keywords": ["rush", "lifesteal"],
+    "effects": [],
+    "collectible": true,
+    "deckLegal": true,
+    "attack": 1,
+    "health": 3
+  },
+  {
+    "id": "showdown_in_the_badlands_hi_ho_silverwing",
+    "expansionId": "future-past",
+    "name": "Hi Ho Silverwing",
+    "rarity": "Rare",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "Dragon",
+    "cost": 2,
+    "rulesText": "Divine Shield. Deathrattle: Draw a Holy spell.",
+    "keywords": ["divine-shield"],
+    "effects": [
+      {
+        "trigger": "deathrattle",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1,
+            "source": {
+              "type": "spell-card",
+              "controller": "self",
+              "selection": "random",
+              "zone": "deck",
+              "count": 1,
+              "filter": {
+                "spellSchool": "Holy"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true,
+    "attack": 2,
+    "health": 1
+  },
+  {
+    "id": "showdown_in_the_badlands_gold_panner",
+    "expansionId": "future-past",
+    "name": "Gold Panner",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": null,
+    "cost": 2,
+    "rulesText": "At the end of your turn, draw a card.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "end-of-turn",
+        "actions": [
+          {
+            "action": "draw",
+            "player": "self",
+            "count": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true,
+    "attack": 1,
+    "health": 2
+  },
+  {
+    "id": "showdown_in_the_badlands_showdown",
+    "expansionId": "future-past",
+    "name": "Showdown!",
+    "rarity": "Epic",
+    "cardClass": "Paladin",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 2,
+    "rulesText": "Both players summon three 3/3 Outlaws. Give yours Rush.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "showdown_in_the_badlands_outlaw",
+            "count": 3,
+            "storeAs": "outlaws"
+          },
+          {
+            "action": "summon",
+            "cardId": "showdown_in_the_badlands_outlaw",
+            "controller": "opponent",
+            "count": 3
+          },
+          {
+            "action": "grant-keyword",
+            "target": {
+              "type": "minion",
+              "controller": "self",
+              "selection": "stored",
+              "reference": "outlaws"
+            },
+            "keyword": "rush"
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "showdown_in_the_badlands_prismatic_beam",
+    "expansionId": "future-past",
+    "name": "Prismatic Beam",
+    "rarity": "Common",
+    "cardClass": "Paladin",
+    "type": "Spell",
+    "subtype": null,
+    "cost": 7,
+    "rulesText": "Deal 3 damage to all enemies. Costs (1) less for each enemy minion.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "cast",
+        "actions": [
+          {
+            "action": "damage",
+            "target": {
+              "type": "character",
+              "controller": "opponent",
+              "selection": "all"
+            },
+            "amount": 3
+          }
+        ]
+      },
+      {
+        "trigger": "while-in-hand",
+        "actions": [
+          {
+            "action": "change-cost",
+            "target": {
+              "type": "card",
+              "controller": "self",
+              "selection": "source"
+            },
+            "amount": {
+              "reference": "matching-entity-count",
+              "selector": {
+                "type": "minion",
+                "controller": "opponent",
+                "selection": "all"
+              },
+              "operation": "subtract"
+            }
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true
+  },
+  {
+    "id": "into_the_emerald_dream_mother_duck",
+    "expansionId": "future-past",
+    "name": "Mother Duck",
+    "rarity": "Common",
+    "cardClass": "Neutral",
+    "type": "Minion",
+    "subtype": "Beast",
+    "cost": 4,
+    "rulesText": "Battlecry: Summon three 1/1 Ducklings with Rush.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "summon",
+            "cardId": "into_the_emerald_dream_duckling",
+            "count": 3
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true,
+    "attack": 2,
+    "health": 3
+  },
+  {
+    "id": "perils_in_paradise_busy_bot",
+    "expansionId": "future-past",
+    "name": "Busy-Bot",
+    "rarity": "Common",
+    "cardClass": "Paladin",
+    "type": "Minion",
+    "subtype": "Mech",
+    "cost": 2,
+    "rulesText": "Battlecry: Give your 1-Attack minions +1/+1.",
+    "keywords": [],
+    "effects": [
+      {
+        "trigger": "battlecry",
+        "actions": [
+          {
+            "action": "modify",
+            "target": {
+              "type": "minion",
+              "controller": "self",
+              "selection": "all",
+              "filter": {
+                "stat": "attack",
+                "operator": "eq",
+                "value": 1
+              }
+            },
+            "attack": 1,
+            "health": 1
+          }
+        ]
+      }
+    ],
+    "collectible": true,
+    "deckLegal": true,
+    "attack": 3,
+    "health": 2
+  },
+  {
+    "id": "ashes_of_outland_ancient_guardian",
+    "name": "Ancient Guardian",
+    "type": "Minion",
+    "cost": 8,
+    "attack": 8,
+    "health": 8,
+    "subtype": null,
+    "keywords": ["taunt", "divine-shield"],
+    "effects": [],
+    "rulesText": "Taunt. Divine-Shield",
+    "rarity": "Summon",
+    "cardClass": "Paladin",
+    "expansionId": "future-past",
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "into_the_emerald_dream_duckling",
+    "name": "Duckling",
+    "type": "Minion",
+    "cost": 1,
+    "attack": 1,
+    "health": 1,
+    "subtype": "Beast",
+    "keywords": ["rush"],
+    "effects": [],
+    "rulesText": "Rush",
+    "rarity": "Summon",
+    "cardClass": "Neutral",
+    "expansionId": "future-past",
+    "collectible": false,
+    "deckLegal": false
+  },
+  {
+    "id": "showdown_in_the_badlands_outlaw",
+    "name": "Outlaw",
+    "type": "Minion",
+    "cost": 3,
+    "attack": 3,
+    "health": 3,
+    "subtype": null,
+    "keywords": [],
+    "effects": [],
+    "rulesText": "",
+    "rarity": "Summon",
+    "cardClass": "Paladin",
+    "expansionId": "future-past",
+    "collectible": false,
+    "deckLegal": false
+  }
+]

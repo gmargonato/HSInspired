@@ -130,15 +130,36 @@ async function choose(session: GameBoardSession) {
     messages: [{ role: 'user', content: '{}' }],
     actionIds: actions.map((action) => action.id)
   }
-  const decision = await new LocalAiDecisionApi(session, undefined, {
-    workBudget: 128
-  }).decide(request)
+  const before = session.match.getCheckpoint()
+  const api = new LocalAiDecisionApi(session, undefined, { workBudget: 128 })
+  const decision = await api.decide(request)
+  expect(session.match.getCheckpoint()).toEqual(before)
   if (!('actionId' in decision.choice))
     throw new Error('Scenario expected an action choice.')
   const actionId = decision.choice.actionId
   const selected = actions.find((action) => action.id === actionId)
   if (!selected) throw new Error(`Unknown selected action ${actionId}.`)
-  return { command: selected.command, decision, actions }
+  const line = api
+    .getLastTrace()
+    ?.candidates.find((candidate) => candidate.actionId === actionId)?.sequenceIntents
+  return { command: selected.command, decision, actions, line }
+}
+
+// Search may put an affordable hero power before the meaningful tactical action.
+// Replay the selected live-pool line, rather than require one arbitrary first step.
+async function playSelectedLine(session: GameBoardSession): Promise<void> {
+  const selected = await choose(session)
+  expect(selected.line?.length).toBeGreaterThan(0)
+  for (const intent of selected.line!) {
+    if (intent.type === 'end-turn') break
+    const command = legal(session).find(
+      (candidate) =>
+        JSON.stringify(aiActionIntent(candidate, session.localParticipantId)) ===
+        JSON.stringify(intent)
+    )
+    expect(command).toBeDefined()
+    dispatch(session, command!)
+  }
 }
 
 describe('hardware local AI tactical scenarios', () => {
@@ -241,10 +262,13 @@ describe('hardware local AI tactical scenarios', () => {
         maximum: 1
       })
     })
-    const selected = (await choose(session)).command
-    expect(selected.type).toBe('attack-character')
-    if (selected.type === 'attack-character')
-      expect(selected.defender).toMatchObject({ kind: 'minion' })
+    await playSelectedLine(session)
+    expect(
+      session.findPlayer(session.getState(), session.localParticipantId).board
+    ).toHaveLength(0)
+    expect(
+      session.findPlayer(session.getState(), session.remoteParticipantId).hero.health
+    ).toBeGreaterThan(0)
   })
 
   it('spends available mana on a strong board development play', async () => {
@@ -257,8 +281,10 @@ describe('hardware local AI tactical scenarios', () => {
         maximum: 6
       })
     })
-    const selected = (await choose(session)).command
-    expect(selected.type).toBe('play-card')
+    await playSelectedLine(session)
+    const self = session.findPlayer(session.getState(), session.remoteParticipantId)
+    expect(self.board.length).toBeGreaterThan(0)
+    expect(self.mana.available).toBeLessThan(7)
   })
 
   it('uses an available hero power when no better card action exists', async () => {
@@ -531,16 +557,13 @@ describe('hardware local AI tactical scenarios', () => {
       })
       setMana(current, 2)
     })
-    const selected = (await choose(session)).command
-    expect(selected.type).toBe('play-card')
-    if (selected.type === 'play-card') {
-      cardInHand(session, 'basic_frostbolt', selected.cardInstanceId)
-      expect(selected.targets?.[0]).toMatchObject({
-        kind: 'minion',
-        participantId: session.localParticipantId,
-        instanceId: expect.any(String)
-      })
-    }
+    await playSelectedLine(session)
+    const enemy = session.findPlayer(session.getState(), session.localParticipantId)
+    expect(enemy.board[0]!.cardId).toBe('whispers_of_the_old_gods_the_ancient_one')
+    expect(enemy.board[0]!.frozenUntilTurn).not.toBeNull()
+    expect(
+      session.findPlayer(session.getState(), session.remoteParticipantId).hero.health
+    ).toBeGreaterThan(0)
   })
 
   it('clears a wide enemy board with area damage when no friendly board is at risk', async () => {
