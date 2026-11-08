@@ -7,7 +7,7 @@ Source: **HSInspired reduced 57-card visual shortlist** and **HSInspired first p
 - 57 collectible cards, all registered in the normal card catalog and their original expansions.
 - 12 new noncollectible, non-deck-legal token definitions; reuse existing Boom Bot, Voidwalker, and Light’s Justice.
 - 13 exact, legal 30-card shortlist decks added to the normal AI pool. The previous 36 lists remain unchanged (49 total).
-- No new artwork or image files. Runtime placeholder/fallback behavior is unchanged.
+- All 69 new card/token illustrations are imported from the existing local extraction archive and registered in `scripts/card-artwork-sources.json`.
 - Reusable deterministic card scenarios, selected-version assertions, AI registration scenarios, targeted production-AI strategy probes, and a repeatable complete-game evaluation harness.
 
 ## Intentional engine corrections
@@ -31,6 +31,16 @@ node scripts/run-shortlist-ai-evaluation.cjs --output /tmp/shortlist-ai-evaluati
 ```
 
 Durable regression scenarios use `.scenarios.ts`, included in the normal Vitest configuration. Temporary `.test` loaders are not retained.
+
+## Artwork integration (8 November 2026)
+
+All 57 collectible cards and 12 tokens now have opaque runtime PNGs named after their local card IDs in `assets/images/card-artwork`. Sources are existing files under `assets/original`; no source images, existing runtime artwork, card values, or layout values were changed. The normal asset resolver discovers the PNGs without renderer changes.
+
+Matching uses the extraction archive's `card_portraits.csv` and original expansion card IDs, with each selected texture independently checked against the card's primary `PortraitTexturePath` in `mapping_data/asset_links.json`. These indexes are in the installed Hearthstone `Assets_Extracted/card_related` folder. The updated project source manifest records the portable original path, Hearthstone ID, and source/runtime SHA-256 hashes. `Artifacts/card-artwork-mapping.csv` and `Artifacts/shortlist-artwork-import.json` retain the local mapping and import evidence.
+
+Two local token names differ from the extracted display names: `march_of_the_lich_king_zombie` uses **Unarmed Zombie** (`RLK_650t2`), the final Lingering Zombie form; `titans_worm` uses **Bursting Jormungar** (`TTN_081t`), the Awakening Tremors token. Name collisions such as Squirrel, Dragon Golem, Lord Godfrey, and the story-mode Librams are resolved by original card ID.
+
+The existing `opaqueArtworkPng` conversion removes alpha masks while preserving original dimensions, gamma, and every RGB pixel. All 1,726 pre-existing runtime PNGs were verified byte-identical after importing the 69 additions. Reimport with `npm run assets:import`; validate with `npm run assets:check`. Desktop visual framing remains untested.
 
 ## Scenario plans and evidence
 
