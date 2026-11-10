@@ -984,6 +984,34 @@ describe('AI decision Markdown', () => {
     expect(markdown).toContain('Choose draw for remote:choice')
   })
 
+  it.each([
+    {
+      failures: [],
+      expected: null
+    },
+    {
+      failures: ['world 2: Worker unavailable'],
+      expected: 'failed searches: world 2: Worker unavailable'
+    },
+    {
+      failures: ['world 1 returned no result', 'world 3: [worker]\nfailed'],
+      expected:
+        'failed searches: world 1 returned no result, world 3: \\[worker\\] failed'
+    }
+  ])('preserves failed search diagnostics: $failures', ({ failures, expected }) => {
+    const transcript = decisionTranscript()
+    transcript.accept(decisionRequest('r1', 4))
+    const response = decisionResponse('r1', 4)
+    const usage = response.data.usage as JsonObject
+    const summary = usage.searchSummary as JsonObject
+    summary.failedWorlds = failures
+    transcript.accept(response)
+    const markdown = transcript.render()
+    if (expected) expect(markdown).toContain(expected)
+    else expect(markdown).not.toContain('failed searches:')
+    expect(markdown).not.toContain('NaN')
+  })
+
   it('uses fair state only, whitelists metadata, and keeps genuinely missing records explicit', () => {
     const transcript = decisionTranscript({
       apiKey: 'secret-do-not-log',

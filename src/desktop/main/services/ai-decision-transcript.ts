@@ -683,10 +683,10 @@ export class AiDecisionTranscript {
         details.push(
           `${omitted} per-search continuations not retained; their first moves remain listed`
         )
-      const failedWorlds = rows(entry.summary.failedWorlds)
+      const failedWorlds = values(entry.summary.failedWorlds)
       if (failedWorlds.length)
         details.push(
-          `failed searches: ${failedWorlds.map((world) => `${Number(world.worldIndex) + 1} ${text(world.status)}`).join(', ')}`
+          `failed searches: ${failedWorlds.map((failure) => escape(text(failure))).join(', ')}`
         )
       const provenance = object(entry.usage.decisionProvenance)
       const priority = provenance.priority ?? entry.usage.decisionPriority
