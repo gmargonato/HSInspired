@@ -80,6 +80,49 @@ function firstTurnCoinFixture(
 }
 
 describe('hardware local AI', () => {
+  it('retains all evaluated roots separately from the gameplay trace shortlist', async () => {
+    const session = firstTurnCoinFixture({
+      aiMana: 4,
+      aiMaximumMana: 4,
+      aiHand: ['classic_wisp', 'basic_chillwind_yeti'],
+      opponentBoard: []
+    })
+    const actions = aiActions(session, legal(session))
+    const api = new LocalAiDecisionApi(session, undefined, {
+      profile: 'expert',
+      workBudget: 64
+    })
+    const internal = api as unknown as { limits: { traceCandidateLimit: number } }
+    internal.limits = { ...internal.limits, traceCandidateLimit: 1 }
+    const before = session.match.getCheckpoint()
+    await api.decide(
+      request(
+        session,
+        'action',
+        actions.map((action) => action.id)
+      )
+    )
+    const trace = api.getLastTrace()!
+    expect(trace.candidates).toHaveLength(1)
+    expect(trace.evaluatedCandidates!.length).toBeGreaterThan(1)
+    expect(
+      trace.evaluatedCandidates!.map((candidate) => candidate.actionId).sort()
+    ).toEqual(trace.rootVisitDistribution!.map((entry) => entry.actionId).sort())
+    for (const candidate of trace.evaluatedCandidates!) {
+      expect(candidate.sequenceIntents?.length).toBeGreaterThan(0)
+      expect(candidate.sequenceSupportVisits ?? 0).toBeLessThanOrEqual(
+        candidate.visits!
+      )
+      expect(candidate.finalRecommendationValue).toBeCloseTo(
+        Object.values(candidate.rankingComponents!).reduce(
+          (sum, value) => sum + value,
+          0
+        )
+      )
+    }
+    expect(session.match.getCheckpoint()).toEqual(before)
+  })
+
   it('rejects the Coin root when its only recurring turn line is Hunter hero power', async () => {
     const fixture = createAiFixture({
       seed: 0xc02,

@@ -50,6 +50,7 @@ export function captureMatchStart(
   state: OpeningMatchState
 ): MatchLogStartData {
   return {
+    ...(setup.seed === undefined ? {} : { seed: setup.seed }),
     participants: setup.participants.map((participant) => ({
       participantId: participant.participantId,
       label: participant.controllerKind === 'human' ? 'Local Player' : 'Remote Player',

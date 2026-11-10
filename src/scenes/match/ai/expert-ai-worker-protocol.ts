@@ -72,6 +72,9 @@ export function expertAiBudgetForTurn(turnBudgetMs: number): ExpertAiBudget {
 export type ExpertAiWorkerRequest =
   | {
       readonly type: 'decide'
+      /** Logging identity; independent of seeds and gameplay. */
+      readonly searchId?: string
+      readonly configuredBudget?: ExpertAiBudget
       /** Shared public-only review, computed once before sampled worlds. */
       readonly publicThreat?: ReturnType<typeof inspectExpertPublicThreat>
       readonly request: AiDecisionRequest

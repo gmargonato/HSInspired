@@ -122,6 +122,13 @@ export interface LocalAiSearchProgress {
   readonly description: string
   readonly recommendationValue: number
   readonly iterations: number
+  /** Logging snapshot from the same root statistics already used for progress. */
+  readonly evaluatedRoots: readonly {
+    readonly actionId: string
+    readonly visits: number
+    readonly meanValue: number
+    readonly recommendationValue: number
+  }[]
 }
 
 // Search/evaluation policy is shared; difficulty only bounds available time.
@@ -159,6 +166,9 @@ export interface LocalAiCandidateTrace {
   readonly phase: TurnMatchState['phase'] | null
   readonly winnerId: string | null
   readonly sequenceIntents?: readonly AiActionIntent[]
+  /** Actual sampled support for this exact prefix, never inferred from root visits. */
+  readonly sequenceSupportVisits?: number
+  readonly sequenceProvenance?: 'sampled-prefix' | 'tactical-proof' | 'root-only'
   /** Same sampled prefix, same supporting visits; review evidence only, not a plan. */
   readonly resourceReviewIntents?: readonly AiActionIntent[]
   readonly visits?: number
@@ -216,6 +226,8 @@ export interface LocalAiDecisionTrace {
   readonly visibleThreat: number | null
   readonly chosenActionId: string | null
   readonly candidates: readonly LocalAiCandidateTrace[]
+  /** Logging only: all evaluated roots, without the gameplay shortlist cap. */
+  readonly evaluatedCandidates?: readonly LocalAiCandidateTrace[]
   readonly rootLegalActionCount?: number
   /** Every visited root edge, retained for unbiased search diagnostics. */
   readonly rootVisitDistribution?: readonly {
@@ -1284,6 +1296,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         visibleThreat: null,
         chosenActionId: action.id,
         chosenSequence: sequenceLabels,
+        rootLegalActionCount: actions.length,
         decisionPriority: 'verified-win',
         tacticalNodes: tactical.nodes,
         tacticalExhausted: tactical.exhausted,
@@ -1300,6 +1313,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
             accepted: true,
             phase: 'ended',
             winnerId: rootId,
+            sequenceProvenance: 'tactical-proof',
             sequenceIntents: line.commands.map((command) =>
               aiActionIntent(command, this.session.localParticipantId)
             )
@@ -1747,7 +1761,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       totalRolloutDepth += rolloutDepth
       maximumRolloutDepth = Math.max(maximumRolloutDepth, rolloutDepth)
       if (this.onSearchProgress && (iterations === 1 || iterations % 64 === 0)) {
-        const provisional = tree
+        const provisionalCandidates = tree
           .rootStats(rootInformationKey)
           .map((stat) => {
             const action = rootChoices.get(stat.key)
@@ -1766,7 +1780,8 @@ export class LocalAiDecisionApi implements AiDecisionApi {
               right.stat.visits - left.stat.visits ||
               right.stat.meanValue - left.stat.meanValue ||
               left.action.id.localeCompare(right.action.id)
-          )[0]
+          )
+        const provisional = provisionalCandidates[0]
         if (provisional) {
           try {
             this.onSearchProgress({
@@ -1774,7 +1789,15 @@ export class LocalAiDecisionApi implements AiDecisionApi {
               command: provisional.action.command,
               description: provisional.action.description,
               recommendationValue: provisional.recommendationValue,
-              iterations
+              iterations,
+              evaluatedRoots: provisionalCandidates.map(
+                ({ action, stat, recommendationValue }) => ({
+                  actionId: action.id,
+                  visits: stat.visits,
+                  meanValue: stat.meanValue,
+                  recommendationValue
+                })
+              )
             })
           } catch {
             // Progress reporting must not interrupt the actual search.
@@ -2116,7 +2139,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     )[0]
     if (!selected) return null
 
-    const candidates: LocalAiCandidateTrace[] = [...visited]
+    const evaluatedCandidates: LocalAiCandidateTrace[] = [...visited]
       .sort(
         (left, right) =>
           (certifiedCompletions.size > 0 || survivalPreference(selected.stat.key)
@@ -2128,7 +2151,6 @@ export class LocalAiDecisionApi implements AiDecisionApi {
           right.stat.visits - left.stat.visits ||
           right.stat.meanValue - left.stat.meanValue
       )
-      .slice(0, this.limits.traceCandidateLimit)
       .map(({ stat, action }) => ({
         ...(() => {
           const selectedLine = rootCandidateContinuations.get(stat.key) ??
@@ -2149,6 +2171,10 @@ export class LocalAiDecisionApi implements AiDecisionApi {
           const risk = rootCandidateRiskAdjustments.get(stat.key) ?? 0
           const tactical = rootCandidateTacticalPenalties.get(stat.key) ?? 0
           return {
+            ...(sample ? { sequenceSupportVisits: sample.visits } : {}),
+            sequenceProvenance: sample
+              ? ('sampled-prefix' as const)
+              : ('root-only' as const),
             ...(sample && selectedLine.length > 1
               ? { continuationEstimate: estimateExpertContinuation(sample, stat) }
               : {}),
@@ -2211,6 +2237,8 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         recommendationTacticalPenalty: rootCandidateTacticalPenalties.get(stat.key),
         actionOutcomeReason: rootActionOutcomes.get(stat.key)?.reason
       }))
+    // Preserve the existing consensus shortlist exactly; the complete list is diagnostics only.
+    const candidates = evaluatedCandidates.slice(0, this.limits.traceCandidateLimit)
     const executableSequence = rootCandidateContinuations.get(selected.stat.key) ??
       sampledContinuation(
         sampledTurnLines.get(selected.stat.key),
@@ -2280,6 +2308,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       visibleThreat: null,
       chosenActionId: selected.action.id,
       candidates,
+      evaluatedCandidates,
       rootLegalActionCount: rootChoices.size,
       rootVisitDistribution: visited.map(({ stat, action }) => ({
         actionId: action.id,

@@ -126,7 +126,9 @@ describe('Expert hidden-world worker pool', () => {
     const fixture = createAiFixture({
       seed: 29,
       aiHeroId: 'jaina',
-      opponentHeroId: 'garrosh'
+      opponentHeroId: 'garrosh',
+      aiMana: 4,
+      aiHand: ['classic_wisp']
     })
     const session = new GameBoardSession({
       setup: fixture.setup,
@@ -173,7 +175,15 @@ describe('Expert hidden-world worker pool', () => {
           planUpdate: null
         },
         durationMs: 800,
-        finishReason: 'expert-search-progress'
+        finishReason: 'expert-search-progress',
+        usage: {
+          searchProgressRoots: actions.slice(0, 2).map((action, index) => ({
+            actionId: action.id,
+            visits: index + 2,
+            meanValue: 0.1,
+            recommendationValue: 0.2
+          }))
+        }
       }
     })
     await vi.advanceTimersByTimeAsync(1_751)
@@ -181,6 +191,13 @@ describe('Expert hidden-world worker pool', () => {
     expect(result).toMatchObject({ worldIndex: 2, status: 'partial' })
     expect(result?.evaluation.trace?.candidates[0]?.recommendationValue).toBe(0.2)
     expect(result?.evaluation.trace?.sampleCount).toBe(8)
+    expect(result?.evaluation.trace?.candidates).toHaveLength(1)
+    expect(result?.evaluation.trace?.evaluatedCandidates).toHaveLength(2)
+    expect(result?.evaluation.trace?.evaluatedCandidates?.[1]).toMatchObject({
+      visits: 3,
+      meanValue: 0.1,
+      recommendationValue: 0.2
+    })
   })
   it('runs independent worlds on separate workers and returns their own results', async () => {
     const pool = new ExpertAiWorldPool(() => new TestWorldWorker() as unknown as Worker)

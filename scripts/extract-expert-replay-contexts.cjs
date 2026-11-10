@@ -50,6 +50,13 @@ function readMatch(prefix) {
   const root = path.resolve('artifacts/match-logs')
   const directory = fs.readdirSync(root).find((name) => name.includes(prefix))
   if (!directory) throw new Error('Missing match ' + prefix)
+  if (
+    !fs.existsSync(path.join(root, directory, 'ai.json')) &&
+    fs.existsSync(path.join(root, directory, 'ai-decisions.md'))
+  )
+    throw new Error(
+      `Match ${directory} uses the two-file Markdown format. Exact replay extraction requires a historical ai.json and ai-conversation.txt pair; ai-decisions.md records readable search choices, not a complete replay checkpoint. Use a legacy recording for this tool, or inspect ai-decisions.md directly.`
+    )
   const log = JSON.parse(fs.readFileSync(path.join(root, directory, 'ai.json'), 'utf8'))
   const transcript = fs.readFileSync(
     path.join(root, directory, 'ai-conversation.txt'),

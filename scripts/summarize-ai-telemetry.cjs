@@ -1,14 +1,15 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
-// Read-only: accepts a match directory, ai.json, or the complete match-log directory.
+// Read-only legacy telemetry. Detect newer Markdown logs instead of silently ignoring them.
 function files(root) {
   if (!fs.existsSync(root)) return []
-  if (fs.statSync(root).isFile()) return path.basename(root) === 'ai.json' ? [root] : []
+  if (fs.statSync(root).isFile())
+    return ['ai.json', 'ai-decisions.md'].includes(path.basename(root)) ? [root] : []
   return fs
     .readdirSync(root, { withFileTypes: true })
     .flatMap((entry) =>
-      entry.isDirectory() || entry.name === 'ai.json'
+      entry.isDirectory() || ['ai.json', 'ai-decisions.md'].includes(entry.name)
         ? files(path.join(root, entry.name))
         : []
     )
@@ -20,7 +21,17 @@ function distribution(values) {
   return { samples: sorted.length, medianMs: percentile(0.5), p95Ms: percentile(0.95) }
 }
 const groups = new Map()
-const inputs = files(process.argv[2] ?? path.join('artifacts', 'match-logs'))
+const discovered = files(process.argv[2] ?? path.join('artifacts', 'match-logs'))
+const inputs = discovered.filter((file) => path.basename(file) === 'ai.json')
+const excludedMarkdownMatches = discovered.filter(
+  (file) =>
+    path.basename(file) === 'ai-decisions.md' &&
+    !fs.existsSync(path.join(path.dirname(file), 'ai.json'))
+).length
+if (excludedMarkdownMatches)
+  console.warn(
+    `Excluded ${excludedMarkdownMatches} newer Markdown match log(s). Telemetry aggregation requires legacy ai.json files; open ai-decisions.md to inspect current searches. Missing provider token, retry and event telemetry cannot be reconstructed from Markdown.`
+  )
 for (const file of inputs) {
   const document = JSON.parse(fs.readFileSync(file, 'utf8'))
   let key = 'unknown'
@@ -122,6 +133,7 @@ console.log(
   JSON.stringify(
     {
       matches: inputs.length,
+      excludedMarkdownMatches,
       note: 'Missing measurements are null, not zero. Successful call durations include automatic recovery. Failed-attempt time is also reported separately, not additive to call duration. Token totals count recorded failed attempts and successful/rejected completions once. Older logs lack attempt diagnostics. Overlap includes presentation pacing.',
       groups: summary
     },

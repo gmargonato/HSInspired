@@ -20,7 +20,14 @@ import {
 } from '../../../game-rules/match/testing/ai-scenario-builder'
 import { asPlayerId } from '../../../game-rules/match/match-types'
 import { GameBoardSession } from '../game-board-session'
-import { LocalAiDecisionApi } from './local-ai-decision-api'
+import {
+  LocalAiDecisionApi,
+  type LocalAiCandidateTrace,
+  type LocalAiDecisionTrace
+} from './local-ai-decision-api'
+import { expertSearchSummary } from './expert-search-summary'
+import { aiActionIntent } from './ai-action-intent'
+import type { ExpertWorldRequest } from './expert-ai-world-runner'
 import { aiActions } from './ai-context'
 import recorded from './expert-tactical-recorded-states.json'
 import { runExpertAiWorkerDecision } from './expert-ai.worker'
@@ -1680,6 +1687,14 @@ describe('Public certainty across concealed summon pools', () => {
       throw Error('Expected worker action')
     // Exercise the JSON boundary used by persisted AI usage records.
     const usage = JSON.parse(JSON.stringify(response.usage))
+    expect(usage.searchSummary.selectedActionId).toBe(response.choice.actionId)
+    expect(usage.searchSummary.seed).toBe(8803)
+    expect(usage.searchSummary.options).toHaveLength(legal.length)
+    expect(
+      usage.searchSummary.options
+        .map((option: { actionId: string }) => option.actionId)
+        .sort()
+    ).toEqual(legal.map((action) => action.id).sort())
     expect(usage.selectedCandidateId).toBe(response.choice.actionId)
     expect(usage.policyRevision).toBe('expert-tactics-11')
     expect(usage.continuationPolicy.minimumSamples).toBe(4)
@@ -1803,4 +1818,237 @@ describe('Public certainty across concealed summon pools', () => {
     expect(rows[0].proof.win).toBeNull()
     expect(rows[1].replay).toEqual([true, false])
   })
+})
+
+describe('Truthful search summaries', () => {
+  it('keeps every evaluated copy and position without changing consensus, and bounds real paths', () => {
+    const fixture = createAiFixture({
+      seed: 2201,
+      aiHeroId: 'jaina',
+      opponentHeroId: 'garrosh',
+      aiMana: 10,
+      aiHand: ['classic_wisp', 'classic_wisp', 'basic_chillwind_yeti'],
+      aiBoard: [
+        { cardId: 'basic_chillwind_yeti' },
+        { cardId: 'basic_murloc_raider' },
+        { cardId: 'basic_goldshire_footman' }
+      ]
+    })
+    const session = new GameBoardSession({
+      setup: fixture.setup,
+      decks: fixture.decks,
+      checkpoint: fixture.checkpoint
+    })
+    const actions = aiActions(
+      session,
+      enumerateLegalCommands(session.match as Match, session.remoteParticipantId)
+    )
+    expect(actions.length).toBeGreaterThan(14)
+    const pass = actions.find((action) => action.command.type === 'end-turn')!
+    const candidates: LocalAiCandidateTrace[] = actions
+      .slice(0, -1)
+      .map((action, index) => ({
+        actionId: action.id,
+        type: action.command.type,
+        description: action.description,
+        score: 0.8 - index * 0.01,
+        meanValue: 0.8 - index * 0.01,
+        recommendationValue: 0.9 - index * 0.01,
+        recommendationTacticalPenalty: 0.2,
+        visits: 50,
+        accepted: true,
+        phase: 'turns',
+        winnerId: null,
+        scoreComponents: {
+          positionDelta: 0,
+          commandPreference: 0,
+          continuationPreference: 0,
+          threatDefense: 0,
+          opponentBoardRemoval: 0,
+          friendlyBoardLoss: 0,
+          sequenceRefinement: 0
+        },
+        sequenceIntents: [aiActionIntent(action.command, session.localParticipantId)],
+        resourceReviewIntents: [
+          aiActionIntent(action.command, session.localParticipantId),
+          aiActionIntent(pass.command, session.localParticipantId)
+        ],
+        sequenceSupportVisits: 3,
+        sequenceProvenance: 'sampled-prefix'
+      }))
+    // Synthetic retained sequence tests truncation, not game legality.
+    candidates[1] = { ...candidates[1]!, outcome: 'win' }
+    candidates[0] = {
+      ...candidates[0]!,
+      sequenceIntents: Array.from(
+        { length: 7 },
+        () => candidates[0]!.sequenceIntents![0]!
+      )
+    }
+    const trace = {
+      chosenActionId: candidates[0]!.actionId,
+      candidates: candidates.slice(0, 8),
+      evaluatedCandidates: candidates,
+      durationMs: 23,
+      sampleCount: 100
+    } as unknown as LocalAiDecisionTrace
+    const results = [
+      { trace, response: { choice: { actionId: candidates[0]!.actionId } } }
+    ] as unknown as ExpertEvaluatedWorld[]
+    const consensus = chooseExpertConsensus(
+      results,
+      actions.map((a) => a.id)
+    )
+    const request = {
+      type: 'decide',
+      searchId: 'fresh-search-1',
+      seed: 2210,
+      remainingSearchBudgetMs: 6000,
+      request: { requestId: 'summary-test', expectedRevision: 0 }
+    } as unknown as ExpertWorldRequest
+    const before = session.match.getCheckpoint()
+    const summary = JSON.parse(
+      JSON.stringify(
+        expertSearchSummary(
+          request,
+          results,
+          new Map(actions.map((a) => [a.id, a])),
+          session.localParticipantId,
+          consensus.actionId!,
+          consensus.scores,
+          [{ worldIndex: 2, status: 'completed' }],
+          25
+        )
+      )
+    )
+    expect(summary.searchId).toBe('fresh-search-1')
+    expect(summary.seed).toBe(2210)
+    expect(summary.legalActionCount).toBe(actions.length)
+    expect(summary.evaluatedActionCount).toBe(candidates.length)
+    expect(summary.options).toHaveLength(actions.length)
+    expect(summary.worlds[0]).toMatchObject({
+      worldIndex: 2,
+      sequenceCount: 12,
+      sequencesOmitted: candidates.length - 12
+    })
+    expect(summary.options[0].worlds[0].sequence).toMatchObject({
+      originalLength: 7,
+      truncated: true,
+      supportVisits: 3,
+      supportScope: 'original-sequence',
+      ending: 'partial'
+    })
+    expect(summary.options[0].worlds[0].sequence.intents).toHaveLength(6)
+    expect(summary.options[1].worlds[0].sequence.intents).toHaveLength(1)
+    // A review may win after an implicit pass; never invent that action.
+    expect(summary.options[1].worlds[0].sequence.ending).toBe('partial')
+    expect(summary.options[10]).toMatchObject({
+      evaluated: true,
+      consensusIncluded: false,
+      sampledWorlds: 1,
+      visits: 50
+    })
+    expect(summary.options[10].expectedValue).toBeCloseTo(0.6)
+    expect(summary.options.at(-1)).toMatchObject({
+      evaluated: false,
+      expectedValue: null,
+      worlds: []
+    })
+    expect(summary.options.map((option: { intent: unknown }) => option.intent)).toEqual(
+      actions.map((a) => aiActionIntent(a.command, session.localParticipantId))
+    )
+    for (const [id, score] of consensus.scores)
+      expect(
+        summary.options.find((option: { actionId: string }) => option.actionId === id)
+          .expectedValue
+      ).toBe(score.score / Math.max(1, score.samples))
+    expect(
+      chooseExpertConsensus(
+        results,
+        actions.map((a) => a.id)
+      ).actionId
+    ).toBe(consensus.actionId)
+    expect(session.match.getCheckpoint()).toEqual(before)
+  })
+
+  it.each(['partial', 'proof', 'mixed'])(
+    'does not invent root means, visits or paths from unavailable evidence: %s',
+    (mode) => {
+      const fixture = createAiFixture({
+        seed: 2202,
+        aiHeroId: 'jaina',
+        opponentHeroId: 'garrosh'
+      })
+      const session = new GameBoardSession({
+        setup: fixture.setup,
+        decks: fixture.decks,
+        checkpoint: fixture.checkpoint
+      })
+      const actions = aiActions(
+        session,
+        enumerateLegalCommands(session.match as Match, session.remoteParticipantId)
+      )
+      const candidate = {
+        actionId: actions[0]!.id,
+        score: 0.4,
+        recommendationValue: 0.4,
+        accepted: true,
+        ...(mode === 'proof' ? { provenWin: true, outcome: 'win' } : {})
+      } as LocalAiCandidateTrace
+      const results = [
+        {
+          response: { choice: { actionId: candidate.actionId } },
+          trace: { candidates: [candidate], chosenActionId: candidate.actionId }
+        }
+      ] as unknown as ExpertEvaluatedWorld[]
+      if (mode === 'mixed')
+        results.push({
+          response: results[0]!.response,
+          trace: {
+            ...results[0]!.trace!,
+            candidates: [{ ...candidate, visits: 7, meanValue: 0.2 }]
+          }
+        })
+      const consensus = chooseExpertConsensus(
+        results,
+        actions.map((a) => a.id)
+      )
+      const request = {
+        type: 'decide',
+        seed: 12,
+        remainingSearchBudgetMs: 6000,
+        request: { requestId: 'partial-test', expectedRevision: 0 }
+      } as unknown as ExpertWorldRequest
+      const summary = JSON.parse(
+        JSON.stringify(
+          expertSearchSummary(
+            request,
+            results,
+            new Map(actions.map((a) => [a.id, a])),
+            session.localParticipantId,
+            candidate.actionId,
+            consensus.scores,
+            [{ worldIndex: 2, status: 'partial' }],
+            500
+          )
+        )
+      )
+      expect(summary.worlds[0]).toMatchObject({
+        worldIndex: 2,
+        status: 'partial',
+        sequenceCount: 0
+      })
+      expect(summary.options[0].visits).toBeNull()
+      if (mode === 'mixed') {
+        expect(summary.options[0].sampledWorlds).toBe(2)
+        expect(summary.options[0].worlds[1].visits).toBe(7)
+      }
+      expect(summary.options[0].worlds[0]).toMatchObject({
+        rootMean: null,
+        visits: null,
+        recommendationValue: 0.4,
+        sequence: null
+      })
+    }
+  )
 })
