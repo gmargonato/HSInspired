@@ -16,8 +16,7 @@ import {
 } from '../../contracts/ipc/ai'
 import type { MatchLogRecord, MatchLogStatus } from '../../contracts/ipc/match-logs'
 import { MatchLogTranscript } from './match-log-transcript'
-import { AiLog } from './ai-log'
-import { AiConversationTranscript } from './ai-conversation-transcript'
+import { AiDecisionTranscript } from './ai-decision-transcript'
 
 const FLUSH_INTERVAL_MS = 250
 const MAX_PENDING_RECORDS = 256
@@ -32,13 +31,12 @@ interface Recording {
   readonly id: string
   readonly owner: number
   readonly directory: string
-  readonly startedAt: number
   queue: Promise<void>
   sequence: number
-  summary: Record<string, JsonValue>
+  status: 'in-progress' | MatchLogStatus
+  recordingIncomplete: boolean
   transcript: MatchLogTranscript
-  conversation: AiConversationTranscript
-  ai: AiLog
+  ai: AiDecisionTranscript
   pending: PendingRecord[]
   timer?: ReturnType<typeof setTimeout>
   flushQueued: boolean
@@ -60,18 +58,36 @@ export function serializeMatchLog(value: unknown, pretty = false): string {
   )
 }
 
+// An exact, versioned header lets recovery update status without parsing search prose.
+const RECORDING_HEADER =
+  /^<!-- hsinspired-ai-decisions:v1 -->\nStatus: (in-progress|completed|abandoned|interrupted)\nRecording incomplete: (yes|no)\n\n/
+const INTERRUPTION_MESSAGE =
+  'The previous session ended unexpectedly.\nThe match recording may be missing its final events.\n'
+
+function recordingHeader(status: Recording['status'], incomplete: boolean): string {
+  return `<!-- hsinspired-ai-decisions:v1 -->\nStatus: ${status}\nRecording incomplete: ${incomplete ? 'yes' : 'no'}\n\n`
+}
+
+async function atomicText(
+  directory: string,
+  name: string,
+  text: string
+): Promise<void> {
+  const target = join(directory, name)
+  try {
+    await writeFile(target + '.tmp', text, 'utf8')
+    await rename(target + '.tmp', target)
+  } finally {
+    await unlink(target + '.tmp').catch(() => undefined)
+  }
+}
+
 async function atomicJson(
   directory: string,
   name: string,
   value: unknown
 ): Promise<void> {
-  const target = join(directory, name)
-  try {
-    await writeFile(target + '.tmp', serializeMatchLog(value, true) + '\n', 'utf8')
-    await rename(target + '.tmp', target)
-  } finally {
-    await unlink(target + '.tmp').catch(() => undefined)
-  }
+  await atomicText(directory, name, serializeMatchLog(value, true) + '\n')
 }
 
 export class MatchLogRepository {
@@ -89,6 +105,30 @@ export class MatchLogRepository {
         continue
       const directory = join(this.root, entry.name)
       try {
+        let markdown: string | undefined
+        try {
+          markdown = await readFile(join(directory, 'ai-decisions.md'), 'utf8')
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+        }
+        if (markdown !== undefined) {
+          const header = markdown.match(RECORDING_HEADER)
+          if (!header) throw new Error('Unrecognized AI decisions recording header.')
+          if (header[1] === 'in-progress') {
+            await appendFile(join(directory, 'match.txt'), '\n' + INTERRUPTION_MESSAGE)
+            await atomicText(
+              directory,
+              'ai-decisions.md',
+              markdown.replace(RECORDING_HEADER, recordingHeader('interrupted', true)) +
+                '\n' +
+                INTERRUPTION_MESSAGE
+            )
+          }
+          // Only discard a stale atomic-write temporary after recognizing its target.
+          await unlink(join(directory, 'ai-decisions.md.tmp')).catch(() => undefined)
+          continue
+        }
+        // Historical three-file folders retain their original format and recovery.
         let summary: JsonObject
         try {
           summary = JSON.parse(
@@ -110,10 +150,7 @@ export class MatchLogRepository {
               if (play.result === 'pending') play.result = 'unknown'
             }
           }
-          await appendFile(
-            join(directory, 'match.txt'),
-            '\nThe previous session ended unexpectedly.\nThe match recording may be missing its final events.\n'
-          )
+          await appendFile(join(directory, 'match.txt'), '\n' + INTERRUPTION_MESSAGE)
           await atomicJson(directory, 'ai.json', {
             ...summary,
             status: 'interrupted',
@@ -133,58 +170,27 @@ export class MatchLogRepository {
     const timestamp = new Date(startedAt).toISOString()
     const directory = join(this.root, `${timestamp.replace(/[:.]/g, '-')}_${id}`)
     await mkdir(directory, { recursive: true })
-    const summary: JsonObject = {
-      schemaVersion: AI_LOG_SCHEMA_VERSION,
-      matchId: id,
-      startedAt: timestamp,
-      status: 'in-progress',
-      recordingIncomplete: false,
-      participants: [],
-      decisions: [],
-      ...(metadata.expertDeckStrategy
-        ? { expertDeckStrategy: metadata.expertDeckStrategy }
-        : {}),
-      ...(metadata.aiDifficulty ? { aiDifficulty: metadata.aiDifficulty } : {}),
-      ...(metadata.aiResources ? { aiResources: metadata.aiResources } : {}),
-      ...(metadata.aiEngine ? { aiEngine: metadata.aiEngine } : {}),
-      // Older recorded matches retain their original mode metadata.
-      ...(metadata.aiMode ? { aiMode: metadata.aiMode } : {}),
-      ...(typeof metadata.aiHeroPowerBonusEnabled === 'boolean'
-        ? { aiHeroPowerBonusEnabled: metadata.aiHeroPowerBonusEnabled }
-        : {}),
-      ...(metadata.curatedOpponent
-        ? { curatedOpponent: metadata.curatedOpponent }
-        : {}),
-      ...(metadata.generatedOpponent
-        ? { generatedOpponent: metadata.generatedOpponent }
-        : {}),
-      model: null,
-      ...(typeof (metadata.aiConfig as JsonObject | undefined)?.modelId === 'string'
-        ? { configuredModel: (metadata.aiConfig as JsonObject).modelId }
-        : {})
-    }
+    const ai = new AiDecisionTranscript(metadata, timestamp)
     await writeFile(
       join(directory, 'match.txt'),
       `Match log\n\nStarted: ${timestamp.replace('T', ' at ').replace('Z', ' UTC')}\n`,
       { flag: 'wx' }
     )
     await writeFile(
-      join(directory, 'ai-conversation.txt'),
-      'AI conversation\nA readable view of the context supplied, questions, choices, and results.\nAI explanations are returned explanations, not private internal reasoning.\nPrevious conversation is retained within the configured limits and is not repeated here.\n\n',
+      join(directory, 'ai-decisions.md'),
+      recordingHeader('in-progress', false) + ai.render(),
       { flag: 'wx' }
     )
-    await atomicJson(directory, 'ai.json', summary)
     this.recordings.set(id, {
       id,
       owner,
       directory,
-      startedAt,
       queue: Promise.resolve(),
       sequence: 0,
-      summary,
+      status: 'in-progress',
+      recordingIncomplete: false,
       transcript: new MatchLogTranscript(),
-      ai: new AiLog(summary),
-      conversation: new AiConversationTranscript(),
+      ai,
       pending: [],
       flushQueued: false
     })
@@ -211,12 +217,8 @@ export class MatchLogRepository {
     const result = recording.queue.then(operation)
     recording.queue = result.catch(async () => {
       recording.failure = 'A match log write failed. This recording may be incomplete.'
-      recording.summary.loggingFailures =
-        Number(recording.summary.loggingFailures ?? 0) + 1
-      recording.summary.recordingIncomplete = true
-      await atomicJson(recording.directory, 'ai.json', recording.summary).catch(
-        () => undefined
-      )
+      recording.recordingIncomplete = true
+      await this.writeSummary(recording).catch(() => undefined)
     })
     return result
   }
@@ -228,9 +230,7 @@ export class MatchLogRepository {
     if (recording.pending.length >= MAX_PENDING_RECORDS) {
       recording.failure =
         'Match logging backlog exceeded its limit; recording is incomplete.'
-      recording.summary.recordingIncomplete = true
-      recording.summary.loggingFailures =
-        Number(recording.summary.loggingFailures ?? 0) + 1
+      recording.recordingIncomplete = true
       return Promise.reject(new Error(recording.failure))
     }
     // IPC owns its structured-cloned value; decision records are immutable call-time values.
@@ -282,47 +282,18 @@ export class MatchLogRepository {
     recording: Recording,
     records: Array<MatchLogRecord & { sequence: number }>
   ): Promise<void> {
-    const conversation: string[] = []
     const text: string[] = []
     for (const snapshot of records) {
       text.push(recording.transcript.format(snapshot))
-      conversation.push(recording.conversation.format(snapshot))
-      if (snapshot.kind === 'match-start') {
-        recording.summary.participants = snapshot.data.participants ?? []
-        continue
-      }
-      const data = { ...snapshot.data }
+      recording.ai.accept(snapshot)
       if (
         snapshot.kind === 'command' &&
-        data.matchEnded === true &&
-        recording.summary.status === 'in-progress'
+        snapshot.data.matchEnded === true &&
+        recording.status === 'in-progress'
       ) {
-        recording.summary.status = 'completed'
-        recording.summary.winnerId = data.winnerId ?? null
-        recording.summary.endedAt = snapshot.timestamp
-        recording.summary.durationMs =
-          Date.parse(snapshot.timestamp) - recording.startedAt
+        recording.status = 'completed'
       }
-      const participants = recording.summary.participants as JsonObject[]
-      const remote = participants.find(
-        (player) => player.label === 'Remote Player'
-      )?.participantId
-      const execution = snapshot.kind === 'command' && data.actor === remote
-      if (execution || snapshot.stream === 'decisions') recording.ai.accept(snapshot)
     }
-    const decisions = records.filter((entry) => entry.stream === 'decisions')
-    if (decisions.length && process.env['HSINSPIRED_AI_FULL_TRANSCRIPT'] === '1')
-      await appendFile(
-        join(recording.directory, 'decisions.jsonl'),
-        decisions.map((entry) => serializeMatchLog(entry)).join('\n') + '\n',
-        'utf8'
-      )
-    if (conversation.some(Boolean))
-      await appendFile(
-        join(recording.directory, 'ai-conversation.txt'),
-        conversation.join(''),
-        'utf8'
-      )
     if (text.some(Boolean))
       await appendFile(join(recording.directory, 'match.txt'), text.join(''), 'utf8')
     if (records.length) await this.writeSummary(recording)
@@ -346,10 +317,9 @@ export class MatchLogRepository {
         pending.forEach((item) => item.reject(error))
         throw error
       }
-      if (recording.summary.status === 'in-progress') {
-        recording.summary.status = status
-        recording.summary.endedAt = new Date().toISOString()
-        recording.summary.durationMs = Date.now() - recording.startedAt
+      if (recording.status === 'in-progress') {
+        recording.status = status
+        if (status === 'interrupted') recording.recordingIncomplete = true
         await appendFile(
           join(recording.directory, 'match.txt'),
           status === 'completed'
@@ -376,8 +346,13 @@ export class MatchLogRepository {
         })
         .catch(() => undefined)
     }
-    recording.summary.updatedAt = new Date().toISOString()
-    await atomicJson(recording.directory, 'ai.json', recording.summary)
+    await atomicText(
+      recording.directory,
+      'ai-decisions.md',
+      recordingHeader(recording.status, recording.recordingIncomplete) +
+        recording.ai.render() +
+        (recording.failure ? '\n' + recording.failure + '\n' : '')
+    )
   }
 
   async interrupt(owner?: number): Promise<void> {

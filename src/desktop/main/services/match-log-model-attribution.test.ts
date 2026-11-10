@@ -1,10 +1,15 @@
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { MatchLogRepository } from './match-log-repository'
 import { MatchLogTranscript } from './match-log-transcript'
-import type { JsonObject } from '../../contracts/ipc/ai'
+import { AiDecisionTranscript } from './ai-decision-transcript'
+import {
+  AI_LOG_SCHEMA_VERSION,
+  type JsonObject,
+  type JsonValue
+} from '../../contracts/ipc/ai'
 import type { MatchLogRecord } from '../../contracts/ipc/match-logs'
 
 describe('match log model attribution', () => {
@@ -17,25 +22,28 @@ describe('match log model attribution', () => {
         await repository.initialize()
         const metadata = {
           aiDifficulty,
-          aiResources: { turnBudgetMs: 60_000, planBudgetMs: 30_000 },
+          aiResources: { turnBudgetMs: 60_000, planSearchLimitMs: 30_000 },
           aiEngine: { modelId: 'hardware-local-v2', policyRevision: 'test-policy' }
         }
         const matchId = await repository.start(7, metadata)
         await repository.finish(matchId, 'abandoned')
         const directoryName = (await readdir(root))[0]!
-        const summary = JSON.parse(
-          await readFile(join(root, directoryName, 'ai.json'), 'utf8')
+        const markdown = await readFile(
+          join(root, directoryName, 'ai-decisions.md'),
+          'utf8'
         )
-        expect(summary).toMatchObject(metadata)
-        expect(summary).not.toHaveProperty('configuredModel')
-        expect(summary).not.toHaveProperty('aiMode')
+        expect(markdown.toLowerCase()).toContain(aiDifficulty)
+        expect(markdown).toContain('test-policy')
+        expect(markdown).toContain('hardware-local-v2')
+        expect(markdown).toContain('turn 60s')
+        expect(markdown).toContain('initial plan 30s')
       } finally {
         await rm(root, { recursive: true, force: true })
       }
     }
   )
 
-  it('records the responding model, not the configured API model', async () => {
+  it('records the responding model separately from the configured model', async () => {
     const root = await mkdtemp(join(tmpdir(), 'hsinspired-match-logs-'))
     try {
       const repository = new MatchLogRepository(root)
@@ -44,15 +52,11 @@ describe('match log model attribution', () => {
         aiConfig: { modelId: 'gpt-5.4-nano' }
       })
       const directoryName = (await readdir(root))[0]!
-      const summaryPath = join(root, directoryName, 'ai.json')
-      const started = JSON.parse(await readFile(summaryPath, 'utf8')) as Record<
-        string,
-        unknown
-      >
-      expect(started).toMatchObject({
-        model: null,
-        configuredModel: 'gpt-5.4-nano'
-      })
+      const markdownPath = join(root, directoryName, 'ai-decisions.md')
+      const started = await readFile(markdownPath, 'utf8')
+      expect(started).toContain('Configured model: gpt-5.4-nano')
+      expect(started).toContain('Responding model: none recorded')
+      expect(started).not.toContain('hardware-local-v2')
 
       await repository.append(matchId, {
         stream: 'decisions',
@@ -62,15 +66,9 @@ describe('match log model attribution', () => {
       })
       await repository.finish(matchId, 'abandoned')
 
-      const finished = JSON.parse(await readFile(summaryPath, 'utf8')) as Record<
-        string,
-        unknown
-      >
-      expect(finished).toMatchObject({
-        model: 'hardware-local-v2',
-        modelsUsed: ['hardware-local-v2'],
-        configuredModel: 'gpt-5.4-nano'
-      })
+      const finished = await readFile(markdownPath, 'utf8')
+      expect(finished).toContain('Responding model: hardware-local-v2')
+      expect(finished).toContain('Configured model: gpt-5.4-nano')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -86,22 +84,23 @@ describe('match log model attribution', () => {
       })
       const directoryName = (await readdir(root))[0]!
       await repository.finish(matchId, 'abandoned')
-      const summary = JSON.parse(
-        await readFile(join(root, directoryName, 'ai.json'), 'utf8')
-      ) as Record<string, unknown>
-      expect(summary).toMatchObject({ model: null, configuredModel: 'gpt-5.4-nano' })
-      expect(summary).not.toHaveProperty('modelsUsed')
+      const markdown = await readFile(
+        join(root, directoryName, 'ai-decisions.md'),
+        'utf8'
+      )
+      expect(markdown).toContain('Configured model: gpt-5.4-nano')
+      expect(markdown).toContain('Responding model: none recorded')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
   })
 })
 
-// Gameplay presentation is tested beside persistence so the existing three-file
-// contract and AI diagnostics remain covered when the human-readable log changes.
+// Gameplay presentation and the two-file persistence lifecycle stay covered together.
 describe('readable match log', () => {
-  it('writes the recording time and keeps deck metadata out of the gameplay header', async () => {
+  it('writes exactly two readable files, even with the retired raw-transcript flag', async () => {
     const root = await mkdtemp(join(tmpdir(), 'hsinspired-match-logs-'))
+    vi.stubEnv('HSINSPIRED_AI_FULL_TRANSCRIPT', '1')
     try {
       const repository = new MatchLogRepository(root)
       await repository.initialize()
@@ -118,20 +117,24 @@ describe('readable match log', () => {
         }
       }
       const id = await repository.start(7, metadata)
-      await repository.append(id, matchStart)
+      const appended = [
+        repository.append(id, matchStart),
+        repository.append(id, {
+          stream: 'decisions',
+          kind: 'response-received',
+          timestamp: matchStart.timestamp,
+          data: { modelId: 'hardware-local-v2' }
+        })
+      ]
       await repository.finish(id, 'abandoned')
+      await Promise.all(appended)
       const directory = join(root, (await readdir(root))[0]!)
       expect((await readdir(directory)).sort()).toEqual([
-        'ai-conversation.txt',
-        'ai.json',
+        'ai-decisions.md',
         'match.txt'
       ])
-      const summary = JSON.parse(await readFile(join(directory, 'ai.json'), 'utf8'))
-      expect(summary).toMatchObject(metadata)
       const text = await readFile(join(directory, 'match.txt'), 'utf8')
-      expect(text).toContain(
-        `Started: ${summary.startedAt.replace('T', ' at ').replace('Z', ' UTC')}`
-      )
+      expect(text).toMatch(/Started: \d{4}-\d{2}-\d{2} at \d{2}:\d{2}:\d{2}\.\d{3} UTC/)
       expect(text).toContain('Local Player (LP): Jaina Proudmoore (Mage)')
       expect(text).toContain('Remote Player (RP): Uther Lightbringer (Paladin)')
       expect(text).toContain('First player: RP')
@@ -144,31 +147,181 @@ describe('readable match log', () => {
         'Opponent deck construction'
       ])
         expect(text).not.toContain(omitted)
-      expect(await readFile(join(directory, 'ai-conversation.txt'), 'utf8')).toBe(
-        'AI conversation\nA readable view of the context supplied, questions, choices, and results.\nAI explanations are returned explanations, not private internal reasoning.\nPrevious conversation is retained within the configured limits and is not repeated here.\n\n'
+      const markdown = await readFile(join(directory, 'ai-decisions.md'), 'utf8')
+      expect(markdown).toContain('# AI decisions')
+      expect(markdown).toContain('Status: abandoned\nRecording incomplete: no')
+    } finally {
+      vi.unstubAllEnvs()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('recovers interrupted Markdown without changing recorded searches or repeating warnings', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'hsinspired-match-logs-'))
+    try {
+      const repository = new MatchLogRepository(root)
+      await repository.initialize()
+      await repository.start(7, {})
+      const directory = join(root, (await readdir(root))[0]!)
+      const markdownPath = join(directory, 'ai-decisions.md')
+      const original = await readFile(markdownPath, 'utf8')
+      await writeFile(markdownPath + '.tmp', 'stale interrupted atomic write')
+      await new MatchLogRepository(root).initialize()
+      const recovered = await readFile(markdownPath, 'utf8')
+      expect(recovered).toContain('Status: interrupted\nRecording incomplete: yes')
+      expect(recovered).toContain(original.slice(original.indexOf('# AI decisions')))
+      expect(recovered).toContain('The previous session ended unexpectedly.')
+      expect(await readFile(join(directory, 'match.txt'), 'utf8')).toContain(
+        'The previous session ended unexpectedly.'
+      )
+      expect((await readdir(directory)).sort()).toEqual([
+        'ai-decisions.md',
+        'match.txt'
+      ])
+      await new MatchLogRepository(root).initialize()
+      expect(await readFile(markdownPath, 'utf8')).toBe(recovered)
+      expect(
+        (await readFile(join(directory, 'match.txt'), 'utf8')).match(
+          /The previous session ended unexpectedly\./g
+        )
+      ).toHaveLength(1)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it.each([4, 5, 6, AI_LOG_SCHEMA_VERSION])(
+    'preserves legacy schema %s folders and their interruption recovery',
+    async (schemaVersion) => {
+      const root = await mkdtemp(join(tmpdir(), 'hsinspired-match-logs-'))
+      try {
+        const directory = join(
+          root,
+          '2026-11-10T14-50-31-678Z_00000000-0000-0000-0000-000000000000'
+        )
+        await mkdir(directory)
+        await writeFile(join(directory, 'match.txt'), 'Historical match\n')
+        await writeFile(
+          join(directory, 'ai-conversation.txt'),
+          'Historical conversation\n'
+        )
+        await writeFile(
+          join(directory, 'ai.json'),
+          JSON.stringify({
+            schemaVersion,
+            status: 'in-progress',
+            decisions: [{ plays: [{ result: 'pending' }] }]
+          })
+        )
+        await new MatchLogRepository(root).initialize()
+        expect(
+          JSON.parse(await readFile(join(directory, 'ai.json'), 'utf8'))
+        ).toMatchObject({
+          status: 'interrupted',
+          recordingIncomplete: true,
+          decisions: [{ plays: [{ result: 'unknown' }] }]
+        })
+        expect(await readFile(join(directory, 'ai-conversation.txt'), 'utf8')).toBe(
+          'Historical conversation\n'
+        )
+        expect((await readdir(directory)).sort()).toEqual([
+          'ai-conversation.txt',
+          'ai.json',
+          'match.txt'
+        ])
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    }
+  )
+
+  it('flushes before finish and preserves completion when late AI records arrive', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'hsinspired-match-logs-'))
+    try {
+      const repository = new MatchLogRepository(root)
+      await repository.initialize()
+      const id = await repository.start(7, {})
+      const appended = [
+        repository.append(id, matchStart),
+        repository.append(
+          id,
+          command({
+            matchEnded: true,
+            events: [{ type: 'match-ended', winnerId: null }]
+          })
+        )
+      ]
+      const finish = repository.finish(id, 'abandoned')
+      await finish
+      await Promise.all(appended)
+      await repository.append(id, {
+        stream: 'decisions',
+        kind: 'response-received',
+        timestamp: matchStart.timestamp,
+        data: { modelId: 'late-model' }
+      })
+      await repository.finish(id, 'interrupted')
+      const directory = join(root, (await readdir(root))[0]!)
+      const markdown = await readFile(join(directory, 'ai-decisions.md'), 'utf8')
+      expect(markdown).toContain('Status: completed\nRecording incomplete: no')
+      expect(markdown).toContain('Responding model: late-model')
+      const text = await readFile(join(directory, 'match.txt'), 'utf8')
+      expect(text).toContain('The match ends in a draw.')
+      expect(text).not.toContain('Match abandoned')
+      await new MatchLogRepository(root).initialize()
+      expect(await readFile(join(directory, 'ai-decisions.md'), 'utf8')).toBe(markdown)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('surfaces append failures and persists the incomplete warning when writes recover', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'hsinspired-match-logs-'))
+    try {
+      const repository = new MatchLogRepository(root)
+      await repository.initialize()
+      const id = await repository.start(7, {})
+      const directory = join(root, (await readdir(root))[0]!)
+      const gameplayPath = join(directory, 'match.txt')
+      await rm(gameplayPath)
+      await mkdir(gameplayPath)
+      await expect(repository.append(id, matchStart)).rejects.toThrow()
+      expect(() => repository.assertHealthy(id)).toThrow('match log write failed')
+      await expect(repository.append(id, matchStart)).rejects.toThrow(
+        'match log write failed'
+      )
+      await rm(gameplayPath, { recursive: true })
+      await writeFile(gameplayPath, 'Recovered write access\n')
+      await repository.finish(id, 'abandoned')
+      const markdown = await readFile(join(directory, 'ai-decisions.md'), 'utf8')
+      expect(markdown).toContain('Recording incomplete: yes')
+      expect(markdown).toContain('A match log write failed.')
+      expect(await readFile(gameplayPath, 'utf8')).toContain(
+        'Match recording is incomplete because logging failed.'
       )
     } finally {
       await rm(root, { recursive: true, force: true })
     }
   })
 
-  it('keeps interruption recovery with the same file and AI summary', async () => {
+  it('marks backlog overflow incomplete and still finishes the accepted records', async () => {
     const root = await mkdtemp(join(tmpdir(), 'hsinspired-match-logs-'))
     try {
       const repository = new MatchLogRepository(root)
       await repository.initialize()
-      await repository.start(7, {})
-      await new MatchLogRepository(root).initialize()
-      const directory = join(root, (await readdir(root))[0]!)
-      expect(await readFile(join(directory, 'match.txt'), 'utf8')).toContain(
-        'The previous session ended unexpectedly.'
+      const id = await repository.start(7, {})
+      const pending = Array.from({ length: 256 }, () =>
+        repository.append(id, { ...matchStart, kind: 'unhandled-record' })
       )
-      expect(
-        JSON.parse(await readFile(join(directory, 'ai.json'), 'utf8'))
-      ).toMatchObject({
-        status: 'interrupted',
-        recordingIncomplete: true
-      })
+      await expect(repository.append(id, matchStart)).rejects.toThrow(
+        'backlog exceeded'
+      )
+      await repository.finish(id, 'abandoned')
+      await Promise.all(pending)
+      const directory = join(root, (await readdir(root))[0]!)
+      const markdown = await readFile(join(directory, 'ai-decisions.md'), 'utf8')
+      expect(markdown).toContain('Recording incomplete: yes')
+      expect(markdown).toContain('backlog exceeded its limit')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -562,4 +715,475 @@ function startedTranscript(owner: string): MatchLogTranscript {
     })
   )
   return transcript
+}
+
+describe('AI decision Markdown', () => {
+  it('freezes names and copy labels for each search, including grouping and retained plans', () => {
+    const transcript = decisionTranscript()
+    transcript.accept(decisionRequest('before', 4))
+    transcript.accept(decisionResponse('before', 4))
+    const next = decisionRequest('after', 5)
+    const messages = (next.data.request as JsonObject).messages as JsonObject[]
+    const facts = JSON.parse(String(messages[0]!.content))
+    facts.state.players[0].hand.forEach((card: { name: string }) => {
+      card.name = 'Sheep'
+    })
+    facts.state.players[1].board[0].name = 'Chillwind Yeti'
+    ;(messages[0] as Record<string, JsonValue>).content = JSON.stringify(facts)
+    transcript.accept(next)
+    transcript.accept(decisionResponse('after', 5))
+    const [before, after] = transcript.render().split('### Search 2')
+    expect(before).toContain('**Argent Horserider**')
+    expect(before).toContain('Argent Horserider #2 in position 2')
+    expect(before).toContain('LP board: Shielded Minibot')
+    expect(before).toContain('Selected plan (not execution): Play Argent Horserider #1')
+    expect(before).not.toContain('Sheep')
+    expect(before).not.toContain('Chillwind Yeti')
+    expect(after).toContain('**Sheep**')
+    expect(after).toContain('Sheep #2 in position 2')
+    expect(after).toContain('LP board: Chillwind Yeti')
+    expect(after).toContain('Selected plan (not execution): Play Sheep #1')
+    expect(after).not.toContain('Argent Horserider')
+  })
+
+  it('preserves different choose-one options for the same card and placement', () => {
+    const transcript = decisionTranscript()
+    transcript.accept(decisionRequest('r1', 4))
+    const response = decisionResponse('r1', 4)
+    const options = ((response.data.usage as JsonObject).searchSummary as JsonObject)
+      .options as Record<string, JsonValue>[]
+    options.forEach((option, index) => {
+      Object.assign(option.intent as JsonObject, {
+        source: 'remote:rider-1',
+        position: 0,
+        option: index ? 'draw' : 'summon'
+      })
+    })
+    transcript.accept(response)
+    const markdown = transcript.render()
+    expect(markdown).toContain('Play Argent Horserider #1 in position 1; choice summon')
+    expect(markdown).toContain('Play Argent Horserider #1 in position 1; choice draw')
+  })
+
+  it('groups cached commits and reused actions under one search, keeping scores and exact line support distinct', () => {
+    const transcript = decisionTranscript()
+    const request = decisionRequest('r1', 4)
+    transcript.accept(request)
+    const response = decisionResponse('r1', 4)
+    transcript.accept({ ...response, kind: 'turn-plan' })
+    transcript.accept({ ...response, data: { ...response.data, durationMs: 0 } })
+    transcript.accept(
+      executed('r1', 4, {
+        type: 'play-card',
+        participantId: 'remote',
+        cardInstanceId: 'remote:rider-1',
+        position: 0
+      })
+    )
+    transcript.accept(decisionRequest('r2', 5))
+    transcript.accept({
+      ...decisionResponse('r2', 5),
+      data: { usage: { mode: 'expert-continuation' }, choice: { actionId: 'a0' } }
+    })
+    transcript.accept(executed('r2', 5, { type: 'end-turn', participantId: 'remote' }))
+    const markdown = transcript.render()
+    expect(markdown.match(/### Search /g)).toHaveLength(1)
+    expect(markdown.match(/RP hand:/g)).toHaveLength(1)
+    expect(markdown).toContain('duration 4.05s')
+    expect(markdown).toContain('score +0.069610; 34 visits')
+    expect(markdown).toContain('Exact-line support: search 1: 5')
+    expect(markdown).toContain('Selected plan (not execution)')
+    expect(markdown).toContain('reused plan, no fresh search')
+    expect(markdown).toContain('Argent Horserider #1 in position 1')
+    expect(markdown).toContain('Argent Horserider #2 in position 2')
+    expect(markdown).toContain('search seed 1234')
+    expect(markdown).not.toContain('undefined')
+  })
+
+  it('does not hide ninth options, missing values, truncation, or the difference from the actual shortlist', () => {
+    const transcript = decisionTranscript()
+    transcript.accept(decisionRequest('r1', 4))
+    const response = decisionResponse('r1', 4)
+    const usage = response.data.usage as Record<string, JsonValue>
+    const summary = usage.searchSummary as Record<string, JsonValue>
+    const options = summary.options as Record<string, JsonValue>[]
+    const first = options[0]!
+    first.consensusExpectedValue = 0.02
+    const world = (first.worlds as Record<string, JsonValue>[])[0]!
+    world.sequence = {
+      ...(world.sequence as JsonObject),
+      originalLength: 10,
+      truncated: true
+    }
+    ;(first.worlds as JsonObject[]).push({
+      worldIndex: 1,
+      sequence: {
+        ...(world.sequence as JsonObject),
+        originalLength: 2,
+        truncated: false,
+        supportVisits: 3
+      }
+    })
+    options.push(
+      ...Array.from({ length: 7 }, (_, index) => ({
+        actionId: `missing-${index}`,
+        intent: {
+          type: 'end-turn',
+          source: null,
+          targets: [],
+          position: null,
+          option: null
+        },
+        evaluated: index !== 6,
+        consensusIncluded: false,
+        expectedValue: null,
+        consensusExpectedValue: null,
+        visits: null,
+        worlds: []
+      }))
+    )
+    summary.legalActionCount = 9
+    summary.evaluatedActionCount = 8
+    summary.worlds = [
+      { worldIndex: 0, status: 'partial', timedOut: true, sequencesOmitted: 2 }
+    ]
+    transcript.accept(response)
+    const markdown = transcript.render()
+    expect(markdown).toContain('9 legal first moves; 8 evaluated')
+    expect(markdown).toContain('score +0.020000')
+    expect(markdown).toContain('All evaluated samples combined: +0.069610')
+    expect(markdown).toContain('score not recorded; visits not recorded')
+    expect(markdown).toContain('not evaluated')
+    expect(markdown).toContain(
+      'Original full-line support: search 1: 5; displayed prefix truncated from 10 actions'
+    )
+    expect(markdown).toContain('Exact-line support: search 2: 3; partial line')
+    expect(markdown).toContain('time limit reached')
+    expect(markdown).toContain('2 per-search continuations not retained')
+  })
+
+  it('records overrides, rejected actions and changed plans without calling a selected move executed', () => {
+    const transcript = decisionTranscript()
+    transcript.accept(decisionRequest('r1', 4))
+    const response = decisionResponse('r1', 4)
+    Object.assign(response.data, { choice: { actionId: 'a1' } })
+    const usage = response.data.usage as Record<string, JsonValue>
+    usage.decisionProvenance = {
+      workerActionId: 'a0',
+      returnedActionId: 'a1',
+      overridden: true,
+      continuationChanged: true,
+      reason: 'Safety check',
+      fallback: true,
+      returnedFinishReason: 'expert-continuation-fallback'
+    }
+    transcript.accept(response)
+    expect(transcript.render()).toContain('No execution recorded.')
+    transcript.accept({
+      ...executed('r1', 4, {
+        type: 'play-card',
+        participantId: 'remote',
+        cardInstanceId: 'remote:rider-2',
+        position: 1
+      }),
+      data: {
+        ...executed('r1', 4, {}).data,
+        command: {
+          type: 'play-card',
+          participantId: 'remote',
+          cardInstanceId: 'remote:rider-2',
+          position: 1
+        },
+        accepted: false,
+        message: 'Stale revision'
+      }
+    })
+    const markdown = transcript.render()
+    expect(markdown).toContain('Argent Horserider #2 in position 2 — selected')
+    expect(markdown).toContain(
+      'selection changed from Play Argent Horserider #1 in position 1 to Play Argent Horserider #2 in position 2: Safety check'
+    )
+    expect(markdown).toContain('controller changed the planned continuation')
+    expect(markdown).toContain('fallback: expert-continuation-fallback')
+    expect(markdown).toContain('rejected: Stale revision')
+  })
+
+  it('keeps forced turn-ending actions with their original turn and handles mulligan without fabricated searches', () => {
+    const transcript = decisionTranscript()
+    transcript.accept({
+      ...command({
+        actor: 'remote',
+        command: { type: 'end-turn', participantId: 'remote' },
+        beforeRevision: 7,
+        beforeTurnNumber: 4,
+        afterTurnNumber: 5
+      }),
+      revision: 8,
+      turnNumber: 5
+    })
+    const forced = executed('forced', 7, { type: 'end-turn', participantId: 'remote' })
+    transcript.accept({
+      ...forced,
+      turnNumber: 5,
+      data: { ...forced.data, source: 'forced' }
+    })
+    const markdown = transcript.render()
+    expect(markdown).toContain('## Turn 4 · RP')
+    expect(markdown).not.toContain('## Turn 5')
+    expect(markdown).toContain('only legal move, no search')
+    expect(markdown).not.toContain('### Search')
+  })
+
+  it('preserves a fresh end-turn review search separately from the follow-up search', () => {
+    const transcript = decisionTranscript()
+    transcript.accept(decisionRequest('r1', 4))
+    const reviewed = decisionResponse('r1', 4)
+    transcript.accept({ ...reviewed, kind: 'end-turn-review' })
+    const next = decisionResponse('r1', 4)
+    ;(
+      (next.data.usage as JsonObject).searchSummary as Record<string, JsonValue>
+    ).searchId = 'search2'
+    transcript.accept(next)
+    transcript.accept(executed('r1', 4, { type: 'end-turn', participantId: 'remote' }))
+    const markdown = transcript.render()
+    expect(markdown.match(/### Search /g)).toHaveLength(2)
+    expect(markdown).toContain('End turn was selected but not executed')
+    const [first, second] = markdown.split('### Search 2')
+    expect(first).toContain('No execution recorded')
+    expect(second).toContain('End turn (accepted)')
+  })
+
+  it('renders execution-only hero attacks, targeted powers and choices with exact ownership', () => {
+    const transcript = decisionTranscript()
+    transcript.accept(
+      executed('forced1', 4, {
+        type: 'attack-character',
+        participantId: 'remote',
+        attacker: { kind: 'hero' },
+        defender: { kind: 'hero' }
+      })
+    )
+    transcript.accept(
+      executed('forced2', 5, {
+        type: 'use-hero-power',
+        participantId: 'remote',
+        target: { kind: 'hero', participantId: 'remote' }
+      })
+    )
+    transcript.accept(
+      executed('forced3', 6, {
+        type: 'choose-card-option',
+        participantId: 'remote',
+        sourceCardInstanceId: 'remote:choice',
+        choice: 'draw'
+      })
+    )
+    const markdown = transcript.render()
+    expect(markdown).toContain("RP's hero attacks LP's hero")
+    expect(markdown).toContain("Use remote:hero-power → RP's hero")
+    expect(markdown).toContain('Choose draw for remote:choice')
+  })
+
+  it('uses fair state only, whitelists metadata, and keeps genuinely missing records explicit', () => {
+    const transcript = decisionTranscript({
+      apiKey: 'secret-do-not-log',
+      headers: { Authorization: 'another-secret' }
+    })
+    const request = decisionRequest('r1', 4)
+    transcript.accept(request)
+    transcript.accept({
+      ...decisionResponse('r1', 4),
+      data: { modelId: 'hardware-local-v2', choice: { actionId: 'a0' } }
+    })
+    const markdown = transcript.render()
+    expect(markdown).not.toContain('secret-do-not-log')
+    expect(markdown).not.toContain('another-secret')
+    expect(markdown).toContain('LP hand: 4 cards; hidden cards are not shown')
+    expect(markdown).toContain('evaluated count not recorded')
+    expect(markdown).toContain('score not recorded')
+    expect(markdown).toContain('No execution recorded')
+  })
+})
+
+function decisionTranscript(metadata: JsonObject = {}): AiDecisionTranscript {
+  const transcript = new AiDecisionTranscript(
+    {
+      aiDifficulty: 'expert',
+      seed: 42,
+      aiResources: { turnBudgetMs: 60_000 },
+      ...metadata
+    },
+    matchStart.timestamp
+  )
+  transcript.accept(matchStart)
+  return transcript
+}
+function decisionRequest(id: string, revision: number): MatchLogRecord {
+  const state = {
+    turn: 4,
+    players: [
+      {
+        role: 'self',
+        hero: { instanceId: 'remote:hero', health: 30, armor: 0 },
+        mana: { available: 3, maximum: 2, temporary: 1 },
+        board: [],
+        hand: [
+          {
+            ref: 'remote:rider-1',
+            name: 'Argent Horserider',
+            type: 'Minion',
+            cost: 3,
+            attack: 2,
+            health: 1
+          },
+          {
+            ref: 'remote:rider-2',
+            name: 'Argent Horserider',
+            type: 'Minion',
+            cost: 3,
+            attack: 2,
+            health: 1
+          }
+        ]
+      },
+      {
+        role: 'opponent',
+        hero: { instanceId: 'local:hero', health: 30, armor: 0 },
+        mana: { available: 0, maximum: 2 },
+        board: [
+          {
+            ref: 'local:minibot',
+            name: 'Shielded Minibot',
+            attack: 2,
+            health: 2,
+            position: 0,
+            activeKeywords: ['divine-shield'],
+            currentStatus: { shieldActive: false }
+          }
+        ],
+        handSize: 4
+      }
+    ]
+  }
+  return {
+    stream: 'decisions',
+    kind: 'request-started',
+    timestamp: matchStart.timestamp,
+    decisionId: id,
+    revision,
+    turnNumber: 4,
+    data: {
+      expectedRevision: revision,
+      phase: 'action',
+      actions: [
+        {
+          id: 'a0',
+          intent: {
+            type: 'play-card',
+            source: 'remote:rider-1',
+            targets: [],
+            position: 0,
+            option: null
+          }
+        },
+        {
+          id: 'a1',
+          intent: {
+            type: 'play-card',
+            source: 'remote:rider-2',
+            targets: [],
+            position: 1,
+            option: null
+          }
+        }
+      ],
+      request: { messages: [{ role: 'user', content: JSON.stringify({ state }) }] }
+    }
+  }
+}
+function decisionResponse(id: string, revision: number): MatchLogRecord {
+  const options = [0, 1].map((index) => ({
+    actionId: `a${index}`,
+    evaluated: true,
+    consensusIncluded: true,
+    intent: {
+      type: 'play-card',
+      source: `remote:rider-${index + 1}`,
+      targets: [],
+      position: index,
+      option: null
+    },
+    expectedValue: index ? 0.066526 : 0.06961,
+    votes: index ? 1 : 2,
+    visits: 34,
+    sampledWorlds: 3,
+    worlds: [
+      {
+        worldIndex: 0,
+        sequence: {
+          intents: [
+            {
+              type: 'play-card',
+              source: `remote:rider-${index + 1}`,
+              targets: [],
+              position: index,
+              option: null
+            },
+            {
+              type: 'attack-character',
+              source: `remote:rider-${index + 1}`,
+              targets: ['local:minibot'],
+              position: null,
+              option: null
+            }
+          ],
+          supportVisits: 5,
+          originalLength: 2,
+          truncated: false,
+          ending: 'partial'
+        }
+      }
+    ]
+  }))
+  return {
+    stream: 'decisions',
+    kind: 'response-received',
+    timestamp: matchStart.timestamp,
+    decisionId: id,
+    revision,
+    turnNumber: 4,
+    data: {
+      modelId: 'hardware-local-v2',
+      durationMs: 4050,
+      choice: { actionId: 'a0' },
+      usage: {
+        mode: 'expert-sampled-search',
+        searchSummary: {
+          version: 1,
+          searchId: 'search1',
+          seed: 1234,
+          durationMs: 4050,
+          legalActionCount: 2,
+          evaluatedActionCount: 2,
+          settings: { planSearchLimitMs: 30_000, replanSearchLimitMs: 4_000 },
+          options,
+          worlds: [
+            { worldIndex: 0, status: 'completed', timedOut: false, sequencesOmitted: 0 }
+          ]
+        },
+        plannedActionIntents: options[0]!.worlds[0]!.sequence.intents,
+        decisionProvenance: { overridden: false, fallback: false }
+      }
+    }
+  }
+}
+function executed(id: string, revision: number, command: JsonObject): MatchLogRecord {
+  return {
+    stream: 'decisions',
+    kind: 'action-executed',
+    timestamp: matchStart.timestamp,
+    decisionId: id,
+    turnNumber: 4,
+    data: { expectedRevision: revision, source: 'model', accepted: true, command }
+  }
 }

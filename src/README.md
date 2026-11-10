@@ -252,3 +252,21 @@ services. Legacy preferences migrate `hardware` to Easy and `hardware-v2`/`api` 
 Expert. Provider configuration and credential loading are retired; existing user key
 files are not deleted. The shared decision types and historical match-log readers
 remain available to local AI and diagnostics.
+
+New match recordings contain exactly two files: `match.txt` is the concise gameplay
+log, and `ai-decisions.md` presents each AI search once with its position, evaluated
+options, chosen/executed actions, and compact diagnostic details. The Markdown file
+also contains a versioned recording-status header so interrupted sessions can be
+marked incomplete without a separate summary file. No raw JSON or conversation
+transcript is generated, including when `HSINSPIRED_AI_FULL_TRANSCRIPT` is set.
+Existing `ai.json` / `ai-conversation.txt` recordings are kept, with legacy
+interruption recovery unchanged.
+
+The `analyze:ai-corpus` command and `scripts/summarize-ai-telemetry.cjs` analyze
+historical `ai.json` telemetry. They report `excludedMarkdownMatches` and warn when
+newer recordings are excluded; their counts do not represent those matches.
+Inspect `ai-decisions.md` for current search choices, durations and fallbacks.
+`scripts/extract-expert-replay-contexts.cjs` (and its recorded-replay runner) still
+requires a legacy JSON/conversation pair and reports a clear error for new logs.
+The readable Markdown summary is not a full replay checkpoint or raw provider
+telemetry source; these scripts do not invent missing events, tokens or state.

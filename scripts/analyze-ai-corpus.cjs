@@ -2,6 +2,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const root = path.resolve(process.cwd(), 'artifacts', 'match-logs')
+let excludedMarkdownMatches = 0
 
 function increment(map, key, amount = 1) {
   map[key] = (map[key] || 0) + amount
@@ -32,7 +33,16 @@ function readLogs() {
   return fs
     .readdirSync(root, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
-    .map((entry) => path.join(root, entry.name, 'ai.json'))
+    .map((entry) => {
+      const directory = path.join(root, entry.name)
+      const file = path.join(directory, 'ai.json')
+      if (
+        !fs.existsSync(file) &&
+        fs.existsSync(path.join(directory, 'ai-decisions.md'))
+      )
+        excludedMarkdownMatches++
+      return file
+    })
     .filter((file) => fs.existsSync(file))
     .flatMap((file) => {
       try {
@@ -44,6 +54,10 @@ function readLogs() {
 }
 
 const logs = readLogs()
+if (excludedMarkdownMatches)
+  console.warn(
+    `Excluded ${excludedMarkdownMatches} newer Markdown match log(s). This report analyzes legacy ai.json telemetry only; open ai-decisions.md for the recorded search options, choices, timings and fallbacks. Raw event/usage totals cannot be reconstructed from that readable summary.`
+  )
 const statuses = {}
 const models = {}
 const kinds = {}
@@ -115,6 +129,7 @@ const averageProviderResponseMs = providerResponseDurations.length
 const result = {
   source: path.relative(process.cwd(), root) || root,
   matches: logs.length,
+  excludedMarkdownMatches,
   statuses,
   models,
   decisionKinds: kinds,

@@ -1,3 +1,6 @@
+import { expertSearchSummary } from './expert-search-summary'
+import { partialExpertWorld, type ExpertWorldRequest } from './expert-ai-world-runner'
+import { rankExpertCandidateWorlds } from './expert-ai-consensus'
 import {
   LOCAL_AI_RESOURCE_PROFILES,
   type LocalAiDifficulty
@@ -95,6 +98,7 @@ export {
 const EXPERT_AI_MULLIGAN_BUDGET_MS = 3_000
 
 interface PendingDecision {
+  readonly workerRequest: ExpertWorldRequest
   /** Fresh redacted checkpoint owned only by this exact pending request. */
   readonly resourceReviewCheckpoint?: OpeningMatchCheckpoint
   readonly request: AiDecisionRequest
@@ -266,6 +270,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
   private activeTurn: number | null = null
   private turnStartedAt = 0
   private searchUsedMs = 0
+  private searchSerial = 0
   private continuation: ExpertContinuation | null = null
   private singletonOrder: CertifiedSingletonContinuation | null = null
   private planCommit: ExpertPlanCommit | null = null
@@ -382,6 +387,8 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       : this.preferredContinuation(request)
     const message: ExpertAiWorkerRequest = {
       type: 'decide',
+      searchId: `${request.requestId}:${request.expectedRevision}:${++this.searchSerial}`,
+      configuredBudget: { ...this.budget },
       request,
       checkpoint,
       perspectivePlayerId: this.perspectiveParticipantId,
@@ -434,6 +441,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       }, timeoutMs)
 
       this.pending.set(request.requestId, {
+        workerRequest: message,
         request,
         resourceReviewCheckpoint: checkpoint,
         startedAt,
@@ -2661,6 +2669,28 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       !this.currentLegalActions().some((action) => action.id === actionId)
     )
       return null
+    const worldIndex = pending.bestProgress?.worldIndex ?? -1
+    const partial = response.usage?.searchSummary
+      ? null
+      : partialExpertWorld(
+          pending.workerRequest,
+          worldIndex,
+          response,
+          pending.bestProgress?.recommendationValue ?? 0,
+          pending.bestProgress?.iterations ?? 0
+        )
+    const summary = partial
+      ? expertSearchSummary(
+          pending.workerRequest,
+          [partial.evaluation],
+          new Map(partial.actions.map((action) => [action.id, action])),
+          this.opponentParticipantId(),
+          actionId,
+          rankExpertCandidateWorlds([partial.evaluation]),
+          [{ worldIndex, status: 'partial' }],
+          Math.max(0, this.now() - pending.startedAt)
+        )
+      : response.usage?.searchSummary
     const reason =
       cause === 'timeout'
         ? 'Search budget expired; returning the best legal candidate found so far.'
@@ -2675,6 +2705,7 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
           : 'expert-best-so-far-worker-failure',
       usage: {
         ...response.usage,
+        ...(summary ? { searchSummary: summary } : {}),
         searchProgress: {
           recommendationValue: pending.bestProgress?.recommendationValue ?? 0,
           worldIndex: pending.bestProgress?.worldIndex ?? -1,
@@ -2699,13 +2730,40 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
       pending.request,
       this.guardCommittedOrder(pending.request, safe, pending.resourceReviewCheckpoint)
     )
-    this.rememberPlanCommit(pending.request, guarded)
-    this.rememberContinuation(pending.request, guarded)
-    pending.resolve({
+    const chosenId = (result: AiDecisionResponse): string | null =>
+      'plan' in result.choice
+        ? result.choice.plan.firstActionId
+        : 'actionId' in result.choice
+          ? result.choice.actionId
+          : null
+    const workerActionId = chosenId(response)
+    const returnedActionId = chosenId(guarded)
+    const resolved: AiDecisionResponse = {
       ...guarded,
       durationMs: Math.max(guarded.durationMs, this.now() - pending.startedAt),
       usage: {
         ...guarded.usage,
+        ...(response.usage?.searchSummary
+          ? { searchSummary: response.usage.searchSummary }
+          : {}),
+        decisionProvenance: {
+          workerActionId,
+          returnedActionId,
+          workerFinishReason: response.finishReason,
+          returnedFinishReason: guarded.finishReason,
+          overridden:
+            workerActionId !== returnedActionId ||
+            guarded.usage?.tacticalOverride === true,
+          continuationChanged:
+            JSON.stringify(response.usage?.plannedActionIntents ?? null) !==
+            JSON.stringify(guarded.usage?.plannedActionIntents ?? null),
+          reason: guarded.reason,
+          priority: guarded.usage?.decisionPriority ?? null,
+          fallback:
+            response.finishReason.includes('timeout') ||
+            response.finishReason.includes('failure') ||
+            response.finishReason.includes('fallback')
+        },
         policyRevision: EXPERT_AI_POLICY_REVISION,
         ...(this.chanceOrderReview
           ? { chanceOrderReview: this.chanceOrderReview }
@@ -2714,7 +2772,10 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
           ? { continuationRejection: this.continuationRejection }
           : {})
       }
-    })
+    }
+    this.rememberPlanCommit(pending.request, resolved)
+    this.rememberContinuation(pending.request, resolved)
+    pending.resolve(resolved)
     this.continuationRejection = undefined
   }
 

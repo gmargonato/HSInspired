@@ -1,3 +1,4 @@
+import { expertSearchSummary } from './expert-search-summary'
 import { inspectExpertPublicThreat } from './expert-public-threat'
 import type { AiDecisionResponse, JsonObject } from '../../../desktop/contracts/ipc/ai'
 import type { AiDecisionChoice } from '../../../desktop/contracts/ipc/ai-deliberation'
@@ -172,6 +173,17 @@ function aggregateResponse(
     usage: {
       policyRevision: EXPERT_AI_POLICY_REVISION,
       selectedCandidateId: selectedId,
+      searchSummary: expertSearchSummary(
+        request,
+        results,
+        actions,
+        opponentPlayerId,
+        selectedId,
+        scores,
+        worldDetails,
+        elapsedMs,
+        failedWorlds
+      ),
       continuationPolicy: {
         ...EXPERT_CONTINUATION_POLICY,
         rootFloor: 'observed-mean-with-positive-singleton-shrinkage'

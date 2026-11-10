@@ -1288,6 +1288,12 @@ describe('Expert AI worker boundary', () => {
             }
         const usage = {
           mode: 'expert-sampled-search',
+          searchSummary: {
+            version: 1,
+            searchId: message.searchId,
+            selectedActionId: selectedAction.id,
+            seed: message.seed
+          },
           plannedActionIntents: continuation
         } as unknown as JsonObject
         const response: AiDecisionResponse = {
@@ -1329,11 +1335,19 @@ describe('Expert AI worker boundary', () => {
     })
 
     try {
-      await api.decide(makeRequest('expert-continuation-plan', 'plan'))
+      const planResponse = await api.decide(
+        makeRequest('expert-continuation-plan', 'plan')
+      )
       const commit = await api.decide(
         makeRequest('expert-continuation-commit-coin', 'action')
       )
       expect(commit.finishReason).toBe('expert-plan-commit-cache')
+      expect(commit.usage?.searchSummary).toEqual(planResponse.usage?.searchSummary)
+      expect(commit.usage?.decisionProvenance).toMatchObject({
+        workerActionId: coinAction.id,
+        returnedActionId: coinAction.id,
+        overridden: false
+      })
       expect(commit.durationMs).toBe(0)
       expect('actionId' in commit.choice ? commit.choice.actionId : null).toBe(
         coinAction.id
@@ -3508,6 +3522,47 @@ describe('Expert fresh friendly-target repair', () => {
     }
   }
 
+  it('preserves fresh search evidence and worker choice through a safety override', async () => {
+    const h = harness({
+      seed: 915,
+      aiHeroId: 'anduin',
+      opponentHeroId: 'jaina',
+      aiMana: 2,
+      aiHeroPowerAvailable: false,
+      aiHand: ['basic_shadow_word_pain'],
+      aiBoard: [{ cardId: 'basic_murloc_raider', ready: true }],
+      opponentBoard: []
+    })
+    const selected = h.target('self', 'minion')
+    const workerResponse = h.responseFor(selected)
+    const searchSummary = {
+      version: 1,
+      searchId: 'fresh-safety-search',
+      selectedActionId: selected.id
+    }
+    h.setWorkerResponse({
+      ...workerResponse,
+      usage: { ...workerResponse.usage, searchSummary }
+    })
+    const before = h.session.match.getCheckpoint()
+    try {
+      const result = await h.api.decide(h.request)
+      expect(result.usage?.searchSummary).toEqual(searchSummary)
+      expect(result.usage?.decisionProvenance).toMatchObject({
+        workerActionId: selected.id,
+        overridden: true,
+        fallback: false,
+        priority: 'tactical-safety'
+      })
+      expect(result.usage?.decisionProvenance).toMatchObject({
+        returnedActionId: 'actionId' in result.choice ? result.choice.actionId : null
+      })
+      expect(h.session.match.getCheckpoint()).toEqual(before)
+    } finally {
+      h.api.dispose()
+    }
+  })
+
   it.each([true, false])(
     'rejects a pure own sacrifice without discarding a ready attack (%s)',
     (ready) => {
@@ -4175,117 +4230,148 @@ describe('Expert attention pacing', () => {
 })
 
 describe('Expert candidate subscription', () => {
-  it('publishes only current legal candidates and isolates listener failures', async () => {
-    const fixture = createAiFixture({
-      seed: 100506,
-      aiHeroId: 'jaina',
-      opponentHeroId: 'garrosh',
-      aiMana: 6,
-      aiHand: ['basic_chillwind_yeti', 'basic_bloodfen_raptor']
-    })
-    const session = new GameBoardSession({
-      setup: fixture.setup,
-      decks: fixture.decks,
-      checkpoint: fixture.checkpoint
-    })
-    const actions = aiActions(
-      session,
-      enumerateLegalCommands(
-        {
-          getState: session.match.getState,
-          getPlayInput: session.match.getPlayInput!,
-          getLegality: session.match.getLegality!
-        },
-        session.remoteParticipantId
+  it.each(['decision', 'failure'])(
+    'publishes only current legal candidates and isolates listener failures: %s',
+    async (completion) => {
+      const fixture = createAiFixture({
+        seed: 100506,
+        aiHeroId: 'jaina',
+        opponentHeroId: 'garrosh',
+        aiMana: 6,
+        aiHand: ['basic_chillwind_yeti', 'basic_bloodfen_raptor']
+      })
+      const session = new GameBoardSession({
+        setup: fixture.setup,
+        decks: fixture.decks,
+        checkpoint: fixture.checkpoint
+      })
+      const actions = aiActions(
+        session,
+        enumerateLegalCommands(
+          {
+            getState: session.match.getState,
+            getPlayInput: session.match.getPlayInput!,
+            getLegality: session.match.getLegality!
+          },
+          session.remoteParticipantId
+        )
       )
-    )
-    const selected = actions.find((action) => action.command.type === 'play-card')!
-    let receive!: (event: MessageEvent<ExpertAiWorkerResponse>) => void
-    let request: AiDecisionRequest | undefined
-    const worker = {
-      addEventListener(type: string, listener: unknown) {
-        if (type === 'message') receive = listener as typeof receive
-      },
-      postMessage(message: ExpertAiWorkerRequest) {
-        if (message.type === 'decide') request = message.request
-      },
-      removeEventListener() {},
-      terminate() {}
-    }
-    const api = new ExpertAiDecisionApi(session, () => worker as unknown as Worker)
-    const listener = vi.fn()
-    const unsubscribe = api.onCandidate(listener)
-    api.onCandidate(() => {
-      throw new Error('Visual subscriber failed')
-    })
-    try {
-      const decision = api.decide({
-        matchId: 'attention-match',
-        requestId: 'attention-request',
-        expectedRevision: session.getState().revision,
-        phase: 'action',
-        messages: [],
-        actionIds: actions.map((a) => a.id)
-      })
-      await vi.waitFor(() => expect(request).toBeDefined())
-      const response: AiDecisionResponse = {
-        ...request!,
-        modelId: 'hardware-local-v2',
-        durationMs: 1,
-        finishReason: 'fixture',
-        reason: 'Candidate fixture',
-        choice: {
-          actionId: selected.id,
-          intent: aiActionIntent(selected.command, session.localParticipantId),
-          expectedResult: 'Play',
-          planUpdate: null
-        }
+      const selected = actions.find((action) => action.command.type === 'play-card')!
+      let receive!: (event: MessageEvent<ExpertAiWorkerResponse>) => void
+      let request: AiDecisionRequest | undefined
+      const worker = {
+        addEventListener(type: string, listener: unknown) {
+          if (type === 'message') receive = listener as typeof receive
+        },
+        postMessage(message: ExpertAiWorkerRequest) {
+          if (message.type === 'decide') request = message.request
+        },
+        removeEventListener() {},
+        terminate() {}
       }
-      const progress = (value: AiDecisionResponse) =>
-        receive({
-          data: {
-            type: 'progress',
-            requestId: request!.requestId,
-            response: value,
-            recommendationValue: 0.5,
-            iterations: 64,
-            worldIndex: 0
-          }
-        } as MessageEvent<ExpertAiWorkerResponse>)
-      progress({ ...response, expectedRevision: response.expectedRevision + 1 })
-      progress({
-        ...response,
-        choice: {
-          ...(response.choice as {
-            actionId: string
-            intent: AiActionIntent
-            expectedResult: string
+      const api = new ExpertAiDecisionApi(session, () => worker as unknown as Worker)
+      const listener = vi.fn()
+      const unsubscribe = api.onCandidate(listener)
+      api.onCandidate(() => {
+        throw new Error('Visual subscriber failed')
+      })
+      try {
+        const decision = api.decide({
+          matchId: 'attention-match',
+          requestId: 'attention-request',
+          expectedRevision: session.getState().revision,
+          phase: 'action',
+          messages: [],
+          actionIds: actions.map((a) => a.id)
+        })
+        await vi.waitFor(() => expect(request).toBeDefined())
+        const response: AiDecisionResponse = {
+          ...request!,
+          modelId: 'hardware-local-v2',
+          durationMs: 1,
+          finishReason: 'fixture',
+          reason: 'Candidate fixture',
+          usage: {
+            searchProgressRoots: actions.slice(0, 2).map((action) => ({
+              actionId: action.id,
+              visits: 4,
+              meanValue: 0.3,
+              recommendationValue: 0.5
+            }))
+          },
+          choice: {
+            actionId: selected.id,
+            intent: aiActionIntent(selected.command, session.localParticipantId),
+            expectedResult: 'Play',
             planUpdate: null
-          }),
-          actionId: 'invalid'
+          }
         }
-      })
-      expect(listener).not.toHaveBeenCalled()
-      progress(response)
-      expect(listener).toHaveBeenCalledExactlyOnceWith({
-        matchId: request!.matchId,
-        requestId: request!.requestId,
-        expectedRevision: request!.expectedRevision,
-        actionId: selected.id
-      })
-      unsubscribe()
-      progress(response)
-      expect(listener).toHaveBeenCalledTimes(1)
-      receive({
-        data: { type: 'decision', requestId: request!.requestId, response }
-      } as MessageEvent<ExpertAiWorkerResponse>)
-      await expect(decision).resolves.toMatchObject({ requestId: request!.requestId })
-      progress(response)
-      expect(listener).toHaveBeenCalledTimes(1)
-    } finally {
-      api.dispose()
+        const progress = (value: AiDecisionResponse) =>
+          receive({
+            data: {
+              type: 'progress',
+              requestId: request!.requestId,
+              response: value,
+              recommendationValue: 0.5,
+              iterations: 64,
+              worldIndex: 0
+            }
+          } as MessageEvent<ExpertAiWorkerResponse>)
+        progress({ ...response, expectedRevision: response.expectedRevision + 1 })
+        progress({
+          ...response,
+          choice: {
+            ...(response.choice as {
+              actionId: string
+              intent: AiActionIntent
+              expectedResult: string
+              planUpdate: null
+            }),
+            actionId: 'invalid'
+          }
+        })
+        expect(listener).not.toHaveBeenCalled()
+        progress(response)
+        expect(listener).toHaveBeenCalledExactlyOnceWith({
+          matchId: request!.matchId,
+          requestId: request!.requestId,
+          expectedRevision: request!.expectedRevision,
+          actionId: selected.id
+        })
+        unsubscribe()
+        progress(response)
+        expect(listener).toHaveBeenCalledTimes(1)
+        receive({
+          data:
+            completion === 'failure'
+              ? {
+                  type: 'failure',
+                  requestId: request!.requestId,
+                  error: 'Stopped after progress'
+                }
+              : { type: 'decision', requestId: request!.requestId, response }
+        } as MessageEvent<ExpertAiWorkerResponse>)
+        const resolved = await decision
+        expect(resolved.requestId).toBe(request!.requestId)
+        if (completion === 'failure') {
+          expect(resolved.usage?.decisionProvenance).toMatchObject({
+            fallback: true,
+            workerActionId: selected.id
+          })
+          expect(resolved.usage?.searchSummary).toMatchObject({
+            evaluatedActionCount: 2,
+            worlds: [
+              { worldIndex: 0, status: 'partial', timedOut: true, sequenceCount: 0 }
+            ]
+          })
+        }
+        progress(response)
+        expect(listener).toHaveBeenCalledTimes(1)
+      } finally {
+        api.dispose()
+      }
     }
-  })
+  )
 })
 
 describe('shared local difficulty resources', () => {

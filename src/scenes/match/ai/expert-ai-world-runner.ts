@@ -5,7 +5,11 @@ import { aiActionIntent } from './ai-action-intent'
 import { type ExpertEvaluatedWorld } from './expert-ai-consensus'
 import type { ExpertAiWorkerRequest } from './expert-ai-worker-protocol'
 import { GameBoardSession } from '../game-board-session'
-import { LocalAiDecisionApi, type LocalAiSearchProgress } from './local-ai-decision-api'
+import {
+  LocalAiDecisionApi,
+  type LocalAiCandidateTrace,
+  type LocalAiSearchProgress
+} from './local-ai-decision-api'
 import { aiActions } from './ai-context'
 
 export type ExpertWorldRequest = Extract<
@@ -144,7 +148,8 @@ export async function evaluateExpertAiWorld(
         usage: {
           mode: 'expert-search-progress',
           iterations: progress.iterations,
-          recommendationValue: progress.recommendationValue
+          recommendationValue: progress.recommendationValue,
+          searchProgressRoots: progress.evaluatedRoots.map((root) => ({ ...root }))
         }
       }
       hooks.onProgress?.(response, progress.recommendationValue, progress.iterations)
@@ -208,6 +213,48 @@ export function partialExpertWorld(
         ? response.choice.actionId
         : null
   const action = actions.find((entry) => entry.id === selectedId)
+  const rawRoots = response.usage?.searchProgressRoots
+  const evaluatedCandidates: LocalAiCandidateTrace[] = Array.isArray(rawRoots)
+    ? rawRoots.flatMap((raw) => {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return []
+        const root = raw as Record<string, unknown>
+        const legal = actions.find((entry) => entry.id === root.actionId)
+        if (
+          !legal ||
+          typeof root.visits !== 'number' ||
+          !Number.isFinite(root.visits) ||
+          typeof root.meanValue !== 'number' ||
+          !Number.isFinite(root.meanValue) ||
+          typeof root.recommendationValue !== 'number' ||
+          !Number.isFinite(root.recommendationValue)
+        )
+          return []
+        return [
+          {
+            actionId: legal.id,
+            type: legal.command.type,
+            description: legal.description,
+            accepted: true,
+            phase: 'turns' as const,
+            winnerId: null,
+            visits: root.visits,
+            meanValue: root.meanValue,
+            score: root.meanValue,
+            recommendationValue: root.recommendationValue,
+            finalRecommendationValue: root.recommendationValue,
+            scoreComponents: {
+              positionDelta: root.meanValue,
+              commandPreference: 0,
+              continuationPreference: 0,
+              threatDefense: 0,
+              opponentBoardRemoval: 0,
+              friendlyBoardLoss: 0,
+              sequenceRefinement: 0
+            }
+          }
+        ]
+      })
+    : []
   return {
     worldIndex,
     status: 'partial',
@@ -218,7 +265,7 @@ export function partialExpertWorld(
         ? {
             requestId: request.request.requestId,
             phase: request.request.phase === 'plan' ? 'plan' : 'action',
-            durationMs: 0,
+            durationMs: response.durationMs,
             evaluatedActions: 1,
             refinedActions: 0,
             continuations: 0,
@@ -227,6 +274,7 @@ export function partialExpertWorld(
             visibleThreat: null,
             chosenActionId: action.id,
             sampleCount: iterations,
+            ...(evaluatedCandidates.length ? { evaluatedCandidates } : {}),
             candidates: [
               {
                 actionId: action.id,
