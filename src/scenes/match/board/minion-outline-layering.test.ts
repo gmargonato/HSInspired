@@ -252,7 +252,7 @@ describe('MinionView dormant overlay', () => {
       >
       otherTimer.pause()
       first.setDormant(false)
-      first.showDormantProgress(2, 2, 6)
+      first.showDormantProgress(2, 2, 5)
       expect(cancel).toHaveBeenCalled()
       const newTimer = timers.mock.results.at(-1)!.value as ReturnType<
         AnimationScope['timeline']

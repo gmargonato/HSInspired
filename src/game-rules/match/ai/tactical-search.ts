@@ -252,6 +252,8 @@ export interface TacticalLine {
   readonly commands: readonly TurnMatchCommand[]
   readonly outcome: TacticalOutcome
   readonly proven: boolean
+  /** Public chance outcomes explored for rollout seeding, never a certificate. */
+  readonly sampledChance?: boolean
   readonly value: number
 }
 
@@ -347,6 +349,7 @@ export function searchTactics(
     readonly width?: number
     readonly shouldStop?: () => boolean
     readonly publicRepliesOnly?: boolean
+    readonly sampleChance?: boolean
     readonly evaluate?: (fork: OpeningMatchAnalysis) => number
     readonly prior?: (command: TurnMatchCommand, state: OpeningMatchState) => number
   } = {}
@@ -498,17 +501,25 @@ export function searchTactics(
               complete = false
               return null
             }
+            const revealsInformation = revealsTacticalInformation(
+              result.events,
+              options.publicRepliesOnly === true && command.type === 'end-turn',
+              { before, after: result.state, playerId }
+            )
             const proven =
               parent.proven &&
               !concealedSecret &&
               child.getAiObservation !== undefined &&
               child.getRandomState !== undefined &&
               JSON.stringify(rngBefore) === JSON.stringify(child.getRandomState()) &&
-              !revealsTacticalInformation(
-                result.events,
-                options.publicRepliesOnly === true && command.type === 'end-turn',
-                { before, after: result.state, playerId }
-              )
+              !revealsInformation
+            const sampledChance =
+              options.sampleChance === true &&
+              !proven &&
+              !concealedSecret &&
+              !revealsInformation &&
+              child.getAiObservation !== undefined &&
+              child.getRandomState !== undefined
             const outcome = terminalOutcome(result.state, playerId)
             const value =
               options.evaluate?.(child) ?? tacticalPositionValue(result.state, playerId)
@@ -516,6 +527,7 @@ export function searchTactics(
               commands: [...parent.commands, command],
               outcome,
               proven,
+              ...(sampledChance ? { sampledChance: true } : {}),
               value
             }
             if (outcome === 'win' && proven) {
@@ -525,17 +537,17 @@ export function searchTactics(
             if (!proven) complete = false
             if (
               outcome === 'ongoing' &&
-              proven &&
+              (proven || sampledChance) &&
               result.state.activePlayerId === playerId &&
               !result.state.pendingDiscover &&
               !result.state.pendingCardChoice
             ) {
-              const key = tacticalStateKey(child, playerId)
+              const key = `${proven ? 'proven' : 'sampled'}:${tacticalStateKey(child, playerId)}`
               if (!seen.has(key)) {
                 seen.add(key)
                 next.push(line)
                 // The one-action guard and final depth have no next frontier.
-                if (!completion && depth + 1 < maxDepth) {
+                if (proven && !completion && depth + 1 < maxDepth) {
                   const hint = faceAttackPressure(child, playerId)
                   if (hint >= 0) {
                     const finished = finishFaceAttacks(child, line)
@@ -600,7 +612,14 @@ export function searchTactics(
         right.value - left.value || left.commands.length - right.commands.length
     )
     if (next.length > width || (depth === maxDepth - 1 && next.length)) complete = false
-    frontier = next.slice(0, width)
+    // Keep proof breadth intact; sampled chance paths get a small separate beam
+    // and share the same node/deadline cap. Hidden draws never enter this beam.
+    frontier = [
+      ...next.filter((line) => line.proven).slice(0, width),
+      ...next
+        .filter((line) => line.sampledChance)
+        .slice(0, options.sampleChance ? 4 : 0)
+    ]
     if (exhausted) break
   }
   return { win, lines, nodes, exhausted, complete }

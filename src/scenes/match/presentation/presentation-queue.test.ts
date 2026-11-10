@@ -1458,6 +1458,82 @@ describe('turn taskbar attention', () => {
     ])
   })
 
+  it('presents a dormant transition before its card-play progress without a summon event', async () => {
+    const { internal } = setup()
+    const presenter = internal as unknown as {
+      presentMinionPlayed(
+        event: unknown,
+        slot?: unknown,
+        removedFromHand?: boolean
+      ): Promise<unknown>
+    }
+    const present = vi.spyOn(presenter, 'presentMinionPlayed').mockResolvedValue(null)
+    const minion = {
+      instanceId: 'sherazin',
+      cardId: CARD_CATALOG.require('journey_to_ungoro_sherazin_corpse_flower').id,
+      attack: 6,
+      health: 3,
+      maxHealth: 3,
+      keywords: [],
+      summonedOnTurn: 1,
+      lastAttackedOnTurn: null,
+      dormant: true
+    }
+    await internal.presentEvent({
+      type: 'minion-went-dormant',
+      participantId: internal.session.localParticipantId,
+      minion,
+      position: 2
+    })
+    expect(present).toHaveBeenCalledWith(
+      {
+        type: 'dev-minion-summoned',
+        participantId: internal.session.localParticipantId,
+        minion,
+        position: 2
+      },
+      undefined,
+      false
+    )
+  })
+
+  it('presents each Sherazin card-play counter through awakening for either side', async () => {
+    const { internal } = setup()
+    const showDormantProgress = vi.fn()
+    const find = vi
+      .spyOn(internal, 'findMinionView')
+      .mockReturnValue({ showDormantProgress })
+    for (const controllerId of [
+      internal.session.localParticipantId,
+      internal.session.remoteParticipantId
+    ]) {
+      for (let current = 1; current <= 4; current++) {
+        await internal.presentEvent({
+          type: 'effect-resolved',
+          revision: current,
+          sourceInstanceId: 'sherazin',
+          sourceCardId: CARD_CATALOG.require('journey_to_ungoro_sherazin_corpse_flower')
+            .id,
+          controllerId,
+          action: 'revive-dormant',
+          actionPath: 'trigger.0',
+          data: { current, total: 4, turnNumber: 6 }
+        })
+      }
+      expect(find).toHaveBeenLastCalledWith(controllerId, 'sherazin')
+    }
+    expect(showDormantProgress.mock.calls).toEqual([
+      [1, 4, 6],
+      [2, 4, 6],
+      [3, 4, 6],
+      [4, 4, 6],
+      [1, 4, 6],
+      [2, 4, 6],
+      [3, 4, 6],
+      [4, 4, 6]
+    ])
+  })
+
   it('does not notify when synchronizing the existing initial turn', () => {
     const { internal, setHighlighted } = setup()
     internal.startInitialTurn()
@@ -3236,6 +3312,200 @@ describe('Golden Monkey hand presentation', () => {
 })
 
 describe('remote card choices', () => {
+  function remoteChoices() {
+    const value = board()
+    const internal = value as unknown as {
+      session: GameBoardSession
+      cardSelectionOverlay: CardSelectionOverlay
+      remoteBackCount: number
+      remoteBacks: Sprite[]
+      createSlot(card: OpeningCard): Promise<GameCardSlot>
+      presentEvent(event: OpeningMatchEvent): Promise<void>
+      presentRemoteDiscoverSelection(
+        instanceId: string,
+        keep: boolean
+      ): Promise<boolean>
+      scheduleAiTurn(): Promise<void>
+    }
+    vi.spyOn(internal, 'scheduleAiTurn').mockResolvedValue()
+    const createSlot = vi.spyOn(internal, 'createSlot')
+    const overlay = internal.cardSelectionOverlay
+    const cards = overlay.getChildByLabel('game.card-selection.cards')!
+    return { internal, overlay, cards, createSlot }
+  }
+
+  it.each([
+    ['Kazakus', 'mean_streets_of_gadgetzan_kazakus', 6],
+    ['Build-a-Beast', 'knights_of_the_frozen_throne_build_a_beast', 2],
+    ['repeated Adapt', 'journey_to_ungoro_galvadon', 5],
+    ['Finley', 'league_of_explorers_sir_finley_mrrgglton', 1]
+  ] as const)(
+    'shows and clears every enemy %s stage without creating hand cards',
+    async (_, sourceId, stages) => {
+      const { internal, overlay, cards, createSlot } = remoteChoices()
+      const handCount = internal.remoteBackCount
+      for (let stage = 0; stage < stages; stage++) {
+        await internal.presentEvent({
+          type: 'card-choice-started',
+          participantId: internal.session.remoteParticipantId,
+          sourceCardInstanceId: 'remote-source',
+          sourceCardId: asCardId(sourceId),
+          options: [0, 1, 2].map((choice) => ({ choice, label: 'Private option' }))
+        })
+        expect(overlay.visible).toBe(true)
+        expect(cards.children).toHaveLength(3)
+        expect(
+          cards.children.every(
+            (child) => child instanceof Sprite && child.eventMode === 'none'
+          )
+        ).toBe(true)
+        expect(overlay.getChildByLabel('game.card-selection.dark-overlay')?.alpha).toBe(
+          0
+        )
+        expect(overlay.getChildByLabel('game.card-selection.toggle')?.visible).toBe(
+          false
+        )
+        const outgoing = [...cards.children]
+        expect(await overlay.resolveRemoteChoice('remote-source:choice:1')).toBeNull()
+        expect(overlay.visible).toBe(false)
+        expect(cards.children).toHaveLength(0)
+        expect(outgoing.every((child) => child.destroyed)).toBe(true)
+      }
+      expect(createSlot).not.toHaveBeenCalled()
+      expect(internal.remoteBackCount).toBe(handCount)
+    }
+  )
+
+  it('uses actual option IDs and centers a two-option enemy choice', async () => {
+    const { internal, cards, overlay } = remoteChoices()
+    await internal.presentEvent({
+      type: 'card-choice-started',
+      participantId: internal.session.remoteParticipantId,
+      sourceCardInstanceId: 'two-options',
+      sourceCardId: asCardId('mean_streets_of_gadgetzan_kazakus'),
+      options: [2, 7].map((choice) => ({ choice, label: 'Private option' }))
+    })
+    const { centerX, gap } = GAME_BOARD_LAYOUT.cardSelection.remoteDiscover
+    expect(cards.children.map((child) => child.x)).toEqual([
+      centerX - gap / 2,
+      centerX + gap / 2
+    ])
+    await overlay.resolveRemoteChoice('two-options:choice:7')
+    expect(cards.children).toHaveLength(0)
+  })
+
+  it.each([true, false])(
+    'preserves ordinary Discover hand transfer (kept: %s)',
+    async (keep) => {
+      const { internal, overlay } = remoteChoices()
+      const handCount = internal.remoteBackCount
+      await internal.presentEvent({
+        type: 'discover-started',
+        participantId: internal.session.remoteParticipantId,
+        sourceCardInstanceId: 'discover-source',
+        candidates: [0, 1, 2].map((index) => ({
+          instanceId: `discovered-${index}`,
+          cardId: asCardId('basic_fireball'),
+          zone: 'revealed',
+          revealed: false
+        }))
+      })
+      expect(await internal.presentRemoteDiscoverSelection('discovered-1', keep)).toBe(
+        keep
+      )
+      expect(internal.remoteBackCount).toBe(handCount + Number(keep))
+      expect(overlay.visible).toBe(false)
+      if (keep) expect(internal.remoteBacks[handCount].destroyed).toBe(false)
+    }
+  )
+
+  it.each(['replace', 'dispose'] as const)(
+    'safely interrupts a remote selection on %s',
+    async (mode) => {
+      const { overlay, cards } = remoteChoices()
+      await overlay.showRemoteChoices(['old-0', 'old-1', 'old-2'])
+      const resolving = overlay.resolveRemoteChoice('old-1')
+      if (mode === 'dispose') overlay.dispose()
+      else await overlay.showRemoteChoices(['new-0', 'new-1'])
+      expect(await resolving).toBeNull()
+      if (mode === 'replace') {
+        expect(overlay.visible).toBe(true)
+        expect(cards.children.map((child) => child.label)).toEqual([
+          'game.card-selection.remote-choice:new-0',
+          'game.card-selection.remote-choice:new-1'
+        ])
+      } else expect(overlay.destroyed).toBe(true)
+    }
+  )
+
+  it.each(['next-stage', 'generated', 'burned', 'rejected'] as const)(
+    'resolves accepted AI option choices before their %s result',
+    async (outcome) => {
+      const { overlay } = remoteChoices()
+      await overlay.showRemoteChoices(['source:choice:0', 'source:choice:1'])
+      const resolve = vi.spyOn(overlay, 'resolveRemoteChoice')
+      const decision = {
+        command: {
+          type: 'choose-card-option',
+          participantId: 'ai',
+          sourceCardInstanceId: 'source',
+          choice: 1
+        }
+      }
+      let state = { phase: 'turns', activePlayerId: 'ai', revision: 0 }
+      const resultEvents = [
+        { type: outcome === 'next-stage' ? 'card-choice-started' : `card-${outcome}` }
+      ]
+      const present = vi.fn(async () => {
+        expect(overlay.visible).toBe(false)
+      })
+      const harness = {
+        destroyed: false,
+        aiTurnRunning: false,
+        aiController: {
+          chooseTurnAction: vi.fn().mockResolvedValue(decision),
+          recordExecution: vi.fn(),
+          recordTiming: vi.fn(),
+          recordPresentation: vi.fn(),
+          isCurrent: () => true,
+          isAbandoned: false,
+          hasLegalActions: () => false
+        },
+        aiAttention: { clear: () => undefined },
+        bindRemoteHand: () => undefined,
+        remoteParticipantId: 'ai',
+        turnLayer: { visible: true },
+        match: { getState: () => state },
+        logger: { warn: vi.fn() },
+        wait: async () => undefined,
+        waitForResolutionIdle: async () => undefined,
+        findPlayer: () => ({ hand: [] }),
+        dispatchCommand: () => {
+          state = { ...state, activePlayerId: 'human', revision: 1 }
+          return { accepted: outcome !== 'rejected', state, events: resultEvents }
+        },
+        syncTurnHud: () => undefined,
+        syncTurnControls: () => undefined,
+        syncSecrets: () => undefined,
+        cardSelectionOverlay: overlay,
+        presentResolutionEvents: present,
+        enqueuePresentation: async (_state: unknown, action: () => Promise<void>) =>
+          action()
+      }
+      await (
+        GameBoardView.prototype as unknown as { scheduleAiTurn(): Promise<void> }
+      ).scheduleAiTurn.call(harness)
+      if (outcome === 'rejected') {
+        expect(resolve).not.toHaveBeenCalled()
+        expect(present).not.toHaveBeenCalled()
+        expect(overlay.visible).toBe(true)
+      } else {
+        expect(resolve).toHaveBeenCalledExactlyOnceWith('source:choice:1')
+        expect(present).toHaveBeenCalledExactlyOnceWith(resultEvents, undefined)
+      }
+    }
+  )
+
   it('shows both Build-a-Beast stages when the choice source is a hero power', async () => {
     const value = board()
     const internal = value as unknown as {
@@ -3294,14 +3564,7 @@ describe('remote card choices', () => {
       cardSelectionOverlay: CardSelectionOverlay
     }
     const overlay = internal.cardSelectionOverlay
-    await overlay.showRemoteDiscover(
-      [0, 1, 2].map((index) => ({
-        instanceId: `remote-choice-${index}`,
-        cardId: asCardId('basic_fireball'),
-        zone: 'revealed' as const,
-        revealed: true
-      }))
-    )
+    await overlay.showRemoteChoices([0, 1, 2].map((index) => `remote-choice-${index}`))
 
     expect(overlay.getChildByLabel('game.card-selection.toggle')?.visible).toBe(false)
     expect(overlay.getChildByLabel('game.card-selection.toggle-outline')).toBeNull()
@@ -3317,14 +3580,7 @@ describe('remote card choices', () => {
       cardSelectionOverlay: CardSelectionOverlay
     }
     const overlay = internal.cardSelectionOverlay
-    await overlay.showRemoteDiscover(
-      [0, 1, 2].map((index) => ({
-        instanceId: `remote-choice-${index}`,
-        cardId: asCardId('basic_fireball'),
-        zone: 'revealed' as const,
-        revealed: true
-      }))
-    )
+    await overlay.showRemoteChoices([0, 1, 2].map((index) => `remote-choice-${index}`))
 
     const { remoteDiscover } = GAME_BOARD_LAYOUT.cardSelection
     const darkOverlay = overlay.getChildByLabel(
@@ -3337,7 +3593,7 @@ describe('remote card choices', () => {
     const backs = ['remote-choice-0', 'remote-choice-1', 'remote-choice-2'].map(
       (instanceId) =>
         cardsLayer.getChildByLabel(
-          `game.card-selection.remote-discover:${instanceId}`
+          `game.card-selection.remote-choice:${instanceId}`
         ) as Sprite
     )
     for (const [index, back] of backs.entries()) {
@@ -8593,4 +8849,169 @@ describe('match graphics preferences', () => {
       }
     }
   )
+})
+
+describe('Bob committed Battlecry choices', () => {
+  it('waits for entrance and Battlecry presentation before opening the action menu', async () => {
+    const value = board()
+    type Result = Extract<ReturnType<GameBoardSession['dispatch']>, { accepted: true }>
+    const internal = value as unknown as {
+      session: GameBoardSession
+      hand: GameHandView
+      cardSelectionOverlay: CardSelectionOverlay
+      presentAcceptedMinionPlay(entry: HandEntry, result: Result): Promise<void>
+      presentMinionPlayed(): Promise<void>
+      presentBattlecryRepetitionStarted(): Promise<void>
+      presentResolutionEvents(events: readonly OpeningMatchEvent[]): Promise<void>
+      presentEvent(event: OpeningMatchEvent): Promise<void>
+    }
+    const slot = mulliganSlot('bob')
+    const entry = {
+      card: { instanceId: 'bob', cardId: asCardId('future_past_bob_the_bartender') },
+      slot,
+      restTransform: layoutHand(1)[0]!,
+      displaced: false
+    }
+    internal.hand.layer.addChild(slot)
+    internal.hand.append(entry)
+    let land!: () => void
+    let battlecry!: () => void
+    vi.spyOn(internal, 'presentMinionPlayed').mockReturnValue(
+      new Promise((resolve) => {
+        land = resolve
+      })
+    )
+    const banner = vi
+      .spyOn(internal, 'presentBattlecryRepetitionStarted')
+      .mockReturnValue(
+        new Promise((resolve) => {
+          battlecry = resolve
+        })
+      )
+    const menu = vi
+      .spyOn(internal.cardSelectionOverlay, 'showChoices')
+      .mockResolvedValue()
+    vi.spyOn(internal, 'presentResolutionEvents').mockImplementation(async (events) => {
+      for (const event of events)
+        if (
+          event.type === 'battlecry-repetition-started' ||
+          event.type === 'card-choice-started'
+        )
+          await internal.presentEvent(event)
+    })
+    const participantId = internal.session.localParticipantId
+    const events = [
+      { type: 'minion-played', participantId },
+      { type: 'battlecry-repetition-started', participantId },
+      {
+        type: 'card-choice-started',
+        participantId,
+        sourceCardInstanceId: 'bob',
+        sourceCardId: entry.card.cardId,
+        options: []
+      }
+    ] as unknown as OpeningMatchEvent[]
+    const playing = internal.presentAcceptedMinionPlay(entry, {
+      accepted: true,
+      state: internal.session.getState(),
+      events
+    })
+    expect(menu).not.toHaveBeenCalled()
+    expect(banner).not.toHaveBeenCalled()
+    land()
+    await vi.waitFor(() => expect(banner).toHaveBeenCalledOnce())
+    expect(menu).not.toHaveBeenCalled()
+    battlecry()
+    await playing
+    expect(menu).toHaveBeenCalledOnce()
+  })
+})
+
+describe('committed effect choice targeting', () => {
+  it('collects Recruit’s target without replaying or refunding Bob', async () => {
+    const value = board()
+    const internal = value as unknown as {
+      session: GameBoardSession
+      pendingEffectTarget: unknown
+      chooseVisibleCardOption(choice: number): void
+      chooseEffectTarget(view: MinionView): void
+      dispatchCommand(command: unknown): ReturnType<GameBoardSession['dispatch']>
+      enqueuePresentation(): Promise<void>
+    }
+    const { session } = internal
+    for (const participant of session.getState().players)
+      session.dispatch({
+        type: 'confirm-mulligan',
+        participantId: participant.participantId,
+        replaceInstanceIds: []
+      })
+    if (session.getState().activePlayerId !== session.localParticipantId)
+      session.dispatch({ type: 'end-turn', participantId: session.remoteParticipantId })
+    const participantId = session.localParticipantId
+    session.dispatch({
+      type: 'dev-set-mana',
+      participantId,
+      available: 10,
+      maximum: 10
+    })
+    session.dispatch({
+      type: 'dev-add-card',
+      participantId,
+      cardId: 'future_past_bob_the_bartender'
+    })
+    session.dispatch({
+      type: 'dev-summon-minion',
+      participantId: session.remoteParticipantId,
+      cardId: 'basic_chillwind_yeti'
+    })
+    const player = () =>
+      session
+        .getState()
+        .players.find((player) => player.participantId === participantId)!
+    const bob = player().hand.find(
+      (card) => card.cardId === 'future_past_bob_the_bartender'
+    )!
+    expect(
+      session.dispatch({
+        type: 'play-card',
+        participantId,
+        cardInstanceId: bob.instanceId,
+        position: 0
+      }).accepted
+    ).toBe(true)
+    const dispatch = vi
+      .spyOn(internal, 'dispatchCommand')
+      .mockImplementation((command) => session.dispatch(command))
+    vi.spyOn(internal, 'enqueuePresentation').mockResolvedValue()
+    internal.chooseVisibleCardOption(1)
+    expect(internal.pendingEffectTarget).not.toBeNull()
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(player().mana.available).toBe(4)
+    const enemy = session
+      .getState()
+      .players.find((player) => player.participantId === session.remoteParticipantId)!
+      .board[0]!
+    const target = Object.assign(Object.create(MinionView.prototype) as MinionView, {
+      instanceId: enemy.instanceId,
+      ownerId: session.remoteParticipantId
+    })
+    internal.chooseEffectTarget(target)
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'choose-card-option',
+        choice: 1,
+        targets: [
+          {
+            kind: 'minion',
+            participantId: session.remoteParticipantId,
+            instanceId: enemy.instanceId
+          }
+        ]
+      })
+    )
+    expect(session.getState().pendingCardChoice).toBeUndefined()
+    expect(player().mana.available).toBe(4)
+    expect(internal.pendingEffectTarget).toBeNull()
+    await Promise.resolve()
+  })
 })

@@ -52,7 +52,7 @@ export const LOCAL_AI_POLICY = {
     expertBoardPresence: 8,
     expertContinuationPreference: 6, // Provisional exact-match line preference.
     secret: 2.4,
-    deckCard: 0.12,
+    deckCard: 2,
     fatigueRisk: 8,
     handOverflow: -6,
     overloadLocked: -2.5,

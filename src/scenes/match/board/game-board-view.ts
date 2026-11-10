@@ -465,6 +465,11 @@ export class GameBoardView extends Actor {
   private historyGrayscaleFilter: ColorMatrixFilter | null = null
   private appliedDesaturation = ''
   private selectedCombatView: CombatView | null = null
+  private pendingEffectTarget: {
+    choice: number
+    targets: CardPlayTargetRef[]
+    sets: readonly (readonly CardPlayTargetRef[])[]
+  } | null = null
   private heroPowerTargeting = false
   private combatInProgress = false
   private readonly targetGestures =
@@ -620,6 +625,13 @@ export class GameBoardView extends Actor {
       if (this.selectedCombatView || this.heroPowerTargeting || this.cardPlay.current) {
         event.preventDefault()
         event.stopPropagation()
+      }
+      if (this.pendingEffectTarget) {
+        this.pendingEffectTarget = null
+        this.attackLine.clear()
+        this.options.cursor?.setTargeting(false)
+        void this.restorePendingChoice()
+        this.syncBoardAttackability(this.match.getState())
       }
       this.cancelHeroPowerTargeting()
       this.cardPlay.cancelCardTargeting(pointer)
@@ -2481,6 +2493,43 @@ export class GameBoardView extends Actor {
     })
   }
 
+  private isEffectChoiceTarget(view: CombatView): boolean {
+    const pending = this.pendingEffectTarget
+    return (
+      pending?.sets[pending.targets.length]?.some((target) =>
+        target.kind === 'hero'
+          ? view instanceof HeroView && view.ownerId === target.participantId
+          : target.kind === 'minion' &&
+            view instanceof MinionView &&
+            view.instanceId === target.instanceId
+      ) ?? false
+    )
+  }
+
+  private chooseEffectTarget(view: CombatView): void {
+    const pending = this.pendingEffectTarget
+    if (
+      this.settingsInputBlocked ||
+      this.matchResultShown ||
+      !pending ||
+      !this.isEffectChoiceTarget(view) ||
+      !view.ownerId
+    )
+      return
+    pending.targets.push(
+      view instanceof HeroView
+        ? { kind: 'hero', participantId: view.ownerId as PlayerId }
+        : {
+            kind: 'minion',
+            participantId: view.ownerId as PlayerId,
+            instanceId: view.instanceId!
+          }
+    )
+    if (pending.targets.length === pending.sets.length)
+      this.chooseVisibleCardOption(pending.choice)
+    else this.syncBoardAttackability(this.match.getState())
+  }
+
   private chooseVisibleCardOption(choice: number, animated = false): void {
     if (this.cardPlay.current) {
       this.cardPlay.chooseCardPlayOption(choice, animated)
@@ -2488,7 +2537,26 @@ export class GameBoardView extends Actor {
     }
     const pending = this.match.getState().pendingCardChoice
     if (!pending || pending.participantId !== this.localParticipantId) return
+    const sets =
+      pending.options.find((option) => option.choice === choice)?.legalTargetOptions ??
+      []
+    if (
+      sets.length &&
+      sets.every((set) => set.length > 0) &&
+      !this.pendingEffectTarget
+    ) {
+      this.pendingEffectTarget = { choice, targets: [], sets }
+      this.cardSelectionOverlay.clear()
+      this.options.cursor?.setTargeting(true)
+      this.syncBoardAttackability(this.match.getState())
+      return
+    }
+    const targets = this.pendingEffectTarget?.targets
+    this.attackLine.clear()
+    this.pendingEffectTarget = null
+    this.options.cursor?.setTargeting(false)
     const result = this.dispatchCommand({
+      ...(targets ? { targets } : {}),
       type: 'choose-card-option',
       participantId: this.localParticipantId,
       sourceCardInstanceId: pending.sourceCardInstanceId,
@@ -2717,6 +2785,7 @@ export class GameBoardView extends Actor {
   private showMatchResult(winnerId: PlayerId | null): void {
     if (this.matchResultShown) return
     this.matchResultShown = true
+    this.pendingEffectTarget = null
     this.cancelBoardObjectSelection()
     this.freezeMatchResultInput()
 
@@ -2847,18 +2916,22 @@ export class GameBoardView extends Actor {
       ] !== undefined
     view.setCanAttack(showCanAttack)
     view.setTargetable(
-      this.cardPlay.current
-        ? this.cardPlay.isValidCardTarget(view)
-        : this.heroPowerTargeting
-          ? this.isValidHeroPowerTarget(view)
-          : showCanAttack || this.isValidCombatTarget(view)
+      this.pendingEffectTarget
+        ? this.isEffectChoiceTarget(view)
+        : this.cardPlay.current
+          ? this.cardPlay.isValidCardTarget(view)
+          : this.heroPowerTargeting
+            ? this.isValidHeroPowerTarget(view)
+            : showCanAttack || this.isValidCombatTarget(view)
     )
     view.setTargetingOutline(
-      this.cardPlay.current
-        ? this.cardPlay.isValidCardTarget(view)
-        : this.heroPowerTargeting
-          ? this.isValidHeroPowerTarget(view)
-          : this.isValidCombatTarget(view)
+      this.pendingEffectTarget
+        ? this.isEffectChoiceTarget(view)
+        : this.cardPlay.current
+          ? this.cardPlay.isValidCardTarget(view)
+          : this.heroPowerTargeting
+            ? this.isValidHeroPowerTarget(view)
+            : this.isValidCombatTarget(view)
     )
     if (!showCanAttack && this.selectedCombatView === view) {
       this.deselectAttacker()
@@ -2910,18 +2983,22 @@ export class GameBoardView extends Actor {
       const showCanAttack = canAttack && ownerId === this.localParticipantId
       view.setCanAttack(showCanAttack)
       view.setTargetable(
-        this.cardPlay.current
-          ? this.cardPlay.isValidCardTarget(view)
-          : this.heroPowerTargeting
-            ? this.isValidHeroPowerTarget(view)
-            : showCanAttack || this.isValidCombatTarget(view)
+        this.pendingEffectTarget
+          ? this.isEffectChoiceTarget(view)
+          : this.cardPlay.current
+            ? this.cardPlay.isValidCardTarget(view)
+            : this.heroPowerTargeting
+              ? this.isValidHeroPowerTarget(view)
+              : showCanAttack || this.isValidCombatTarget(view)
       )
       view.setTargetingOutline(
-        this.cardPlay.current
-          ? this.cardPlay.isValidCardTarget(view)
-          : this.heroPowerTargeting
-            ? this.isValidHeroPowerTarget(view)
-            : this.isValidCombatTarget(view)
+        this.pendingEffectTarget
+          ? this.isEffectChoiceTarget(view)
+          : this.cardPlay.current
+            ? this.cardPlay.isValidCardTarget(view)
+            : this.heroPowerTargeting
+              ? this.isValidHeroPowerTarget(view)
+              : this.isValidCombatTarget(view)
       )
       view.setSleeping(sleeping && state.phase === 'turns')
       if (sleeping || !showCanAttack) {
@@ -2936,6 +3013,7 @@ export class GameBoardView extends Actor {
    * targeting outline (and cursor circle) while any enemy Taunt remains.
    */
   private isValidCombatTarget(view: CombatView): boolean {
+    if (this.pendingEffectTarget) return this.isEffectChoiceTarget(view)
     if (this.heroPowerTargeting) return this.isValidHeroPowerTarget(view)
     const attacker = this.selectedCombatView
     if (!attacker || !view.ownerId) return false
@@ -3081,6 +3159,31 @@ export class GameBoardView extends Actor {
     this.options.cursor?.setTargetingVisualScale(
       Math.min(canvasBounds.width / GAME_WIDTH, canvasBounds.height / GAME_HEIGHT)
     )
+    if (this.pendingEffectTarget) {
+      const pending = this.match.getState().pendingCardChoice
+      const source = pending
+        ? this.findMinionView(pending.participantId, pending.sourceCardInstanceId)
+        : undefined
+      const from =
+        source?.getGlobalPosition() ??
+        this.heroViews.get(this.localParticipantId)?.getGlobalPosition()
+      if (from) {
+        if (this.options.gameAssets.arrowBody)
+          this.attackLine.setBodyTexture(this.options.gameAssets.arrowBody)
+        this.attackLine.setEndpoints(
+          this.attackLineLayer.toLocal(from),
+          this.resolveAttackLineEnd(from, { x: event.globalX, y: event.globalY })
+        )
+        this.options.cursor?.setTargetingAngle(
+          Math.atan2(event.globalY - from.y, event.globalX - from.x)
+        )
+      }
+      const target = this.findTargetCharacter(event)
+      this.options.cursor?.setTargetingTarget(
+        target ? this.toCursorTargetPoint(event.globalX, event.globalY) : null
+      )
+      return
+    }
     this.updateHeroPowerHover({ x: event.globalX, y: event.globalY })
     if (this.heroPowerTargeting) {
       const power = this.heroPowerViews.get(this.localParticipantId)
@@ -3580,6 +3683,11 @@ export class GameBoardView extends Actor {
           decision.command.participantId === this.remoteParticipantId
             ? decision.command.cardInstanceId
             : null
+        const remoteSelectedOptionId =
+          decision.command.type === 'choose-card-option' &&
+          decision.command.participantId === this.remoteParticipantId
+            ? `${decision.command.sourceCardInstanceId}:choice:${decision.command.choice}`
+            : null
         const remoteMinionPlay =
           decision.command.type === 'play-card' &&
           remotePlayedCard !== null &&
@@ -3711,6 +3819,9 @@ export class GameBoardView extends Actor {
               remoteDiscoverSelectedInstanceId,
               remoteDiscoverDrawn !== undefined
             )
+          }
+          if (remoteSelectedOptionId) {
+            await this.cardSelectionOverlay.resolveRemoteChoice(remoteSelectedOptionId)
           }
           if (remoteTargetedSpellTargets) {
             await this.presentRemoteTargetedSpell(remoteTargetedSpellTargets)
@@ -4578,7 +4689,9 @@ export class GameBoardView extends Actor {
         if (event.participantId === this.localParticipantId)
           await this.cardSelectionOverlay.show(event.candidates)
         else if (event.participantId === this.remoteParticipantId)
-          await this.cardSelectionOverlay.showRemoteDiscover(event.candidates)
+          await this.cardSelectionOverlay.showRemoteChoices(
+            event.candidates.map((candidate) => candidate.instanceId)
+          )
         return
       case 'card-choice-started':
         if (event.participantId === this.remoteParticipantId) void this.scheduleAiTurn()
@@ -4590,6 +4703,12 @@ export class GameBoardView extends Actor {
             event.options,
             true,
             event.prompt
+          )
+        } else if (event.participantId === this.remoteParticipantId) {
+          await this.cardSelectionOverlay.showRemoteChoices(
+            event.options.map(
+              (option) => `${event.sourceCardInstanceId}:choice:${option.choice}`
+            )
           )
         }
         return
@@ -4703,6 +4822,13 @@ export class GameBoardView extends Actor {
         return
       case 'minion-summoned':
         await this.presentMinionSummoned(event)
+        return
+      case 'minion-went-dormant':
+        await this.presentMinionPlayed(
+          { ...event, type: 'dev-minion-summoned' },
+          undefined,
+          false
+        )
         return
       case 'effect-resolved':
         await this.presentEffectResolved(event)
@@ -4935,6 +5061,20 @@ export class GameBoardView extends Actor {
   private async presentEffectResolved(
     event: Extract<OpeningMatchEvent, { type: 'effect-resolved' }>
   ): Promise<void> {
+    if (event.action === 'revive-dormant') {
+      const { current, total, turnNumber } = event.data ?? {}
+      if (
+        typeof current === 'number' &&
+        typeof total === 'number' &&
+        typeof turnNumber === 'number'
+      ) {
+        this.findMinionView(
+          event.controllerId,
+          event.sourceInstanceId
+        )?.showDormantProgress(current, total, turnNumber)
+      }
+      return
+    }
     if (event.deckAddition) {
       const addition = event.deckAddition
       const source = this.findEffectTargetView(addition.sourceInstanceId)?.view
@@ -6705,15 +6845,16 @@ export class GameBoardView extends Actor {
       y: transform.y
     })
     const destination = this.cardSelectionOverlay.toLocal(globalDestination)
-    const selected = await this.cardSelectionOverlay.resolveRemoteDiscover(
+    const selected = await this.cardSelectionOverlay.resolveRemoteChoice(
       selectedInstanceId,
-      {
-        x: destination.x,
-        y: destination.y,
-        scale: transform.scale,
-        rotation: transform.rotation
-      },
       keepSelected
+        ? {
+            x: destination.x,
+            y: destination.y,
+            scale: transform.scale,
+            rotation: transform.rotation
+          }
+        : undefined
     )
     if (!selected || this.destroyed) return false
 
@@ -8222,6 +8363,10 @@ export class GameBoardView extends Actor {
       if (this.consumeCardPlacementTap(event)) return
       if (this.consumeTargetGestureTap(event)) return
       if (event.button !== 0) return
+      if (this.pendingEffectTarget) {
+        this.chooseEffectTarget(view)
+        return
+      }
       if (this.cardPlay.current) {
         if (this.cardPlay.isValidCardTarget(view)) {
           this.cardPlay.commitCardTarget(view)
@@ -8273,6 +8418,10 @@ export class GameBoardView extends Actor {
       if (this.consumeCardPlacementTap(event)) return
       if (this.consumeTargetGestureTap(event)) return
       if (event.button !== 0) return
+      if (this.pendingEffectTarget) {
+        this.chooseEffectTarget(view)
+        return
+      }
       if (this.cardPlay.current) {
         if (this.cardPlay.isValidCardTarget(view)) {
           this.cardPlay.commitCardTarget(view)

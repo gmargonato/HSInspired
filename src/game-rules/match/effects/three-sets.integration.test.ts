@@ -16,6 +16,316 @@ import { getDerivedState } from './effect-runtime'
 
 type Scenario = ReturnType<typeof createMatchScenario>
 
+describe('Sherazin dormant progress', () => {
+  const sherazinId = 'journey_to_ungoro_sherazin_corpse_flower'
+  const cast = (
+    scenario: Scenario,
+    participantId: string,
+    cardId: string,
+    extra: Record<string, unknown> = {}
+  ) => {
+    setMana(scenario, participantId)
+    addCard(scenario, participantId, cardId)
+    return play(scenario, participantId, cardId, extra)
+  }
+
+  it('keeps the same board slot and identity without summon effects when becoming dormant', () => {
+    const scenario = ready({ seed: 2113 })
+    const [own] = activePlayers(scenario)
+    const left = summon(scenario, own, 'classic_wisp')
+    const sherazin = summon(scenario, own, sherazinId)
+    const right = summon(scenario, own, 'basic_chillwind_yeti')
+    const summonedBefore = scenario.match.getState().history?.minionsSummonedThisTurn
+    const result = cast(scenario, own, 'basic_fireball', {
+      targets: [{ kind: 'minion', participantId: own, instanceId: sherazin.instanceId }]
+    })
+    expect(player(scenario, own).board.map((minion) => minion.instanceId)).toEqual([
+      left.instanceId,
+      sherazin.instanceId,
+      right.instanceId
+    ])
+    expect(player(scenario, own).board[1]).toMatchObject({
+      dormant: true,
+      dormantProgress: 1
+    })
+    expect(
+      result.events.filter((event) => event.type === 'minion-summoned')
+    ).toHaveLength(0)
+    expect(
+      result.events.filter(
+        (event) => event.type === 'effect-resolved' && event.action === 'summon'
+      )
+    ).toHaveLength(0)
+    expect(scenario.match.getState().history?.minionsSummonedThisTurn).toEqual(
+      summonedBefore
+    )
+    expect(
+      result.events.filter((event) => event.type === 'minion-went-dormant')
+    ).toMatchObject([
+      { position: 1, minion: { instanceId: sherazin.instanceId, dormant: true } }
+    ])
+  })
+
+  it.each(['basic_fireball', 'basic_fire_elemental'])(
+    'counts the killing card after %s resolves',
+    (cardId) => {
+      const scenario = ready({ seed: 2114 })
+      const [own] = activePlayers(scenario)
+      const sherazin = summon(scenario, own, sherazinId)
+      const result = cast(scenario, own, cardId, {
+        targets: [
+          { kind: 'minion', participantId: own, instanceId: sherazin.instanceId }
+        ]
+      })
+      expect(
+        player(scenario, own).board.find(
+          (minion) => minion.instanceId === sherazin.instanceId
+        )
+      ).toMatchObject({
+        dormant: true,
+        dormantProgress: 1
+      })
+      const dormantIndex = result.events.findIndex(
+        (event) => event.type === 'minion-went-dormant'
+      )
+      const progressIndex = result.events.findIndex(
+        (event) => event.type === 'effect-resolved' && event.action === 'revive-dormant'
+      )
+      expect(progressIndex).toBeGreaterThan(dormantIndex)
+    }
+  )
+
+  it.each([false, true])(
+    'restores simultaneous dormant slots with reverse death order %s',
+    (reverse) => {
+      let scenario = ready({ seed: 2118 })
+      const [own] = activePlayers(scenario)
+      const first = summon(scenario, own, sherazinId)
+      const middle = summon(scenario, own, 'basic_chillwind_yeti')
+      const last = summon(scenario, own, sherazinId)
+      if (reverse) {
+        const checkpoint = scenario.match.getCheckpoint()
+        const state = checkpoint.state
+        const players = state.players.map((player) =>
+          player.participantId !== own
+            ? player
+            : {
+                ...player,
+                board: [last, middle, first]
+              }
+        ) as unknown as typeof state.players
+        scenario = {
+          ...scenario,
+          match: createOpeningMatchFromCheckpoint({
+            ...checkpoint,
+            state: { ...state, players }
+          })
+        }
+      }
+      const order = player(scenario, own).board.map((minion) => minion.instanceId)
+      // The Yeti survives the damage and provides a stable neighbor.
+      cast(scenario, own, 'basic_hellfire')
+      expect(player(scenario, own).board.map((minion) => minion.instanceId)).toEqual(
+        order
+      )
+      expect(
+        player(scenario, own).board.filter((minion) => minion.dormant)
+      ).toHaveLength(2)
+    }
+  )
+
+  it('finishes the fourth spell before awakening and leaves Sherazin exhausted', () => {
+    const scenario = ready({ seed: 2115 })
+    const [own, enemy] = activePlayers(scenario)
+    const sherazin = summon(scenario, own, sherazinId)
+    expect(
+      scenario.match.dispatch({ type: 'end-turn', participantId: own }).accepted
+    ).toBe(true)
+    cast(scenario, enemy, 'basic_fireball', {
+      targets: [{ kind: 'minion', participantId: own, instanceId: sherazin.instanceId }]
+    })
+    expect(
+      scenario.match.dispatch({ type: 'end-turn', participantId: enemy }).accepted
+    ).toBe(true)
+    for (let index = 0; index < 3; index++) cast(scenario, own, 'basic_the_coin')
+    // If Sherazin awakens early, Vanish returns it to hand instead of leaving it on board.
+    cast(scenario, own, 'basic_vanish')
+    expect(player(scenario, own).board).toMatchObject([
+      { instanceId: sherazin.instanceId, dormant: false, attack: 6, health: 3 }
+    ])
+    expect(
+      attack(
+        scenario.match,
+        own,
+        { kind: 'minion', instanceId: sherazin.instanceId },
+        { kind: 'hero' }
+      ).accepted
+    ).toBe(false)
+    cycleTurn(scenario, own, enemy)
+    expect(
+      attack(
+        scenario.match,
+        own,
+        { kind: 'minion', instanceId: sherazin.instanceId },
+        { kind: 'hero' }
+      ).accepted
+    ).toBe(true)
+  })
+
+  it('does not count a countered spell', () => {
+    const scenario = ready({ seed: 2116 })
+    const [own, enemy] = activePlayers(scenario)
+    const sherazin = summon(scenario, own, sherazinId)
+    expect(
+      scenario.match.dispatch({ type: 'end-turn', participantId: own }).accepted
+    ).toBe(true)
+    cast(scenario, enemy, 'basic_fireball', {
+      targets: [{ kind: 'minion', participantId: own, instanceId: sherazin.instanceId }]
+    })
+    cast(scenario, enemy, 'classic_counterspell')
+    expect(
+      scenario.match.dispatch({ type: 'end-turn', participantId: enemy }).accepted
+    ).toBe(true)
+    const result = cast(scenario, own, 'basic_the_coin')
+    expect(player(scenario, own).board[0]).toMatchObject({
+      dormant: true,
+      dormantProgress: 0
+    })
+    expect(
+      result.events.filter(
+        (event) => event.type === 'effect-resolved' && event.action === 'revive-dormant'
+      )
+    ).toHaveLength(0)
+  })
+
+  it.each(['discover', 'choose-one'] as const)(
+    'waits for a fourth-card %s choice, including checkpoint restoration',
+    (kind) => {
+      const scenario = ready({ seed: 2119 })
+      const [own] = activePlayers(scenario)
+      const sherazin = summon(scenario, own, sherazinId)
+      cast(scenario, own, 'basic_fireball', {
+        targets: [
+          { kind: 'minion', participantId: own, instanceId: sherazin.instanceId }
+        ]
+      })
+      for (let index = 0; index < 2; index++) cast(scenario, own, 'basic_the_coin')
+      cast(
+        scenario,
+        own,
+        kind === 'discover'
+          ? 'league_of_explorers_jeweled_scarab'
+          : 'blackrock_mountain_druid_of_the_flame'
+      )
+      expect(player(scenario, own).board[0]).toMatchObject({
+        dormant: true,
+        dormantProgress: 3
+      })
+      const checkpoint = scenario.match.getCheckpoint()
+      const restored = createOpeningMatchFromCheckpoint(
+        JSON.parse(JSON.stringify(checkpoint))
+      )
+      const state = scenario.match.getState()
+      const command =
+        kind === 'discover'
+          ? {
+              type: 'choose-discover-card' as const,
+              participantId: own,
+              cardInstanceId: state.pendingDiscover!.candidates[0]!.instanceId
+            }
+          : {
+              type: 'choose-card-option' as const,
+              participantId: own,
+              sourceCardInstanceId: state.pendingCardChoice!.sourceCardInstanceId,
+              choice: 0
+            }
+      const result = scenario.match.dispatch(command)
+      expect(result.accepted).toBe(true)
+      expect(restored.dispatch(command)).toEqual(result)
+      expect(player(scenario, own).board[0]).toMatchObject({
+        dormant: false,
+        dormantProgress: 4
+      })
+      expect(
+        result.events.filter(
+          (event) =>
+            event.type === 'effect-resolved' && event.action === 'revive-dormant'
+        )
+      ).toHaveLength(1)
+    }
+  )
+
+  it('turns a living Sherazin dormant when Umbra triggers its Deathrattle without duplicating it', () => {
+    const scenario = ready({ seed: 2117 })
+    const [own] = activePlayers(scenario)
+    summon(scenario, own, 'journey_to_ungoro_spiritsinger_umbra')
+    const result = cast(scenario, own, sherazinId)
+    expect(player(scenario, own).board).toMatchObject([
+      { cardId: 'journey_to_ungoro_spiritsinger_umbra' },
+      { cardId: sherazinId, dormant: true, dormantProgress: 1 }
+    ])
+    expect(
+      result.events.filter((event) => event.type === 'minion-summoned')
+    ).toHaveLength(1)
+  })
+
+  it('reports each friendly play, resets each turn, and stops reporting after revival', () => {
+    const scenario = ready({ seed: 2112 })
+    const [own, enemy] = activePlayers(scenario)
+    const sherazin = summon(scenario, own, 'journey_to_ungoro_sherazin_corpse_flower')
+    const coin = (participantId: string) => {
+      addCard(scenario, participantId, 'basic_the_coin')
+      return play(scenario, participantId, 'basic_the_coin')
+    }
+    const progressEvents = (result: ReturnType<typeof play>) =>
+      result.events.filter(
+        (event) => event.type === 'effect-resolved' && event.action === 'revive-dormant'
+      )
+    expect(progressEvents(coin(own))).toHaveLength(0)
+    expect(
+      scenario.match.dispatch({ type: 'end-turn', participantId: own }).accepted
+    ).toBe(true)
+    setMana(scenario, enemy)
+    addCard(scenario, enemy, 'basic_fireball')
+    play(scenario, enemy, 'basic_fireball', {
+      targets: [{ kind: 'minion', participantId: own, instanceId: sherazin.instanceId }]
+    })
+    const dormant = player(scenario, own).board.find(
+      (minion) => minion.cardId === sherazin.cardId
+    )!
+    expect(dormant.dormant).toBe(true)
+    expect(
+      scenario.match.dispatch({ type: 'end-turn', participantId: enemy }).accepted
+    ).toBe(true)
+    for (let current = 1; current <= 2; current++) {
+      expect(progressEvents(coin(own))).toMatchObject([
+        {
+          sourceInstanceId: dormant.instanceId,
+          controllerId: own,
+          data: { current, total: 4, turnNumber: scenario.match.getState().turnNumber }
+        }
+      ])
+    }
+    expect(
+      scenario.match.dispatch({ type: 'end-turn', participantId: own }).accepted
+    ).toBe(true)
+    expect(progressEvents(coin(enemy))).toHaveLength(0)
+    expect(
+      scenario.match.dispatch({ type: 'end-turn', participantId: enemy }).accepted
+    ).toBe(true)
+    for (let current = 1; current <= 4; current++) {
+      expect(progressEvents(coin(own))).toMatchObject([
+        {
+          sourceInstanceId: dormant.instanceId,
+          data: { current, total: 4, turnNumber: scenario.match.getState().turnNumber }
+        }
+      ])
+      expect(player(scenario, own).board[0]?.dormant).toBe(current < 4)
+    }
+    expect(progressEvents(coin(own))).toHaveLength(0)
+  })
+})
+
 describe('Defile', () => {
   const defile = 'knights_of_the_frozen_throne_defile'
 

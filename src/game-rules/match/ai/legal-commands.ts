@@ -26,7 +26,9 @@ function targetKey(target: CardPlayTargetRef): string {
   return stable(target)
 }
 
-function targetAssignments(input: PlayCardInput): readonly CardPlayTargetRef[][] {
+function targetAssignments(
+  input: Pick<PlayCardInput, 'legalTargetOptions'>
+): readonly CardPlayTargetRef[][] {
   if (input.legalTargetOptions.length === 0) return [[]]
   const result: CardPlayTargetRef[][] = []
   const visit = (
@@ -78,12 +80,18 @@ export function enumerateLegalCommands(
     }))
   }
   if (state.pendingCardChoice?.participantId === participantId) {
-    return state.pendingCardChoice.options.map((option) => ({
-      type: 'choose-card-option',
-      participantId,
-      sourceCardInstanceId: state.pendingCardChoice!.sourceCardInstanceId,
-      choice: option.choice
-    }))
+    return state.pendingCardChoice.options.flatMap((option) => {
+      const sets = option.legalTargetOptions ?? []
+      return targetAssignments({
+        legalTargetOptions: sets.some((set) => set.length === 0) ? [] : sets
+      }).map((targets) => ({
+        type: 'choose-card-option' as const,
+        participantId,
+        sourceCardInstanceId: state.pendingCardChoice!.sourceCardInstanceId,
+        choice: option.choice,
+        ...(targets.length ? { targets } : {})
+      }))
+    })
   }
 
   if (

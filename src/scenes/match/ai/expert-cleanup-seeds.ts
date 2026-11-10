@@ -35,7 +35,9 @@ function simpleRandomMinionDamage(cardId: string): boolean {
     action?.action === 'damage' &&
     typeof action.amount === 'number' &&
     action.amount > 0 &&
-    Object.keys(action).every((key) => ['action', 'target', 'amount'].includes(key)) &&
+    Object.keys(action).every((key) =>
+      ['action', 'target', 'amount', 'vfx'].includes(key)
+    ) &&
     Object.keys(target).length === 3 &&
     target.controller === 'opponent' &&
     target.type === 'minion' &&

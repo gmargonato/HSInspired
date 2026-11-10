@@ -759,6 +759,94 @@ it.each(['random', 'reveal'] as const)(
   }
 )
 
+it('extends public chance samples without promoting sampled wins to proofs', () => {
+  const graph = provisionalGraph('random')
+  const result = searchTactics(graph.node(), graph.actor, {
+    ...graph.options,
+    sampleChance: true,
+    maxNodes: 32
+  })
+  expect(
+    result.lines.some(
+      (line) =>
+        line.commands.length === 3 && line.sampledChance && line.outcome === 'win'
+    )
+  ).toBe(true)
+  expect(result.win).toBeNull()
+  expect(
+    result.lines.filter((line) => line.sampledChance).every((line) => !line.proven)
+  ).toBe(true)
+  expect(result.nodes).toBeLessThanOrEqual(32)
+})
+
+it('does not extend a hidden draw when public chance sampling is enabled', () => {
+  const graph = provisionalGraph('reveal')
+  const result = searchTactics(graph.node(), graph.actor, {
+    ...graph.options,
+    sampleChance: true
+  })
+  expect(result.lines.some((line) => line.commands.length > 2)).toBe(false)
+  expect(result.win).toBeNull()
+})
+
+it('samples Storm followed by a trade in the recorded Shaman position', () => {
+  const session = new GameBoardSession(
+    createAiFixture({
+      seed: 20261109,
+      aiHeroId: 'thrall',
+      opponentHeroId: 'guldan',
+      aiMana: 7,
+      aiHand: ['journey_to_ungoro_tidal_surge', 'classic_lightning_storm'],
+      aiBoard: [{ cardId: 'classic_harrison_jones', health: 1, ready: true }],
+      opponentBoard: [
+        { cardId: 'classic_infernal' },
+        {
+          cardId: 'whispers_of_the_old_gods_faceless_shambler',
+          attack: 6,
+          health: 6,
+          maxHealth: 6
+        }
+      ]
+    })
+  )
+  const actor = session.remoteParticipantId
+  const before = session.match.getCheckpoint()
+  const own = before.state.players.find((player) => player.participantId === actor)!
+  const storm = own.hand.find((card) => card.cardId === 'classic_lightning_storm')!
+  const surge = own.hand.find(
+    (card) => card.cardId === 'journey_to_ungoro_tidal_surge'
+  )!
+  const result = session.match.analyze((root) =>
+    searchTactics(root, actor, {
+      sampleChance: true,
+      maxNodes: 1024,
+      maxDepth: 4,
+      commands: enumerateLegalCommands(root, actor).filter(
+        (command) =>
+          command.type === 'play-card' &&
+          command.cardInstanceId === surge.instanceId &&
+          command.targets?.some(
+            (target) => target.kind === 'minion' && target.participantId !== actor
+          )
+      )
+    })
+  )
+  expect(
+    result.lines.some(
+      (line) =>
+        line.sampledChance &&
+        line.commands.some(
+          (command, index) =>
+            command.type === 'play-card' &&
+            command.cardInstanceId === storm.instanceId &&
+            line.commands[index + 1]?.type === 'attack-character'
+        )
+    )
+  ).toBe(true)
+  expect(result.win).toBeNull()
+  expect(session.match.getCheckpoint()).toEqual(before)
+})
+
 describe('Expert recorded root attack-only wins', () => {
   it.each([
     { key: 'rootAttackOnly82', commands: 3, budget: 48 },
@@ -1547,6 +1635,84 @@ describe('Public certainty across concealed summon pools', () => {
     expect(response.choice.intent?.source).toBe(
       me.hand.find((c) => c.cardId === 'classic_wisp')!.instanceId
     )
+  })
+  it('persists bounded worker diagnostics with actual continuation support and ranking terms', async () => {
+    const s = session({
+      aiMana: 5,
+      aiHealth: 30,
+      aiHand: ['basic_the_coin', 'basic_boulderfist_ogre'],
+      aiBoard: [],
+      opponentHealth: 30,
+      opponentHand: [],
+      opponentBoard: []
+    })
+    const legal = aiActions(
+      s,
+      enumerateLegalCommands(s.match as Match, s.remoteParticipantId)
+    )
+    const response = await runExpertAiWorkerDecision(
+      {
+        type: 'decide',
+        checkpoint: createFairHypothesisCheckpoint(
+          s.match.getCheckpoint(),
+          s.remoteParticipantId,
+          8803
+        ),
+        perspectivePlayerId: s.remoteParticipantId,
+        seed: 8803,
+        remainingSearchBudgetMs: 6000,
+        request: {
+          matchId: 'diagnostics-worker',
+          requestId: 'diagnostics-worker:8803',
+          phase: 'action',
+          expectedRevision: s.getState().revision,
+          allowInspection: false,
+          messages: [],
+          actionIds: legal.map((a) => a.id)
+        }
+      },
+      {
+        evaluateWorld: (request, index, budget) =>
+          evaluateExpertAiWorld(request, index, budget, { workBudget: 64 })
+      }
+    )
+    if (!response || !('actionId' in response.choice))
+      throw Error('Expected worker action')
+    // Exercise the JSON boundary used by persisted AI usage records.
+    const usage = JSON.parse(JSON.stringify(response.usage))
+    expect(usage.selectedCandidateId).toBe(response.choice.actionId)
+    expect(usage.policyRevision).toBe('expert-tactics-11')
+    expect(usage.continuationPolicy.minimumSamples).toBe(4)
+    expect(usage.continuationPolicy.exploratorySamples).toBe(2)
+    let continuations = 0
+    for (const world of usage.searchDiagnostics) {
+      expect(world.comparisonVisits).toBeGreaterThan(0)
+      expect(world.sampledChanceSeeds).toBeLessThanOrEqual(8)
+      expect(world.candidateStatistics.length).toBeGreaterThan(0)
+      expect(world.candidateStatistics.length).toBeLessThanOrEqual(8)
+      expect(world.candidateStatistics[0].selectedInWorld).toBe(true)
+      for (const candidate of world.candidateStatistics) {
+        expect(candidate.visits).toBeGreaterThan(0)
+        if (candidate.rankingComponents)
+          expect(candidate.finalRecommendationValue).toBeCloseTo(
+            Object.values(candidate.rankingComponents).reduce<number>(
+              (sum, value) => sum + Number(value),
+              0
+            ),
+            10
+          )
+        const estimate = candidate.continuationEstimate
+        if (!estimate) continue
+        continuations++
+        expect(estimate.supportVisits).toBeGreaterThan(0)
+        expect(estimate.comparisonVisits).toBe(world.comparisonVisits)
+        expect(estimate.value).toBeGreaterThanOrEqual(estimate.rootValue)
+        expect(estimate.supported).toBe(
+          estimate.supportVisits >= estimate.requiredSamples
+        )
+      }
+    }
+    expect(continuations).toBeGreaterThan(0)
   })
   it('preserves pre-existing random-damage and secret safety', () => {
     for (const options of [

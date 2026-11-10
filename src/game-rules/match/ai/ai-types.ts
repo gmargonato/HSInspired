@@ -128,6 +128,7 @@ export interface AiObservation {
       | 'presentationCardId'
       | 'presentationCost'
       | 'presentationHeroPowerId'
+      | 'legalTargetOptions'
     >[]
   }
   readonly selfOriginalDeck: AiObservedDeck

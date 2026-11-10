@@ -167,6 +167,7 @@ export interface EffectRuntimeOptions {
 }
 
 export interface PendingCardChoiceRuntimeOptions {
+  readonly targets?: readonly CardPlayTargetRef[]
   readonly state: OpeningMatchState
   readonly rng?: DeterministicRng
   readonly participantId: PlayerId
@@ -592,6 +593,7 @@ function collectTargetSelectors(
     return
   }
   if (!isRecord(value)) return
+  if (value.action === 'choose-effect') return
   const choice = value.choice
   if (isRecord(choice) && Array.isArray(choice.options) && choiceIndex !== undefined) {
     if (choiceIndex === -1) {
@@ -696,6 +698,7 @@ export class EffectRuntime {
       readonly source: EntityRef
       readonly blocks: readonly CardEffectBlock[]
       readonly position?: number
+      readonly boardOrder?: readonly string[]
       readonly playOrder?: number
       readonly weapon?: BoardWeapon
     }
@@ -2667,6 +2670,9 @@ export class EffectRuntime {
         return trigger === 'on-secret-played' && event.playedFromHand === true
       }
       if (event.type === 'card-played') {
+        return trigger === 'on-card-played'
+      }
+      if (event.type === 'card-resolved') {
         return trigger === 'on-card-played'
       }
       if (
@@ -4705,6 +4711,12 @@ export class EffectRuntime {
       })
       const deadKeys = new Set(dead.map((entry) => entry.minion.instanceId))
       const deathEntries: DeathEntry[] = []
+      const boardOrders = new Map(
+        this.draft.players.map((player) => [
+          player.participantId,
+          player.board.map((minion) => minion.instanceId)
+        ])
+      )
 
       for (const entry of dead) {
         this.replaceBoard(
@@ -4743,6 +4755,7 @@ export class EffectRuntime {
           source,
           blocks: this.actionBlocksFor(source, 'deathrattle'),
           position: rememberedPosition,
+          boardOrder: boardOrders.get(entry.player.participantId),
           playOrder: entry.minion.playOrder ?? entry.minion.creationOrdinal
         })
         deathEntries.push({
@@ -7729,14 +7742,52 @@ export class EffectRuntime {
           }
           return
         }
-        if (frame.source.kind !== 'minion' || frame.source.zone !== 'graveyard') return
-        const dormant = this.resurrect(frame.source, frame, path)
-        if (dormant)
-          this.updateMinion(dormant, (minion) => {
-            minion.dormant = true
-            minion.dormantProgress = 0
-            minion.dormantProgressTurn = this.draft.turnNumber
-          })
+        if (frame.source.kind !== 'minion') return
+        const player = this.player(frame.source.participantId)
+        let minion = player.board.find(
+          (entry) => entry.instanceId === frame.source.instanceId
+        )
+        if (minion?.dormant) return
+        if (!minion) {
+          const index = (player.graveyard ?? []).findIndex(
+            (entry) => entry.minion.instanceId === frame.source.instanceId
+          )
+          const entry = player.graveyard?.[index]
+          if (!entry || player.board.length >= MAX_BOARD_SIZE) return
+          minion = clonePlain(entry.minion) as DraftMinion
+          this.removeGraveyardAt(player, index)
+          // Restore between the original neighbors, including other dormant
+          // forms already restored by this death batch.
+          const dead = this.deadSources.get(frame.source.instanceId)
+          const order = dead?.boardOrder ?? []
+          const originalIndex = order.indexOf(minion.instanceId)
+          const next = order
+            .slice(originalIndex + 1)
+            .find((id) => player.board.some((entry) => entry.instanceId === id))
+          const previous = order
+            .slice(0, originalIndex)
+            .findLast((id) => player.board.some((entry) => entry.instanceId === id))
+          const position = next
+            ? player.board.findIndex((entry) => entry.instanceId === next)
+            : previous
+              ? player.board.findIndex((entry) => entry.instanceId === previous) + 1
+              : (dead?.position ?? player.board.length)
+          this.insertBoardMinion(player, minion, position)
+        }
+        const ref = { ...frame.source, zone: 'board' as const }
+        const cardId = asCardId(stringValue(action.cardId) ?? minion.cardId)
+        this.transformMinion(ref, cardId, frame, path)
+        minion.dormant = true
+        minion.dormantProgress = 0
+        minion.dormantProgressTurn = this.draft.turnNumber
+        this.events.push({
+          type: 'minion-went-dormant',
+          participantId: player.participantId,
+          minion: clonePlain(minion) as BoardMinion,
+          position: player.board.findIndex(
+            (entry) => entry.instanceId === minion.instanceId
+          )
+        })
         return
       }
       case 'revive-dormant': {
@@ -7753,6 +7804,11 @@ export class EffectRuntime {
             current.dormantProgress = progress
             current.dormantProgressTurn = this.draft.turnNumber
           })
+          this.emit(frame, name, path, {
+            current: progress,
+            total: 4,
+            turnNumber: this.draft.turnNumber
+          })
           return
         }
         if (definition?.type !== 'Minion') return
@@ -7764,6 +7820,13 @@ export class EffectRuntime {
           current.maxHealth = definition.health
           current.health = definition.health
           current.damageTaken = 0
+          current.summonedOnTurn = this.draft.turnNumber
+          current.lastAttackedOnTurn = null
+        })
+        this.emit(frame, name, path, {
+          current: progress,
+          total: 4,
+          turnNumber: this.draft.turnNumber
         })
         return
       }
@@ -8066,6 +8129,66 @@ export class EffectRuntime {
           frame,
           path
         )
+        return
+      }
+      case 'choose-effect': {
+        const authored = asArray(action.options).filter(isRecord)
+        const pending: Omit<PendingCardChoice, 'queued'> = {
+          participantId: frame.controllerId,
+          sourceCardInstanceId: frame.source.instanceId,
+          sourceCardId: frame.sourceCardId!,
+          options: authored.map((option, choice) => ({
+            choice,
+            label:
+              cardDefinition(option.presentationCardId as CardId)?.name ??
+              String(choice + 1),
+            presentationCardId: option.presentationCardId as CardId
+          })),
+          resolution: {
+            type: 'effect-actions',
+            ...(frame.battlecryRepetition &&
+            frame.battlecryRepetition.repetition > 0 &&
+            frame.source.kind === 'minion'
+              ? {
+                  battlecry: {
+                    type: 'battlecry-repetition-started',
+                    participantId: frame.controllerId,
+                    minion: clonePlain(
+                      this.currentMinion(frame.source)!
+                    ) as BoardMinion,
+                    ...frame.battlecryRepetition
+                  }
+                }
+              : {}),
+            source: { ...frame.source },
+            actions: authored.map((option) => asArray(option.actions).filter(isRecord)),
+            actionPath: path
+          }
+        }
+        if (this.automaticChoiceDepth > 0) {
+          const option = authored[Math.floor(this.rng.next() * authored.length)]!
+          const actions = asArray(option.actions).filter(isRecord)
+          const targets = this.effectChoiceSelectors(actions).flatMap((selector) => {
+            const candidates = this.legalInputCandidates(selector, frame)
+            return candidates.length
+              ? [candidates[Math.floor(this.rng.next() * candidates.length)]!]
+              : []
+          })
+          if (targets.length === this.effectChoiceSelectors(actions).length)
+            this.runActions(
+              actions,
+              this.frameFor(frame.source, frame.event, targets),
+              path + '.automatic'
+            )
+        } else if (this.draft.pendingCardChoice) {
+          this.draft.pendingCardChoice.queued = [
+            ...(this.draft.pendingCardChoice.queued ?? []),
+            pending as Mutable<Omit<PendingCardChoice, 'queued'>>
+          ]
+        } else {
+          this.draft.pendingCardChoice = pending as DraftState['pendingCardChoice']
+          this.announcePendingCardChoice()
+        }
         return
       }
       case 'create-kazakus-potion':
@@ -12408,10 +12531,18 @@ export class EffectRuntime {
           // Announce each repetition pass once (on its first matching block) so
           // the presentation layer can play the Battlecry banner before the
           // visible trigger resolves.
-          if (announceBattlecry && repetition > announcedRepetition) {
+          if (
+            announceBattlecry &&
+            repetition > announcedRepetition &&
+            !(
+              repetition > 0 &&
+              block.actions?.some((action) => action.action === 'choose-effect')
+            )
+          ) {
             announcedRepetition = repetition
             this.emitBattlecryRepetitionStarted(frame, repetition, repetitions)
           }
+          frame.battlecryRepetition = { repetition, repetitions }
           this.runBlock(
             block,
             frame,
@@ -12536,6 +12667,15 @@ export class EffectRuntime {
 
   private commitResolution(): OpeningMatchState {
     this.step('checkpoint.commit', 'checkpoint')
+    // Choices can span several dispatches. Carry the after-play phase until
+    // the last choice resolves, including after restoring a checkpoint.
+    const afterCardPlays = [
+      ...(this.initialState.pendingDiscover?.afterCardPlays ?? []),
+      ...(this.initialState.pendingCardChoice?.afterCardPlays ?? [])
+    ]
+    for (const pending of afterCardPlays) {
+      this.finishCardPlay(pending.participantId, pending.card)
+    }
     this.recomputeContinuousEffects()
     this.resolveFourHorsemen()
     const nextState = clonePlain(this.draft) as unknown as DraftState
@@ -15400,6 +15540,7 @@ export class EffectRuntime {
       ...this.frameFor(validated.source, null, validated.chosenTargets),
       choiceIndex: effectiveChoice
     }
+    let cardResolved = true
     if (validated.definition.type === 'Minion') {
       const minionCountBeforePlay = countBoardMinions(player.board)
       const summonFrame = frame
@@ -15646,8 +15787,9 @@ export class EffectRuntime {
           'spell-resolved',
           'cast'
         )
-      } else if (isSecret) {
-        this.addToDiscardedCards(player, card)
+      } else {
+        cardResolved = false
+        if (isSecret) this.addToDiscardedCards(player, card)
       }
     }
     for (const instanceId of corruptible) {
@@ -15671,6 +15813,30 @@ export class EffectRuntime {
       }
     }
     this.processDeaths()
+    if (cardResolved && !options.deferChoice)
+      this.finishCardPlay(options.participantId, card)
+  }
+
+  private finishCardPlay(participantId: PlayerId, card: OpeningCard): void {
+    const pending = this.draft.pendingDiscover ?? this.draft.pendingCardChoice
+    if (pending) {
+      const afterCardPlays = pending.afterCardPlays ?? []
+      if (!afterCardPlays.some((entry) => entry.card.instanceId === card.instanceId))
+        pending.afterCardPlays = [
+          ...afterCardPlays,
+          { participantId, card: clonePlain(card) as DraftCard }
+        ]
+      return
+    }
+    const source: EntityRef = {
+      instanceId: card.instanceId,
+      participantId,
+      cardId: card.cardId,
+      kind: 'card',
+      zone: 'discarded'
+    }
+    this.emitCardPlayedSemantic(source, source, card as DraftCard, 'card-resolved')
+    this.processDeaths()
   }
 
   resolveCardPlay(options: EffectRuntimeOptions): EffectResolutionResult {
@@ -15690,8 +15856,9 @@ export class EffectRuntime {
           participantId: options.participantId,
           sourceCardInstanceId: options.cardInstanceId,
           sourceCardId: validated.card.cardId,
-          options: [...pendingOptions]
+          options: clonePlain(pendingOptions) as Mutable<CardChoiceOption[]>
         }
+        this.finishCardPlay(options.participantId, validated.card)
         this.events.push({
           type: 'card-choice-started',
           participantId: options.participantId,
@@ -16095,6 +16262,11 @@ export class EffectRuntime {
           continuation.actionPath
         )
       }
+      if (
+        !this.draft.pendingDiscover &&
+        this.draft.pendingCardChoice?.resolution?.type === 'effect-actions'
+      )
+        this.announcePendingCardChoice()
       const nestedPending = (
         this.draft as unknown as {
           pendingDiscover?: Mutable<PendingDiscoverChoice>
@@ -16197,6 +16369,15 @@ export class EffectRuntime {
     }
   }
 
+  private effectChoiceSelectors(
+    actions: readonly unknown[]
+  ): readonly Readonly<Record<string, unknown>>[] {
+    const selectors: { selector: Readonly<Record<string, unknown>>; path: string }[] =
+      []
+    collectTargetSelectors(actions, '', selectors)
+    return selectors.map((entry) => entry.selector)
+  }
+
   private announcePendingCardChoice(): void {
     let pending = this.draft.pendingCardChoice
     while (
@@ -16209,7 +16390,27 @@ export class EffectRuntime {
       this.advancePendingCardChoice(pending)
       pending = this.draft.pendingCardChoice
     }
-    if (!pending) return
+    if (!pending || this.draft.pendingDiscover) return
+    if (pending.resolution?.type === 'effect-actions') {
+      const resolution = pending.resolution
+      if (resolution.battlecry) {
+        this.events.push(clonePlain(resolution.battlecry))
+        delete resolution.battlecry
+      }
+      const frame = this.frameFor(resolution.source as EntityRef, null, [])
+      pending.options = pending.options.map((option) => ({
+        ...option,
+        legalTargetOptions:
+          this.targetRandomizerCount() > 0
+            ? []
+            : this.effectChoiceSelectors(resolution.actions[option.choice]!).map(
+                (selector) =>
+                  this.legalInputCandidates(selector, frame)
+                    .map(publicTarget)
+                    .filter((target): target is CardPlayTargetRef => target !== null)
+              )
+      }))
+    }
     this.events.push({
       type: 'card-choice-started',
       participantId: pending.participantId,
@@ -16240,6 +16441,62 @@ export class EffectRuntime {
         )
       if (!pending.options.some((option) => option.choice === options.choice))
         throw new ResolutionInputError('extra-input', 'The selected choice is invalid.')
+      if (pending.resolution?.type === 'effect-actions') {
+        const resolution = pending.resolution
+        const actions = resolution.actions[options.choice]!
+        const frame = this.frameFor(resolution.source as EntityRef, null, [])
+        const candidates = this.effectChoiceSelectors(actions).map((selector) =>
+          this.legalInputCandidates(selector, frame)
+        )
+        const empty = candidates.some((entries) => entries.length === 0)
+        const randomized = this.targetRandomizerCount() > 0
+        if (randomized && options.targets?.length)
+          throw new ResolutionInputError('extra-input', 'Targets are chosen randomly.')
+        const requested =
+          randomized && !empty
+            ? candidates.map((entries) =>
+                publicTarget(entries[Math.floor(this.rng.next() * entries.length)]!)!
+              )
+            : (options.targets ?? [])
+        if (requested.length !== (empty ? 0 : candidates.length))
+          throw new ResolutionInputError(
+            'missing-input',
+            'The choice requires its legal targets.'
+          )
+        const chosen = requested.map((target, index) => {
+          const entity = findRequestedTarget(this, target)
+          if (
+            !entity ||
+            !candidates[index]!.some(
+              (candidate) => entityKey(candidate) === entityKey(entity)
+            )
+          )
+            throw new ResolutionInputError('illegal-target', 'Invalid choice target.')
+          return entity
+        })
+        this.advancePendingCardChoice(pending)
+        if (!empty)
+          this.runActions(
+            actions,
+            this.frameFor(resolution.source as EntityRef, null, chosen),
+            resolution.actionPath + '.choice[' + options.choice + ']'
+          )
+        this.processDeaths()
+        this.announcePendingCardChoice()
+        return {
+          accepted: true,
+          state: this.commitResolution(),
+          events: clonePlain(this.events) as OpeningMatchEvent[],
+          trace: copyPlainArray(this.trace),
+          nextEntityOrdinal: this.nextEntityOrdinal,
+          triggerEvents: copyPlainArray(this.triggerEvents)
+        }
+      }
+      if ((options.targets?.length ?? 0) > 0)
+        throw new ResolutionInputError(
+          'extra-input',
+          'This choice does not accept targets.'
+        )
       if (pending.resolution?.type === 'adapt') {
         const selected = pending.options.find(
           (option) => option.choice === options.choice

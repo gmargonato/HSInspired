@@ -208,7 +208,7 @@ export class MinionView extends Container {
   private readonly dormantOverlay: Sprite | undefined
   private readonly dormantProgress: Text
   private dormantProgressTimer: ReturnType<AnimationScope['timeline']> | null = null
-  private dormantProgressTurn: number | null = null
+  private dormantProgressKey: string | null = null
   private canAttackEnabled = false
   private activatableEnabled = false
   private targetingOutlineEnabled = false
@@ -608,8 +608,9 @@ export class MinionView extends Container {
   }
 
   showDormantProgress(current: number, total: number, turnNumber: number): void {
-    if (this.destroyed || this.dormantProgressTurn === turnNumber) return
-    this.dormantProgressTurn = turnNumber
+    const key = `${turnNumber}:${current}:${total}`
+    if (this.destroyed || this.dormantProgressKey === key) return
+    this.dormantProgressKey = key
     if (this.dormantProgressTimer) this.animationScope.cancel(this.dormantProgressTimer)
     this.dormantProgress.text = `${current}/${total}`
     this.dormantProgress.visible = true

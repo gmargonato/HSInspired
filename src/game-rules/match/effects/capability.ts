@@ -211,6 +211,7 @@ const RUNTIME_CAPABILITY_NAMES: Readonly<Record<CapabilityFamily, readonly strin
       'destroy-and-gain-stats',
       'destroy-mana-crystal',
       'destroy-secrets',
+      'choose-effect',
       'discover',
       'discover-opponent-deck-guess',
       'attack-target',
@@ -305,6 +306,7 @@ const RUNTIME_CAPABILITY_NAMES: Readonly<Record<CapabilityFamily, readonly strin
     ],
     event: [
       'card-played',
+      'card-resolved',
       'card-discarded',
       'character-attacked',
       'attack-resolved',

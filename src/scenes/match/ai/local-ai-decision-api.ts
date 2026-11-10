@@ -61,6 +61,16 @@ import { LOCAL_AI_POLICY } from './local-ai-policy'
 import { CTHUN_ID } from '../../../game-rules/match/cthun'
 import { expertDrawPreference } from './expert-draw-preference'
 import {
+  bestExpertContinuation,
+  estimateExpertContinuation,
+  expertRootRecommendationValue
+} from './expert-continuation-value'
+import {
+  predictableEndTurnDraws,
+  expertDeckResourceValue,
+  expertResurrectionValue
+} from './expert-resource-evaluation'
+import {
   expertAttackSetupPreference,
   expertResourceSetupPreference
 } from './expert-resource-preference'
@@ -156,8 +166,19 @@ export interface LocalAiCandidateTrace {
   /** Mean added position points across this root action's sampled leaves. */
   readonly meanDeckStrategyAdjustment?: number
   readonly prior?: number
-  /** Value of the best continuation sampled at least twice. */
+  /** Support-weighted continuation value, with the observed root mean as a floor. */
   readonly recommendationValue?: number
+  /** Evidence for the exact displayed suffix; absent for root-only choices. */
+  readonly continuationEstimate?: ReturnType<typeof estimateExpertContinuation>
+  /** Signed numeric ranking terms; proof and survival priorities are separate. */
+  readonly rankingComponents?: {
+    readonly root: number
+    readonly continuationAndOutcome: number
+    readonly preference: number
+    readonly risk: number
+    readonly tactical: number
+  }
+  readonly finalRecommendationValue?: number
   readonly recommendationRiskAdjustment?: number
   readonly recommendationPreferenceAdjustment?: number
   /** Expert action/sequence penalties, also applied during world consensus. */
@@ -167,6 +188,9 @@ export interface LocalAiCandidateTrace {
 
 /** Diagnostics for one local decision; kept small enough to persist with a match log. */
 export interface LocalAiDecisionTrace {
+  readonly comparisonVisits?: number
+  readonly sampledChanceLines?: number
+  readonly sampledChanceSeeds?: number
   readonly boundaryEvaluations?: number
   readonly publicThreatReview?: ReturnType<typeof inspectExpertPublicThreat>['stats']
   readonly tacticalNodes?: number
@@ -292,23 +316,24 @@ function sampledContinuation(
   lines:
     | Map<
         string,
-        { visits: number; valueSum: number; commands: readonly TurnMatchCommand[] }
+        {
+          visits: number
+          valueSum: number
+          valueSquaredSum?: number
+          commands: readonly TurnMatchCommand[]
+        }
       >
-    | undefined
+    | undefined,
+  comparisonVisits?: number
 ): readonly TurnMatchCommand[] | undefined {
   if (!lines) return undefined
-  // Prefer the strongest recurring continuation; length only breaks value ties.
-  return [...lines.values()]
-    .filter((line) => line.commands.length > 1 && line.visits >= 2)
-    .sort(
-      (left, right) =>
-        right.valueSum / right.visits - left.valueSum / left.visits ||
-        left.commands.length - right.commands.length ||
-        right.visits - left.visits ||
-        JSON.stringify(left.commands.map(canonicalCommandKey)).localeCompare(
-          JSON.stringify(right.commands.map(canonicalCommandKey))
-        )
-    )[0]?.commands
+  const root = [...lines.values()].find((line) => line.commands.length === 1)
+  if (!root) return undefined
+  return bestExpertContinuation([...lines.values()], {
+    visits: root.visits,
+    meanValue: root.valueSum / root.visits,
+    comparisonVisits
+  })?.line.commands
 }
 
 function stableObservation(value: unknown): string {
@@ -769,7 +794,10 @@ function playerValue(
   const cthunProgress =
     cthunBodyProgress + cthunPayoffValue(player.hand, cthunThresholdAttack(cthunAttack))
   const overloadLocked = number(record(player.mana).overloadLocked)
-  const handOverflow = Math.max(0, player.handSize - 8)
+  const handOverflow = Math.max(
+    0,
+    player.handSize + predictableEndTurnDraws(player) + 1 - 10
+  )
   return (
     heroHealthValue +
     armor * LOCAL_AI_POLICY.weights.heroArmor +
@@ -780,7 +808,7 @@ function playerValue(
     mana * LOCAL_AI_POLICY.weights.manaAvailable +
     weaponValue +
     secretValue +
-    Math.min(player.deckSize, 10) * LOCAL_AI_POLICY.weights.deckCard -
+    player.deckSize * LOCAL_AI_POLICY.weights.deckCard -
     player.fatigueDamage * LOCAL_AI_POLICY.weights.fatigueRisk +
     handOverflow * LOCAL_AI_POLICY.weights.handOverflow +
     number(effects.overload) * LOCAL_AI_POLICY.weights.overloadLocked +
@@ -790,56 +818,75 @@ function playerValue(
 
 /** Public recurring benefits omitted by the ordinary attack/health body score. */
 function expertEngineValue(player: AiObservedPlayer, turn: number): number {
-  return player.board.reduce((sum, minion) => {
-    const keywords = effectiveBoardMinionKeywords(minion, turn)
-    const healing = keywords.includes('lifesteal')
-      ? Math.min(
-          number(minion.attack),
-          Math.max(0, number(player.hero.maxHealth) - number(player.hero.health))
-        ) * LOCAL_AI_POLICY.weights.heroHealth
-      : 0
-    const recurring =
-      CARD_CATALOG.get(minion.cardId)
-        ?.effects.filter((effect) =>
-          ['start-of-turn', 'end-of-turn'].includes(effect.trigger)
-        )
-        .flatMap((effect) => effect.actions ?? [])
-        .reduce((value, action) => {
-          const entry = record(action)
-          if (
-            entry.action === 'change-cost' &&
-            number(entry.amount) < 0 &&
-            record(entry.target).zone === 'hand' &&
-            record(entry.target).controller === 'self'
+  const draws = predictableEndTurnDraws(player)
+  const usefulDraws = Math.min(
+    draws,
+    Math.max(0, 10 - player.handSize),
+    player.deckSize
+  )
+  const fatigueDraws = Math.max(0, draws - player.deckSize)
+  const drawValue =
+    usefulDraws * LOCAL_AI_POLICY.weights.handCard -
+    (fatigueDraws * (player.fatigueDamage + 1) +
+      (fatigueDraws * (fatigueDraws - 1)) / 2) *
+      LOCAL_AI_POLICY.weights.heroHealth
+  return (
+    drawValue +
+    expertResurrectionValue(player) +
+    player.board.reduce((sum, minion) => {
+      const keywords = effectiveBoardMinionKeywords(minion, turn)
+      const healing = keywords.includes('lifesteal')
+        ? Math.min(
+            number(minion.attack),
+            Math.max(0, number(player.hero.maxHealth) - number(player.hero.health))
+          ) * LOCAL_AI_POLICY.weights.heroHealth
+        : 0
+      const recurring =
+        CARD_CATALOG.get(minion.cardId)
+          ?.effects.filter((effect) =>
+            ['start-of-turn', 'end-of-turn'].includes(effect.trigger)
           )
+          .flatMap((effect) => effect.actions ?? [])
+          .reduce((value, action) => {
+            const entry = record(action)
+            if (
+              entry.action === 'change-cost' &&
+              number(entry.amount) < 0 &&
+              record(entry.target).zone === 'hand' &&
+              record(entry.target).controller === 'self'
+            )
+              return (
+                value +
+                Math.min(player.handSize, 10) * Math.min(2, -number(entry.amount)) * 2
+              )
+            return value
+          }, 0) ?? 0
+      const triggerSupport =
+        CARD_CATALOG.get(minion.cardId)
+          ?.effects.filter((effect) => effect.trigger === 'aura')
+          .flatMap((effect) => effect.actions ?? [])
+          .reduce((value, action) => {
+            const entry = record(action)
+            if (entry.action !== 'multiply-trigger' || entry.trigger !== 'battlecry')
+              return value
+            // Public hand size bounds the opportunity; never inspect hidden card IDs.
             return (
               value +
-              Math.min(player.handSize, 10) * Math.min(2, -number(entry.amount)) * 2
+              Math.min(3, player.handSize) *
+                Math.max(0, number(entry.multiplier, 1) - 1) *
+                4
             )
-          if (entry.action === 'draw') return value + LOCAL_AI_POLICY.weights.handCard
-          return value
-        }, 0) ?? 0
-    const triggerSupport =
-      CARD_CATALOG.get(minion.cardId)
-        ?.effects.filter((effect) => effect.trigger === 'aura')
-        .flatMap((effect) => effect.actions ?? [])
-        .reduce((value, action) => {
-          const entry = record(action)
-          if (entry.action !== 'multiply-trigger' || entry.trigger !== 'battlecry')
-            return value
-          // Public hand size bounds the opportunity; never inspect hidden card IDs.
-          return (
-            value +
-            Math.min(3, player.handSize) *
-              Math.max(0, number(entry.multiplier, 1) - 1) *
-              4
-          )
-        }, 0) ?? 0
-    return sum + healing + (minion.silenced ? 0 : recurring + triggerSupport)
-  }, 0)
+          }, 0) ?? 0
+      return sum + healing + (minion.silenced ? 0 : recurring + triggerSupport)
+    }, 0)
+  )
 }
 
-function stateScore(observation: AiObservation, selfId: string): number {
+function stateScore(
+  observation: AiObservation,
+  selfId: string,
+  ownDeckValue?: number
+): number {
   const self = observation.players.find((player) => player.participantId === selfId)
   const opponent = observation.players.find((player) => player.participantId !== selfId)
   if (!self || !opponent) return -Infinity
@@ -861,7 +908,10 @@ function stateScore(observation: AiObservation, selfId: string): number {
     (expertEngineValue(self, observation.turnNumber) -
       expertEngineValue(opponent, observation.turnNumber)) +
     pressure -
-    danger
+    danger +
+    (ownDeckValue === undefined
+      ? 0
+      : ownDeckValue - self.deckSize * LOCAL_AI_POLICY.weights.deckCard)
   )
 }
 
@@ -1173,6 +1223,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     const tactical = simulationSession.match.analyze((fork) =>
       searchTactics(fork, rootId, {
         commands: actions.map((action) => action.command),
+        sampleChance: true,
         maxNodes:
           this.workBudget === undefined ? 2_000 : Math.min(256, this.workBudget),
         shouldStop: () =>
@@ -1181,7 +1232,17 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         evaluate: (child) => {
           const observation = child.getAiObservation?.(rootId, 'fair')
           return observation
-            ? this.scoreObservation(observation, child.getState().winnerId)
+            ? this.scoreObservation(
+                observation,
+                child.getState().winnerId,
+                expertDeckResourceValue(
+                  child
+                    .getState()
+                    .players.find((player) => player.participantId === rootId)?.deck ??
+                    [],
+                  rootId
+                )
+              )
             : 0
         }
       })
@@ -1302,6 +1363,18 @@ export class LocalAiDecisionApi implements AiDecisionApi {
     const tacticalSeedLines = [...seedByRoot.values()]
       .sort((a, b) => b.value - a.value)
       .slice(0, 24)
+    const chanceSeedLines = [...tactical.lines]
+      .filter((line) => line.sampledChance && line.commands.length > 1)
+      .sort((a, b) => b.value - a.value)
+      .filter(
+        (line, index, lines) =>
+          lines.findIndex(
+            (other) =>
+              canonicalCommandKey(other.commands[0]!) ===
+              canonicalCommandKey(line.commands[0]!)
+          ) === index
+      )
+      .slice(0, 8)
     // Sample useful information and resource setups omitted by the tactical line.
     // Seed only the setup; subsequent choices use its actual resolved state.
     const informationAndSetupSeeds = actions
@@ -1328,6 +1401,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       ...publicThreat.defenses,
       ...informationAndSetupSeeds,
       ...cleanupSeedLines,
+      ...chanceSeedLines,
       ...tacticalSeedLines
     ]
     const searchDeadline =
@@ -1387,7 +1461,12 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       string,
       Map<
         string,
-        { visits: number; valueSum: number; commands: readonly TurnMatchCommand[] }
+        {
+          visits: number
+          valueSum: number
+          valueSquaredSum?: number
+          commands: readonly TurnMatchCommand[]
+        }
       >
     >()
 
@@ -1609,7 +1688,16 @@ export class LocalAiDecisionApi implements AiDecisionApi {
             return observation
               ? MCTS_POSITION_VALUE_LIMIT *
                   Math.tanh(
-                    (this.scoreObservation(observation, resolved.winnerId) +
+                    (this.scoreObservation(
+                      observation,
+                      resolved.winnerId,
+                      expertDeckResourceValue(
+                        resolved.players.find(
+                          (player) => player.participantId === rootId
+                        )?.deck ?? [],
+                        rootId
+                      )
+                    ) +
                       adjustment) /
                       MCTS_POSITION_VALUE_SCALE
                   )
@@ -1643,10 +1731,12 @@ export class LocalAiDecisionApi implements AiDecisionApi {
           const line = lines.get(lineKey) ?? {
             visits: 0,
             valueSum: 0,
+            valueSquaredSum: 0,
             commands
           }
           line.visits++
           line.valueSum += reward
+          line.valueSquaredSum = (line.valueSquaredSum ?? 0) + reward * reward
           lines.set(lineKey, line)
         }
         sampledTurnLines.set(firstRootActionKey, lines)
@@ -1695,7 +1785,9 @@ export class LocalAiDecisionApi implements AiDecisionApi {
 
     if (cancelled || this.cancelled.has(requestId)) return null
     const rootObservation = simulationSession.getAiObservation()
-    const rootStats = tree.rootStats(informationSetKey(rootObservation))
+    const rawRootStats = tree.rootStats(informationSetKey(rootObservation))
+    const comparisonVisits = Math.max(0, ...rawRootStats.map((stat) => stat.visits))
+    const rootStats = rawRootStats.map((stat) => ({ ...stat, comparisonVisits }))
     const visited = rootStats
       .map((stat) => ({ stat, action: rootChoices.get(stat.key) }))
       .filter(
@@ -1728,9 +1820,10 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         .map(({ stat }) => stat.key)
     )
     for (const { stat, action } of visited) {
-      let continuation = sampledContinuation(sampledTurnLines.get(stat.key)) ?? [
-        action.command
-      ]
+      let continuation = sampledContinuation(
+        sampledTurnLines.get(stat.key),
+        comparisonVisits
+      ) ?? [action.command]
       let supportedCoinPayoff:
         | {
             readonly commands: readonly TurnMatchCommand[]
@@ -1780,10 +1873,11 @@ export class LocalAiDecisionApi implements AiDecisionApi {
           })
         const payoffs = sampledLines.filter((line) => line.penalty === 0)
         const bestPayoff = payoffs
-          .filter((line) => line.visits >= 2)
+          .filter((line) => estimateExpertContinuation(line, stat).supported)
           .sort(
             (left, right) =>
-              right.valueSum / right.visits - left.valueSum / left.visits ||
+              estimateExpertContinuation(right, stat).value -
+                estimateExpertContinuation(left, stat).value ||
               left.commands.length - right.commands.length ||
               right.visits - left.visits
           )[0]
@@ -1818,8 +1912,12 @@ export class LocalAiDecisionApi implements AiDecisionApi {
             ? [supportedCoinPayoff]
             : []
           : [...(sampledTurnLines.get(stat.key)?.values() ?? [])]
-              .filter((line) => line.visits >= 2)
-              .sort((a, b) => b.valueSum / b.visits - a.valueSum / a.visits)
+              .filter((line) => estimateExpertContinuation(line, stat).supported)
+              .sort(
+                (a, b) =>
+                  estimateExpertContinuation(b, stat).value -
+                  estimateExpertContinuation(a, stat).value
+              )
               .slice(0, 3)
         const candidates = lines.length
           ? lines
@@ -1851,7 +1949,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
             )
           )
           if (penalty > 0) continue
-          const value = line.valueSum / line.visits
+          const value = estimateExpertContinuation(line, stat).value
           if (!best || value > best.value)
             best = { value, commands: supported.commands }
         }
@@ -1862,7 +1960,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
           // A rejected follow-up does not make the opening move itself bad.
           // Remove its optimistic line support and replan after the root action.
           continuation = [action.command]
-          reviewedLineValues.set(stat.key, mctsRootRecommendationScore(stat))
+          reviewedLineValues.set(stat.key, expertRootRecommendationValue(stat))
         }
       }
       const immediateOutcome = rootTerminalOutcomes.get(stat.key)
@@ -1907,7 +2005,10 @@ export class LocalAiDecisionApi implements AiDecisionApi {
           if (checked.reply === 'clear' && checked.outcome === 'ongoing') {
             continuation = complete
             inspection = checked
-            reviewedLineValues.set(stat.key, sample.valueSum / sample.visits)
+            reviewedLineValues.set(
+              stat.key,
+              estimateExpertContinuation(sample, stat).value
+            )
           }
         }
       }
@@ -1956,7 +2057,7 @@ export class LocalAiDecisionApi implements AiDecisionApi {
           inspection = contrary
           reviewedLineValues.set(
             stat.key,
-            certifiedSample.valueSum / certifiedSample.visits
+            estimateExpertContinuation(certifiedSample, stat).value
           )
           certifiedCompletions.add(stat.key)
         }
@@ -1976,13 +2077,15 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       if (inspection?.outcome === 'draw') return 0
       if (inspection?.reply === 'lethal') return -0.925
       const reviewed = reviewedLineValues.get(key)
-      if (reviewed !== undefined) return reviewed
-      const lines = [...(sampledTurnLines.get(key)?.values() ?? [])].filter(
-        (line) => line.visits >= 2
+      if (reviewed !== undefined)
+        return Math.max(expertRootRecommendationValue(fallback), reviewed)
+      const best = bestExpertContinuation(
+        [...(sampledTurnLines.get(key)?.values() ?? [])],
+        fallback
       )
-      return lines.length
-        ? Math.max(...lines.map((line) => line.valueSum / line.visits))
-        : mctsRootRecommendationScore(fallback)
+      return best
+        ? Math.max(expertRootRecommendationValue(fallback), best.estimate.value)
+        : expertRootRecommendationValue(fallback)
     }
     const survivalPreference = (key: string) =>
       publicThreat.reply === 'lethal' &&
@@ -2029,7 +2132,9 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       .map(({ stat, action }) => ({
         ...(() => {
           const selectedLine = rootCandidateContinuations.get(stat.key) ??
-            sampledContinuation(sampledTurnLines.get(stat.key)) ?? [action.command]
+            sampledContinuation(sampledTurnLines.get(stat.key), comparisonVisits) ?? [
+              action.command
+            ]
           const sample = sampledTurnLines
             .get(stat.key)
             ?.get(JSON.stringify(selectedLine.map(canonicalCommandKey)))
@@ -2038,7 +2143,23 @@ export class LocalAiDecisionApi implements AiDecisionApi {
             identicalSupportedContinuation(sample, [
               ...(sampledTurnLines.get(stat.key)?.values() ?? [])
             ])
+          const rootValue = expertRootRecommendationValue(stat)
+          const recommendation = supportedLineValue(stat.key, stat)
+          const preference = rootCandidatePreferenceAdjustments.get(stat.key) ?? 0
+          const risk = rootCandidateRiskAdjustments.get(stat.key) ?? 0
+          const tactical = rootCandidateTacticalPenalties.get(stat.key) ?? 0
           return {
+            ...(sample && selectedLine.length > 1
+              ? { continuationEstimate: estimateExpertContinuation(sample, stat) }
+              : {}),
+            rankingComponents: {
+              root: rootValue,
+              continuationAndOutcome: recommendation - rootValue,
+              preference: -preference,
+              risk: -risk,
+              tactical: -tactical
+            },
+            finalRecommendationValue: recommendation - preference - risk - tactical,
             ...(complete?.commands.at(-1)?.type === 'end-turn' && complete.visits >= 2
               ? {
                   resourceReviewIntents: complete.commands.map((command) =>
@@ -2091,9 +2212,10 @@ export class LocalAiDecisionApi implements AiDecisionApi {
         actionOutcomeReason: rootActionOutcomes.get(stat.key)?.reason
       }))
     const executableSequence = rootCandidateContinuations.get(selected.stat.key) ??
-      sampledContinuation(sampledTurnLines.get(selected.stat.key)) ?? [
-        selected.action.command
-      ]
+      sampledContinuation(
+        sampledTurnLines.get(selected.stat.key),
+        comparisonVisits
+      ) ?? [selected.action.command]
     const executableSequenceLabels = executableSequence.map(
       (command) =>
         rootChoices.get(canonicalCommandKey(command))?.description ??
@@ -2124,6 +2246,9 @@ export class LocalAiDecisionApi implements AiDecisionApi {
       }
     }
     const trace: LocalAiDecisionTrace = {
+      comparisonVisits,
+      sampledChanceLines: tactical.lines.filter((line) => line.sampledChance).length,
+      sampledChanceSeeds: chanceSeedLines.length,
       publicThreatReview: publicThreat.stats,
       boundaryEvaluations,
       orderingReview: { ...inspectOrder.stats },
@@ -2698,9 +2823,14 @@ export class LocalAiDecisionApi implements AiDecisionApi {
 
   private scoreObservation(
     observation: AiObservation,
-    winnerId: TurnMatchState['winnerId'] | undefined
+    winnerId: TurnMatchState['winnerId'] | undefined,
+    ownDeckValue?: number
   ): number {
-    const score = stateScore(observation, this.session.remoteParticipantId)
+    const score = stateScore(
+      observation,
+      this.session.remoteParticipantId,
+      ownDeckValue
+    )
     // Keep terminal outcomes independent of the positional evaluator.
     if (winnerId === this.session.remoteParticipantId)
       return (

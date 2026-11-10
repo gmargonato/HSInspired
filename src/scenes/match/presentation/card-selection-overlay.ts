@@ -155,8 +155,8 @@ export class CardSelectionOverlay extends Container {
     await this.showCards(candidates, [], undefined, false, true, prompt, onCancel)
   }
 
-  /** Shows concealed remote Discover choices while the AI decides. */
-  async showRemoteDiscover(candidates: readonly OpeningCard[]): Promise<void> {
+  /** Shows concealed remote choices without needing their private card identities. */
+  async showRemoteChoices(optionIds: readonly string[]): Promise<void> {
     if (this.destroyed) return
     this.clear()
     const revision = this.requestRevision
@@ -167,9 +167,9 @@ export class CardSelectionOverlay extends Container {
     this.setToggleVisible(false)
     this.syncView()
 
-    const midpoint = (candidates.length - 1) / 2
+    const midpoint = (optionIds.length - 1) / 2
     const remote = GAME_BOARD_LAYOUT.cardSelection.remoteDiscover
-    for (const [index, candidate] of candidates.entries()) {
+    for (const [index, instanceId] of optionIds.entries()) {
       const back = new Sprite(this.options.cardBackTexture)
       back.anchor.set(0.5, 1)
       back.position.set(
@@ -179,7 +179,7 @@ export class CardSelectionOverlay extends Container {
       back.scale.set(remote.scale)
       back.alpha = 0
       back.eventMode = 'none'
-      back.label = `game.card-selection.remote-discover:${candidate.instanceId}`
+      back.label = `game.card-selection.remote-choice:${instanceId}`
       attachShadow(
         back,
         {
@@ -191,7 +191,7 @@ export class CardSelectionOverlay extends Container {
         { restingScale: remote.scale, restingHeight: remote.shadowHeight }
       )
       this.cardsLayer.addChild(back)
-      this.remoteEntries.push({ instanceId: candidate.instanceId, view: back })
+      this.remoteEntries.push({ instanceId, view: back })
     }
 
     if (this.destroyed || revision !== this.requestRevision) return
@@ -207,16 +207,15 @@ export class CardSelectionOverlay extends Container {
     )
   }
 
-  /** Resolves a concealed remote Discover and optionally hands its back to the remote hand. */
-  async resolveRemoteDiscover(
+  /** Resolves a concealed choice, optionally handing its back to the remote hand. */
+  async resolveRemoteChoice(
     selectedInstanceId: string,
-    destination: {
+    destination?: {
       readonly x: number
       readonly y: number
       readonly scale: number
       readonly rotation: number
-    },
-    keepSelected: boolean
+    }
   ): Promise<Sprite | null> {
     if (this.destroyed) return null
     const selected = this.remoteEntries.find(
@@ -239,7 +238,7 @@ export class CardSelectionOverlay extends Container {
     }
 
     const selection = this.animationScope.timeline()
-    if (keepSelected) {
+    if (destination) {
       selection.to(selected.view, {
         x: destination.x,
         y: destination.y,
@@ -266,7 +265,7 @@ export class CardSelectionOverlay extends Container {
     }
     await completeTimeline(selection)
     if (this.destroyed || revision !== this.requestRevision) return null
-    if (!keepSelected) {
+    if (!destination) {
       this.clear()
       return null
     }

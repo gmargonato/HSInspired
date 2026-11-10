@@ -35,6 +35,28 @@ function markersForTrigger(trigger: CardTrigger) {
 }
 
 describe('board ability markers', () => {
+  it('swaps Sherazin deathrattle and revival markers through repeated dormant cycles', () => {
+    const definition = CARD_CATALOG.require('journey_to_ungoro_sherazin_corpse_flower')
+    const minion = {
+      instanceId: 'sherazin',
+      cardId: definition.id,
+      attack: 6,
+      health: 3,
+      maxHealth: 3,
+      keywords: [],
+      summonedOnTurn: 1,
+      lastAttackedOnTurn: null
+    } as BoardMinion
+    for (const dormant of [false, true, false, true, false]) {
+      expect(
+        boardMinionAbilityMarkers({ ...minion, dormant }, definition, 3)
+      ).toMatchObject({
+        deathrattle: !dormant,
+        trigger: dormant
+      })
+    }
+  })
+
   it('removes Ancient of Yore dormant-only markers on awakening', () => {
     const definition = CARD_CATALOG.require('future_past_ancient_of_yore')
     const minion = {
@@ -264,8 +286,11 @@ describe('board ability markers', () => {
     'on-cast',
     'on-damage',
     'on-death',
+    'on-divine-shield-lost',
+    'on-freeze',
     'on-gain-armor',
     'on-heal',
+    'on-overload',
     'on-secret-played',
     'on-secret-revealed',
     'on-summon',
@@ -294,6 +319,46 @@ describe('board ability markers', () => {
   it('excludes source-play Overload and deferred Poison visuals', () => {
     expect(markers('classic_doomhammer').trigger).toBe(false)
     expect(markers('classic_emperor_cobra').trigger).toBe(false)
+  })
+
+  it.each([
+    'blackrock_mountain_chromaggus',
+    'future_past_puppetmaster_dorian',
+    'knights_of_the_frozen_throne_moorabi',
+    'knights_of_the_frozen_throne_bolvar_fireblood',
+    'league_of_explorers_tunnel_trogg',
+    'mean_streets_of_gadgetzan_daring_reporter',
+    'one_night_in_karazhan_malchezaars_imp',
+    'the_grand_tournament_shadowfiend',
+    'the_grand_tournament_tiny_knight_of_evil',
+    'knights_of_the_frozen_throne_lights_sorrow'
+  ])('shows the persistent board trigger for %s', (id) => {
+    const definition = CARD_CATALOG.require(id)
+    expect(boardAbilityMarkers(definition).trigger).toBe(true)
+    if (definition.type !== 'Minion') return
+    const minion = {
+      instanceId: id,
+      cardId: definition.id,
+      attack: definition.attack,
+      health: definition.health,
+      maxHealth: definition.health,
+      keywords: definition.keywords,
+      summonedOnTurn: 1,
+      lastAttackedOnTurn: null
+    } as BoardMinion
+    expect(boardMinionAbilityMarkers(minion, definition, 2).trigger).toBe(true)
+    expect(
+      boardMinionAbilityMarkers({ ...minion, silenced: true }, definition, 2).trigger
+    ).toBe(false)
+  })
+
+  it.each([
+    'goblins_vs_gnomes_flame_leviathan',
+    'the_grand_tournament_sea_reaver',
+    'journey_to_ungoro_clutchmother_zavas',
+    'one_night_in_karazhan_silverware_golem'
+  ])('keeps source-only draw and discard effects off the board for %s', (id) => {
+    expect(markers(id).trigger).toBe(false)
   })
 
   it('uses authored Poisonous and Stealth indicators instead of temporary labels', () => {

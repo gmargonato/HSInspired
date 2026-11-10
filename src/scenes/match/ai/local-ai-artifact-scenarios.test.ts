@@ -25,6 +25,10 @@ import { aiActions } from './ai-context'
 import { GameBoardSession } from '../game-board-session'
 import { LocalAiDecisionApi } from './local-ai-decision-api'
 import { expertDrawPreference } from './expert-draw-preference'
+import {
+  expertDeckResourceValue,
+  expertResurrectionValue
+} from './expert-resource-evaluation'
 import { wastesImmediateTemporaryMana } from './expert-temporary-mana'
 import { unpaidActionPenalty } from './expert-ai-action-safety'
 import {
@@ -39,6 +43,185 @@ import {
   expertContinuationPenalty,
   evaluateExpertBoundary
 } from './expert-action-outcome'
+
+describe('Expert Shaman resource regressions', () => {
+  const base: AiFixtureOptions = {
+    seed: 20261109,
+    aiHeroId: 'thrall',
+    opponentHeroId: 'guldan',
+    aiMana: 10,
+    aiMaximumMana: 10,
+    turnNumber: 19
+  }
+
+  it('penalizes empty Volcano while preserving its actual damage payoff', () => {
+    for (const enemy of [false, true]) {
+      const session = createSession({
+        ...base,
+        aiHand: ['journey_to_ungoro_volcano'],
+        opponentBoard: enemy ? [{ cardId: 'basic_chillwind_yeti' }] : []
+      })
+      const command = playCommand(session, 'journey_to_ungoro_volcano')
+      const before = session.match.getCheckpoint()
+      const outcome = createExpertActionInspector(
+        before,
+        session.remoteParticipantId
+      )(command)
+      expect(outcome.penalty).toBe(enemy ? 0 : 0.35)
+      expect(session.match.getCheckpoint()).toEqual(before)
+    }
+  })
+
+  it('penalizes zero-heal Joust on a healthy minion, but preserves healing', () => {
+    for (const health of [2, 4]) {
+      const session = createSession({
+        ...base,
+        aiHand: ['the_grand_tournament_healing_wave'],
+        aiBoard: [{ cardId: 'basic_chillwind_yeti', health, maxHealth: 4 }]
+      })
+      const command = playCommand(
+        session,
+        'the_grand_tournament_healing_wave',
+        (target) =>
+          target.kind === 'minion' &&
+          target.participantId === session.remoteParticipantId
+      )
+      expect(
+        createExpertActionInspector(
+          session.match.getCheckpoint(),
+          session.remoteParticipantId
+        )(command).penalty
+      ).toBe(health === 4 ? 0.35 : 0)
+    }
+  })
+
+  it('preserves an empty Overload cast with a real buff and a zero-heal minion with a body', () => {
+    for (const cardId of [
+      'classic_lightning_storm',
+      'mean_streets_of_gadgetzan_jinyu_waterspeaker'
+    ]) {
+      const session = createSession({
+        ...base,
+        aiHand: [cardId],
+        aiBoard:
+          cardId === 'classic_lightning_storm'
+            ? [{ cardId: 'classic_unbound_elemental' }]
+            : []
+      })
+      const command = playCommand(session, cardId)
+      expect(
+        createExpertActionInspector(
+          session.match.getCheckpoint(),
+          session.remoteParticipantId
+        )(command).penalty
+      ).toBe(0)
+    }
+  })
+
+  it('values known remaining resources without relying on their order or concealed generated identities', () => {
+    const cards = [
+      { cardId: 'classic_sylvanas_windrunner', startedInDeck: true },
+      { cardId: 'classic_wisp', startedInDeck: true }
+    ]
+    expect(expertDeckResourceValue(cards, 'ai')).toBe(
+      expertDeckResourceValue([...cards].reverse(), 'ai')
+    )
+    expect(expertDeckResourceValue(cards, 'ai')).toBeGreaterThan(
+      expertDeckResourceValue(cards.slice(1), 'ai')
+    )
+    expect(
+      expertDeckResourceValue([{ cardId: 'classic_sylvanas_windrunner' }], 'ai')
+    ).toBe(expertDeckResourceValue([{ cardId: 'classic_wisp' }], 'ai'))
+  })
+
+  it('prices Harrison overflow while retaining weapon removal and keeping safe draws unpenalized', () => {
+    for (const full of [false, true]) {
+      const session = createSession({
+        ...base,
+        aiHand: [
+          'classic_harrison_jones',
+          ...Array(full ? 9 : 0).fill('basic_chillwind_yeti')
+        ],
+        aiDeck: Array(9).fill('classic_wisp'),
+        opponentWeapon: { cardId: 'classic_blood_fury', durability: 7 }
+      })
+      const command = playCommand(session, 'classic_harrison_jones')
+      expect(
+        createExpertActionInspector(
+          session.match.getCheckpoint(),
+          session.remoteParticipantId
+        )(command).penalty
+      ).toBe(full ? 0.25 : 0)
+      expect(
+        session.match.analyze(
+          (fork) =>
+            fork
+              .dispatch(command)
+              .state.players.find(
+                (player) => player.participantId === session.localParticipantId
+              )!.weapon
+        )
+      ).toBeNull()
+    }
+  })
+
+  it('values a resurrection pool only while its payoff is held and accessible', () => {
+    const value = (options: Partial<AiFixtureOptions>) => {
+      const session = createSession({ ...base, ...options })
+      return expertResurrectionValue(
+        session.getAiObservation().players.find((player) => player.role === 'self')!
+      )
+    }
+    const pool = { aiGraveyard: [{ cardId: 'naxxramas_sludge_belcher' }] }
+    expect(value(pool)).toBe(0)
+    expect(
+      value({ ...pool, aiHand: ['whispers_of_the_old_gods_nzoth_the_corruptor'] })
+    ).toBeGreaterThan(0)
+    expect(
+      value({
+        ...pool,
+        aiHand: ['whispers_of_the_old_gods_nzoth_the_corruptor'],
+        aiMana: 4,
+        aiMaximumMana: 4
+      })
+    ).toBe(0)
+  })
+
+  it('develops a body after Far Sight instead of spending Volcano on an empty board', async () => {
+    const session = createSession({
+      ...base,
+      aiHealth: 4,
+      opponentHealth: 13,
+      opponentReplacementHeroId: 'jaraxxus',
+      aiMana: 7,
+      aiHand: [
+        'classic_lightning_storm',
+        'journey_to_ungoro_volcano',
+        'naxxramas_sludge_belcher',
+        'whispers_of_the_old_gods_nzoth_the_corruptor',
+        { cardId: 'classic_cairne_bloodhoof', currentCost: 3 }
+      ],
+      aiDeck: [],
+      opponentDeck: Array(16).fill('classic_wisp'),
+      opponentHand: Array(8).fill('classic_wisp')
+    })
+    const volcano = aiPlayer(session).hand.find(
+      (card) => card.cardId === 'journey_to_ungoro_volcano'
+    )!
+    const actions = await runAiTurn(session, 5)
+    expect(
+      actions.some(
+        (command) =>
+          command.type === 'play-card' && command.cardInstanceId === volcano.instanceId
+      )
+    ).toBe(false)
+    expect(
+      aiPlayer(session).board.some((minion) =>
+        ['naxxramas_sludge_belcher', 'classic_cairne_bloodhoof'].includes(minion.cardId)
+      )
+    ).toBe(true)
+  }, 60_000)
+})
 
 describe('Expert early draw preference', () => {
   const base: AiFixtureOptions = {
@@ -122,6 +305,31 @@ describe('Expert early draw preference', () => {
         expertDrawPreference(fork, session.remoteParticipantId, command)
       )
     ).toBe(0)
+  })
+
+  it('does not promote filling the hand ahead of a visible Mana Tide draw', () => {
+    const session = createSession({
+      ...base,
+      aiHeroId: 'thrall',
+      aiMana: 7,
+      aiHand: [
+        'the_grand_tournament_ancestral_knowledge',
+        ...Array(8).fill('basic_chillwind_yeti')
+      ],
+      aiBoard: [{ cardId: 'classic_mana_tide_totem' }]
+    })
+    const command = playCommand(session, 'the_grand_tournament_ancestral_knowledge')
+    expect(
+      session.match.analyze((fork) =>
+        expertDrawPreference(fork, session.remoteParticipantId, command)
+      )
+    ).toBe(0)
+    expect(
+      createExpertActionInspector(
+        session.match.getCheckpoint(),
+        session.remoteParticipantId
+      )(command).reason
+    ).toBe('draw-overflow')
   })
 
   it('takes guaranteed lethal before a safe draw', async () => {
@@ -10015,7 +10223,7 @@ describe('Yore sweep adverse target regressions', () => {
       expect(
         createExpertActionInspector(before, session.remoteParticipantId)(selfHeal)
           .penalty
-      ).toBe(0)
+      ).toBe(0.35)
       expect(session.match.getCheckpoint()).toEqual(before)
     }
   )
@@ -10258,7 +10466,7 @@ describe('Yore sweep adverse target regressions', () => {
     }
   )
 
-  it('preserves a full-health joust used only for its public reveal', () => {
+  it('penalizes a full-health joust used only for its public reveal', () => {
     const session = createSession({
       seed: 2026110321,
       aiHeroId: 'thrall',
@@ -10277,7 +10485,7 @@ describe('Yore sweep adverse target regressions', () => {
         session.match.getCheckpoint(),
         session.remoteParticipantId
       )(command).penalty
-    ).toBe(0)
+    ).toBe(0.35)
   })
 
   it.each(['drawWonCard', 'returnSourceFromGraveyard'])(

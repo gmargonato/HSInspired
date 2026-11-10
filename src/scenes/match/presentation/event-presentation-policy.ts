@@ -54,7 +54,8 @@ export const EVENT_PRESENTATION_POLICY: Readonly<
   'trigger-activated': 'animation',
   'death-batch-started': 'animation',
   'death-batch-completed': 'state-refresh',
-  'minion-summoned': 'animation'
+  'minion-summoned': 'animation',
+  'minion-went-dormant': 'animation'
 }
 
 export function eventPresentationPolicy(type: EventType): EventPresentationPolicy {

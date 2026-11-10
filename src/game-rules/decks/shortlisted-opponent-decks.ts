@@ -2,35 +2,6 @@
  * Kept separate from historical adaptations; registration follows card validation. */
 export const SHORTLISTED_OPPONENT_DECK_DEFINITIONS = [
   {
-    id: 'shortlist-dragon-hand-ramp-druid',
-    name: 'Dragon-hand Ramp Druid',
-    deckName: 'Dragon Ramp',
-    classId: 'Druid',
-    source: {
-      title: 'HSInspired first pass deck selections, 5 November 2026',
-      url: 'docs/shortlist-ai-evaluation.md',
-      format: 'wild-legal'
-    },
-    plan: 'Keep early ramp and a Dragon activator. Develop Whelp, retain another Dragon for Breath/Nestmatron, refill with Nourish/Azure Drake/Explorer, then turn retained Dragons into a Golem board. Earthen Scales and Primordial Drake stabilize; repeated large Taunt boards close.',
-    cardList: {
-      Innervate: 2,
-      'Azure Drake': 2,
-      'Wild Growth': 2,
-      Swipe: 2,
-      'Breath of Dreams': 2,
-      'Emerald Explorer': 2,
-      Wrath: 2,
-      'Dragon Golem': 2,
-      'Splish-Splash Whelp': 2,
-      Nourish: 2,
-      'Faerie Dragon': 2,
-      'Primordial Drake': 2,
-      'Twilight Drake': 2,
-      'Earthen Scales': 2,
-      'Desert Nestmatron': 2
-    }
-  },
-  {
     id: 'shortlist-original-libram-paladin',
     name: 'Original Libram Paladin',
     deckName: 'Libram Paladin',
@@ -58,94 +29,6 @@ export const SHORTLISTED_OPPONENT_DECK_DEFINITIONS = [
       'Sunkeeper Tarim': 1,
       'Aldor Truthseeker': 2,
       'Tirion Fordring': 1
-    }
-  },
-  {
-    id: 'shortlist-showdown-giant-paladin',
-    name: 'Showdown Giant Paladin',
-    deckName: 'Showdown Giants',
-    classId: 'Paladin',
-    source: {
-      title: 'HSInspired first pass deck selections, 5 November 2026',
-      url: 'docs/shortlist-ai-evaluation.md',
-      format: 'wild-legal'
-    },
-    plan: 'Build small sticky boards. Showdown creates six bodies, discounting Sea Giant and Prismatic Beam; sequence Beam before trading away enemy tokens if preserving its discount matters. Rush Outlaws/Ducklings trade while leaving your attackers. Busy-Bot grows recruits/Ducklings; Steward protects 1-Health summons. Giant or surviving buffed minions plus Battlemaster close the game. Solemn Vigil refills after a trading turn.',
-    cardList: {
-      'Righteous Protector': 2,
-      'Hi Ho Silverwing': 2,
-      'Lost in the Jungle': 2,
-      'Gold Panner': 2,
-      'Shielded Minibot': 2,
-      'Mother Duck': 2,
-      'Muster for Battle': 2,
-      'Busy-Bot': 2,
-      'Showdown!': 2,
-      'Steward of Darkshire': 2,
-      'Prismatic Beam': 2,
-      'Blessing of Kings': 2,
-      'Sea Giant': 2,
-      'Sunkeeper Tarim': 1,
-      'Solemn Vigil': 2,
-      'Battleground Battlemaster': 1
-    }
-  },
-  {
-    id: 'shortlist-glowfly-token-druid',
-    name: 'Glowfly Token Druid',
-    deckName: 'Glowfly Druid',
-    classId: 'Druid',
-    source: {
-      title: 'HSInspired first pass deck selections, 5 November 2026',
-      url: 'docs/shortlist-ai-evaluation.md',
-      format: 'wild-legal'
-    },
-    plan: 'Sticky early minions and spell-created boards set up Lotus/Power/Roar. Twenty-six spells keep Glowfly meaningful without imposing a zero-minion restriction that has lost its draw payoff. Nourish is the main refill. Authored Force of Nature plus Roar remains 14 empty-board burst for nine mana when the hero can attack.',
-    cardList: {
-      Innervate: 2,
-      'Soul of the Forest': 2,
-      'Living Roots': 2,
-      Swipe: 2,
-      'Mark of the Lotus': 2,
-      'Glowfly Swarm': 2,
-      'Power of the Wild': 2,
-      'Force of Nature': 2,
-      'Dreamway Guardians': 2,
-      Nourish: 2,
-      Wrath: 2,
-      Acornbearer: 2,
-      'Wild Growth': 2,
-      'Lingering Zombie': 2,
-      'Savage Roar': 2
-    }
-  },
-  {
-    id: 'shortlist-beast-swarm-hunter',
-    name: 'Beast Swarm Hunter',
-    deckName: 'Beast Swarm',
-    classId: 'Hunter',
-    source: {
-      title: 'HSInspired first pass deck selections, 5 November 2026',
-      url: 'docs/shortlist-ai-evaluation.md',
-      format: 'wild-legal'
-    },
-    plan: 'Early Beasts support Razormaw/Houndmaster buffs and Hyena growth. Springpaw and Awakening Tremors supply additional cheap Beasts. Buzzard refills on summon turns, Ingenuity draws and buffs a Beast, and Rhino/Highmane provide pressure and reach alongside Kill Command.',
-    cardList: {
-      Alleycat: 2,
-      'Awakening Tremors': 2,
-      Springpaw: 2,
-      'Adorable Infestation': 2,
-      'Starving Buzzard': 2,
-      'Unleash the Hounds': 2,
-      'Scavenging Hyena': 2,
-      'Kill Command': 2,
-      'Crackling Razormaw': 2,
-      'Timber Wolf': 2,
-      'Kindly Grandmother': 2,
-      'Tundra Rhino': 2,
-      Houndmaster: 2,
-      'Savannah Highmane': 2,
-      "Scavenger's Ingenuity": 2
     }
   },
   {
@@ -179,35 +62,6 @@ export const SHORTLISTED_OPPONENT_DECK_DEFINITIONS = [
     }
   },
   {
-    id: 'shortlist-shark-swarm-mech-mage',
-    name: 'Shark Swarm Mech Mage',
-    deckName: 'Shark Mechs',
-    classId: 'Mage',
-    source: {
-      title: 'HSInspired first pass deck selections, 5 November 2026',
-      url: 'docs/shortlist-ai-evaluation.md',
-      format: 'wild-legal'
-    },
-    plan: 'Discount a hand of Mechs, establish Shark/Automaton, then chain cheap Mechs into random damage and scaling. Sticky Mechs keep pressure and trigger Shark again on token summons. Blastmage wins board swings; Fireball closes and Gorillabot refills.',
-    cardList: {
-      'Click-Clocker': 2,
-      'Mecha-Shark': 2,
-      Mecharoo: 2,
-      'Seafloor Gateway': 2,
-      'Clockwork Gnome': 2,
-      'Harvest Golem': 2,
-      Mechwarper: 2,
-      'Piloted Shredder': 2,
-      Galvanizer: 2,
-      'Goblin Blastmage': 2,
-      'Security Automaton': 2,
-      Fireball: 2,
-      Snowchugger: 2,
-      'Gorillabot A-3': 2,
-      'Annoy-o-Tron': 2
-    }
-  },
-  {
     id: 'shortlist-charge-handbuff-paladin',
     name: 'Charge Handbuff Paladin',
     deckName: 'Charge Handbuff',
@@ -234,36 +88,6 @@ export const SHORTLISTED_OPPONENT_DECK_DEFINITIONS = [
       "Painter's Virtue": 2,
       'Argent Commander': 2,
       'Southsea Deckhand': 2
-    }
-  },
-  {
-    id: 'shortlist-pirate-oil-rogue',
-    name: 'Pirate Oil Rogue',
-    deckName: 'Pirate Oil',
-    classId: 'Rogue',
-    source: {
-      title: 'HSInspired first pass deck selections, 5 November 2026',
-      url: 'docs/shortlist-ai-evaluation.md',
-      format: 'wild-legal'
-    },
-    plan: 'Use cheap Pirates and dagger attacks for early tempo, then tutor with Combo Raiding Party. Weapon buffs turn Cutting Class and Dread Corsair cheap, and Oil/Blade Flurry supply burst. Prize Plunderer rewards cheap-card sequencing and removes blockers. Shadowblade allows a safe initial weapon trade through Battlecry Immune. This relies on the supplied custom/old balance baseline: Preparation discounts by 3, Patches has Charge and 2-mana Blade Flurry hits all enemies including the hero.',
-    cardList: {
-      Preparation: 2,
-      'Blade Flurry': 2,
-      'Deadly Poison': 2,
-      Eviscerate: 2,
-      'Southsea Deckhand': 2,
-      'Hench-Clan Thug': 2,
-      'Small-Time Buccaneer': 2,
-      "Tinker's Sharpsword Oil": 2,
-      'Dread Corsair': 2,
-      'Prize Plunderer': 2,
-      'Raiding Party': 2,
-      Backstab: 2,
-      Shadowblade: 2,
-      'Patches the Pirate': 1,
-      'Cutting Class': 2,
-      'Captain Greenskin': 1
     }
   },
   {

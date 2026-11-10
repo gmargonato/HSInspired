@@ -1,4 +1,5 @@
 import { CARD_CATALOG } from '../../../game-rules/content'
+import { predictableEndTurnDraws } from './expert-resource-evaluation'
 import type {
   OpeningMatchAnalysis,
   PlayerId,
@@ -57,6 +58,13 @@ export function expertDrawPreference(
     if ((!draws && !generates) || ownEvents.some((e) => e.type === 'card-burned'))
       return 0
     const after = result.state.players.find((p) => p.participantId === actorId)!
+    // A preference, not a ban: urgent removal or a needed answer may justify drawing.
+    if (
+      draws &&
+      (after.hand.length + predictableEndTurnDraws(after) + 1 > 10 ||
+        after.deck.length < predictableEndTurnDraws(after))
+    )
+      return 0
     // Multi-draw fatigue can occur even when the first draw succeeds.
     if (after.fatigueDamage > before.fatigueDamage || after.mana.available <= 0)
       return 0

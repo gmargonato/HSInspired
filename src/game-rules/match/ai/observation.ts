@@ -191,6 +191,9 @@ export function createAiObservation(
               : {}),
             options: state.pendingCardChoice.options.map((option) => ({
               choice: option.choice,
+              ...(option.legalTargetOptions
+                ? { legalTargetOptions: option.legalTargetOptions }
+                : {}),
               label: option.label,
               ...(option.presentationCardId !== undefined
                 ? { presentationCardId: option.presentationCardId }

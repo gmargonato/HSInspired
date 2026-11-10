@@ -2427,11 +2427,17 @@
     "effects": [
       {
         "trigger": "deathrattle",
-        "actions": [{ "action": "go-dormant" }]
+        "actions": [
+          {
+            "action": "go-dormant",
+            "cardId": "journey_to_ungoro_sherazin_corpse_flower"
+          }
+        ]
       },
       {
         "trigger": "on-card-played",
-        "event": { "type": "card-played", "controller": "self" },
+        "event": { "type": "card-resolved", "controller": "self" },
+        "whileDormant": true,
         "actions": [{ "action": "revive-dormant" }]
       }
     ],

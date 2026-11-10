@@ -865,90 +865,93 @@
     "effects": [
       {
         "trigger": "battlecry",
-        "choice": {
-          "options": [
-            {
-              "presentationCardId": "future_past_freeze_the_shop",
-              "actions": [
-                {
-                  "action": "freeze",
-                  "target": {
-                    "controller": "opponent",
-                    "type": "minion",
-                    "selection": "all"
-                  },
-                  "vfx": "frost-blast-enemy-board"
-                }
-              ]
-            },
-            {
-              "presentationCardId": "future_past_recruit_a_minion",
-              "actions": [
-                {
-                  "action": "copy",
-                  "target": {
-                    "controller": "opponent",
-                    "type": "minion",
-                    "selection": "chosen"
-                  },
-                  "destination": "hand"
-                },
-                {
-                  "action": "add-to-hand",
-                  "player": "opponent",
-                  "cardId": "basic_the_coin",
-                  "count": 3
-                }
-              ]
-            },
-            {
-              "presentationCardId": "future_past_refresh_the_tavern",
-              "actions": [
-                {
-                  "action": "discover",
-                  "player": "self",
-                  "source": "random-card",
-                  "filter": {
-                    "cardType": "Minion",
-                    "cost": 3
-                  },
-                  "count": 3
-                },
-                {
-                  "action": "refresh-mana",
-                  "player": "self",
-                  "amount": 3
-                }
-              ]
-            },
-            {
-              "presentationCardId": "future_past_find_a_triple",
-              "actions": [
-                {
-                  "action": "draw",
-                  "player": "self",
-                  "count": 1,
-                  "source": {
-                    "controller": "self",
-                    "type": "minion-card",
-                    "selection": "random",
-                    "zone": "deck",
-                    "count": 1
+        "actions": [
+          {
+            "action": "choose-effect",
+            "options": [
+              {
+                "presentationCardId": "future_past_freeze_the_shop",
+                "actions": [
+                  {
+                    "action": "freeze",
+                    "target": {
+                      "controller": "opponent",
+                      "type": "minion",
+                      "selection": "all"
+                    },
+                    "vfx": "frost-blast-enemy-board"
                   }
-                },
-                {
-                  "action": "copy",
-                  "target": {
-                    "type": "drawn-card",
-                    "selection": "all"
+                ]
+              },
+              {
+                "presentationCardId": "future_past_recruit_a_minion",
+                "actions": [
+                  {
+                    "action": "copy",
+                    "target": {
+                      "controller": "opponent",
+                      "type": "minion",
+                      "selection": "chosen"
+                    },
+                    "destination": "hand"
                   },
-                  "destination": "hand",
-                  "count": 2
-                }
-              ]
-            }
-          ]
-        }
+                  {
+                    "action": "add-to-hand",
+                    "player": "opponent",
+                    "cardId": "basic_the_coin",
+                    "count": 3
+                  }
+                ]
+              },
+              {
+                "presentationCardId": "future_past_refresh_the_tavern",
+                "actions": [
+                  {
+                    "action": "discover",
+                    "player": "self",
+                    "source": "random-card",
+                    "filter": {
+                      "cardType": "Minion",
+                      "cost": 3
+                    },
+                    "count": 3
+                  },
+                  {
+                    "action": "refresh-mana",
+                    "player": "self",
+                    "amount": 3
+                  }
+                ]
+              },
+              {
+                "presentationCardId": "future_past_find_a_triple",
+                "actions": [
+                  {
+                    "action": "draw",
+                    "player": "self",
+                    "count": 1,
+                    "source": {
+                      "controller": "self",
+                      "type": "minion-card",
+                      "selection": "random",
+                      "zone": "deck",
+                      "count": 1
+                    }
+                  },
+                  {
+                    "action": "copy",
+                    "target": {
+                      "type": "drawn-card",
+                      "selection": "all"
+                    },
+                    "destination": "hand",
+                    "count": 2
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       }
     ],
     "collectible": true,

@@ -74,6 +74,7 @@ export interface SemanticEvent {
 }
 
 export interface EffectFrame {
+  battlecryRepetition?: { repetition: number; repetitions: number }
   /** Scoped by the runtime; never changes rules, entity IDs, or RNG. */
   summonGroupId?: string
   readonly source: EntityRef

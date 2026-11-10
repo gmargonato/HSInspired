@@ -12,16 +12,16 @@ const normalize = (name: string): string =>
     .toLowerCase()
 
 describe('approved shortlist AI deck registration', () => {
-  it('adds exactly thirteen thirty-card lists without removing the original thirty-six', () => {
-    expect(SHORTLISTED_OPPONENT_DECK_DEFINITIONS).toHaveLength(13)
-    expect(CURATED_OPPONENT_DECKS).toHaveLength(49)
+  it('retains exactly seven shortlisted lists alongside twenty legacy decks', () => {
+    expect(SHORTLISTED_OPPONENT_DECK_DEFINITIONS).toHaveLength(7)
+    expect(CURATED_OPPONENT_DECKS).toHaveLength(27)
     expect(
-      CURATED_OPPONENT_DECKS.slice(0, 36).every(
+      CURATED_OPPONENT_DECKS.slice(0, 20).every(
         ({ definition }) => !definition.id.startsWith('shortlist-')
       )
     ).toBe(true)
     expect(
-      CURATED_OPPONENT_DECKS.slice(36).map(({ definition }) => definition.id)
+      CURATED_OPPONENT_DECKS.slice(20).map(({ definition }) => definition.id)
     ).toEqual(SHORTLISTED_OPPONENT_DECK_DEFINITIONS.map(({ id }) => id))
   })
 

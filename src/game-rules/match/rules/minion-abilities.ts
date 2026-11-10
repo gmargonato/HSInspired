@@ -33,8 +33,11 @@ const IN_PLAY_TRIGGER_TYPES: ReadonlySet<CardTrigger> = new Set([
   'on-cast',
   'on-damage',
   'on-death',
+  'on-divine-shield-lost',
+  'on-freeze',
   'on-gain-armor',
   'on-heal',
+  'on-overload',
   'on-secret-played',
   'on-secret-revealed',
   'on-summon',
@@ -47,6 +50,27 @@ function isPoisonEffect(effect: CardEffectBlock): boolean {
     effect.trigger === 'on-damage' &&
     (effect.actions ?? []).some((action) => action.action === 'destroy')
   )
+}
+
+function isInPlayTriggerEffect(effect: CardEffectBlock): boolean {
+  if (effect.activeZone === 'hand' || isPoisonEffect(effect)) return false
+  if (effect.trigger === 'on-draw' || effect.trigger === 'on-discard') {
+    const target = effect.event?.target
+    const targetsSource =
+      target !== null &&
+      typeof target === 'object' &&
+      'selection' in target &&
+      target.selection === 'source'
+    if (targetsSource) return false
+    // Drawing this card is distinct from a board ability listening to draws.
+    // Discarding this card uses an explicit source target in authored effects.
+    return (
+      effect.trigger === 'on-discard' ||
+      effect.activeZone === 'board' ||
+      effect.event?.controller !== undefined
+    )
+  }
+  return IN_PLAY_TRIGGER_TYPES.has(effect.trigger)
 }
 
 /**
@@ -78,9 +102,8 @@ export function boardAbilityMarkers(
   const aura = definition.auraVisual === true
   const inspire = definition.effects.some((effect) => effect.trigger === 'inspire')
   const trigger =
-    definition.effects.some(
-      (effect) => IN_PLAY_TRIGGER_TYPES.has(effect.trigger) && !isPoisonEffect(effect)
-    ) || keywords.has('attack-wrong-enemy-chance-50')
+    definition.effects.some(isInPlayTriggerEffect) ||
+    keywords.has('attack-wrong-enemy-chance-50')
 
   return {
     taunt: keywords.has('taunt'),
@@ -203,8 +226,9 @@ export function boardMinionAbilityMarkers(
       new Set(effectiveBoardMinionKeywords(minion, turnNumber)).has('poisonous'),
     inspire: authored.inspire || grantedInspire,
     deathrattle:
-      authored.deathrattle ||
-      grantedDeathrattle ||
-      (minion.deathrattles?.length ?? 0) > 0
+      !minion.dormant &&
+      (authored.deathrattle ||
+        grantedDeathrattle ||
+        (minion.deathrattles?.length ?? 0) > 0)
   }
 }

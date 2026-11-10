@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { asCardId } from '../../../game-rules/content/cards'
 import { enumerateLegalCommands } from '../../../game-rules/match/ai'
 import type { TurnMatchCommand } from '../../../game-rules/match'
+import { asPlayerId } from '../../../game-rules/match/match-types'
 import { createMatchScenario } from '../../../game-rules/match/testing/match-scenario-builder'
 import {
   createAiFixture,
@@ -15,9 +16,76 @@ import { GameBoardSession } from '../game-board-session'
 import { LocalAiDecisionApi } from './local-ai-decision-api'
 import { expertResourceSetupPreference } from './expert-resource-preference'
 import { expertSingletonCleanupSeeds } from './expert-cleanup-seeds'
+import {
+  bestExpertContinuation,
+  estimateExpertContinuation
+} from './expert-continuation-value'
 
 // Fixed search work makes shared-policy assertions independent of CPU speed.
 vi.setConfig({ testTimeout: 30_000 })
+
+describe('Expert continuation confidence', () => {
+  const commands: TurnMatchCommand[] = [
+    { type: 'end-turn', participantId: asPlayerId('sample-self') },
+    { type: 'end-turn', participantId: asPlayerId('sample-self') }
+  ]
+  const root = { visits: 100, meanValue: 0 }
+  it('does not promote two lucky wins over a repeatedly useful continuation', () => {
+    const lucky = { visits: 2, valueSum: 2, valueSquaredSum: 2, commands }
+    const steady = {
+      visits: 20,
+      valueSum: 2.4,
+      valueSquaredSum: 20 * 0.12 ** 2,
+      commands
+    }
+    expect(estimateExpertContinuation(lucky, root).supported).toBe(false)
+    expect(estimateExpertContinuation(lucky, root).value).toBe(0)
+    expect(bestExpertContinuation([lucky, steady], root)?.line).toBe(steady)
+  })
+  it('discounts variance without changing the root samples or inventing visits', () => {
+    const stable = { visits: 8, valueSum: 1.6, valueSquaredSum: 8 * 0.2 ** 2, commands }
+    const volatile = { ...stable, valueSquaredSum: 6 }
+    expect(estimateExpertContinuation(stable, root).value).toBeGreaterThan(
+      estimateExpertContinuation(volatile, root).value
+    )
+    expect(estimateExpertContinuation(volatile, root).supportVisits).toBe(8)
+  })
+  it('does not make a lightly sampled losing pass look better by shrinking toward zero', () => {
+    const line = { visits: 2, valueSum: -0.4, commands }
+    expect(estimateExpertContinuation(line, { visits: 3, meanValue: -0.2 }).value).toBe(
+      -0.2
+    )
+  })
+  it('keeps the better observed free-secret play ahead of the recorded Mage pass', () => {
+    const play = { visits: 5, valueSum: 5 * 0.02744748, commands }
+    const pass = { visits: 3, valueSum: 3 * -0.00347754, commands }
+    const reviewed = estimateExpertContinuation(play, {
+      visits: 5,
+      meanValue: 0.02744748
+    })
+    expect(reviewed.value).toBeGreaterThan(
+      estimateExpertContinuation(pass, { visits: 3, meanValue: -0.00347754 }).value
+    )
+    expect(reviewed.value).toBeGreaterThanOrEqual(reviewed.rootValue)
+  })
+  it('preserves early combinations until a comparison has enough root evidence', () => {
+    const line = { visits: 2, valueSum: 0.8, commands }
+    const early = estimateExpertContinuation(line, {
+      visits: 5,
+      meanValue: 0.1,
+      comparisonVisits: 8
+    })
+    const mature = estimateExpertContinuation(line, {
+      visits: 5,
+      meanValue: 0.1,
+      comparisonVisits: 64
+    })
+    expect(early.supported).toBe(true)
+    expect(early.value).toBeGreaterThan(mature.value)
+    expect(mature.supported).toBe(false)
+    expect(mature.value).toBe(0.1)
+  })
+})
 
 function dispatch(session: GameBoardSession, command: TurnMatchCommand): void {
   const result = session.match.dispatch(command)

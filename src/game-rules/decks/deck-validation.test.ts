@@ -37,10 +37,10 @@ describe('deck name validation', () => {
 })
 
 describe('approved curated opponent roster', () => {
-  it('pins the exact version 2 roster, heroes, names and card counts', () => {
+  it('pins the exact cleaned roster, heroes, names and card counts', () => {
     expect(CURATED_OPPONENT_CATALOG_VERSION).toBe(4)
     expect(
-      CURATED_OPPONENT_DECKS.slice(0, 27).map(({ definition, deck }) => ({
+      CURATED_OPPONENT_DECKS.map(({ definition, deck }) => ({
         id: definition.id,
         name: deck.name,
         classId: definition.classId,
@@ -50,8 +50,8 @@ describe('approved curated opponent roster', () => {
     ).toMatchSnapshot()
   })
 
-  it('contains four legal historical-pool adaptations per class with valid unique names', () => {
-    const historicalDecks = CURATED_OPPONENT_DECKS.slice(0, 36)
+  it('contains three legal thirty-card decks per class with valid unique names', () => {
+    const roster = CURATED_OPPONENT_DECKS
     const historicalExpansions = new Set([
       'basic',
       'classic',
@@ -67,19 +67,17 @@ describe('approved curated opponent roster', () => {
       'knights-of-the-frozen-throne'
     ])
     const rules = new DeckRules()
-    expect(historicalDecks).toHaveLength(36)
-    expect(new Set(historicalDecks.map(({ definition }) => definition.id)).size).toBe(
-      36
+    expect(roster).toHaveLength(27)
+    expect(new Set(roster.map(({ definition }) => definition.id)).size).toBe(27)
+    expect(new Set(roster.map(({ deck }) => deck.name)).size).toBe(27)
+    expect(roster.reduce((total, { deck }) => total + countDeckCards(deck), 0)).toBe(
+      810
     )
-    expect(new Set(historicalDecks.map(({ deck }) => deck.name)).size).toBe(36)
-    expect(
-      historicalDecks.reduce((total, { deck }) => total + countDeckCards(deck), 0)
-    ).toBe(1080)
     for (const classId of PLAYABLE_CLASSES)
       expect(
-        historicalDecks.filter(({ definition }) => definition.classId === classId)
-      ).toHaveLength(4)
-    for (const { definition, deck, strategy } of historicalDecks) {
+        roster.filter(({ definition }) => definition.classId === classId)
+      ).toHaveLength(3)
+    for (const { definition, deck, strategy } of roster) {
       expect(countDeckCards(deck), definition.id).toBe(30)
       expect(deck.name.length).toBeLessThanOrEqual(MAX_DECK_NAME_LENGTH)
       expect(parseDeck(deck)).toEqual(deck)
@@ -87,10 +85,19 @@ describe('approved curated opponent roster', () => {
       expect(HERO_CATALOG.require(deck.heroId).classId).toBe(definition.classId)
       expect(strategy.strategy).toBe('constructed')
       expect(strategy.text).toContain(definition.plan)
-      expect(strategy.text).toContain('Historical inspiration:')
+      const shortlisted = definition.id.startsWith('shortlist-')
+      expect(strategy.text).toContain(
+        shortlisted ? 'Approved custom shortlist:' : 'Historical inspiration:'
+      )
       for (const [id, count] of Object.entries(deck.cards)) {
         const card = CARD_CATALOG.require(id)
-        expect(historicalExpansions.has(card.expansionId), id).toBe(true)
+        if (!shortlisted)
+          expect(
+            historicalExpansions.has(card.expansionId) ||
+              (definition.id === 'rogue-crystal-caverns' &&
+                card.expansionId === 'future-past'),
+            id
+          ).toBe(true)
         expect(isCollectibleDeckCard(card), id).toBe(true)
         expect([definition.classId, 'Neutral']).toContain(card.cardClass)
         expect(count).toBeGreaterThan(0)
@@ -133,6 +140,56 @@ describe('approved curated opponent roster', () => {
       expect(() => selectCuratedConstructedOpponent(seed)).toThrow(
         'seed must be uint32'
       )
+  })
+
+  it('removes the requested decks from explicit and seeded selection', () => {
+    const removedIds = [
+      'druid-jungle-giants',
+      'shortlist-dragon-hand-ramp-druid',
+      'shortlist-glowfly-token-druid',
+      'hunter-marsh-queen',
+      'shortlist-beast-swarm-hunter',
+      'mage-flamewaker-tempo',
+      'mage-giants-waygate',
+      'shortlist-shark-swarm-mech-mage',
+      'paladin-anyfin-control',
+      'paladin-murloc-swarm',
+      'paladin-kaleidosaur',
+      'shortlist-showdown-giant-paladin',
+      'priest-dragon-tempo',
+      'priest-awaken-makers',
+      'rogue-jade-deathrattle',
+      'shortlist-pirate-oil-rogue',
+      'shaman-elemental-battlecry',
+      'shaman-unite-murlocs',
+      'warlock-reno-demon-control-selected',
+      'warlock-lakkari-portal',
+      'warrior-dragon-tempo',
+      'warrior-fire-plume'
+    ]
+    for (const id of removedIds) {
+      expect(
+        CURATED_OPPONENT_DECKS.some(({ definition }) => definition.id === id),
+        id
+      ).toBe(false)
+      expect(() => selectCuratedConstructedOpponent(42, id)).toThrow(
+        'Unknown curated opponent deck'
+      )
+    }
+    const seen = new Set<string>()
+    for (let seed = 0; seed < 10000; seed++)
+      seen.add(selectCuratedConstructedOpponent(seed).metadata.deckId)
+    expect([...seen].sort()).toEqual(
+      CURATED_OPPONENT_DECKS.map(({ definition }) => definition.id).sort()
+    )
+  })
+
+  it('swaps exactly one Swashburglar for Vicious Scalehide in Crystal Caverns', () => {
+    const { deck } = selectCuratedConstructedOpponent(42, 'rogue-crystal-caverns')
+    expect(deck.cards.one_night_in_karazhan_swashburglar).toBe(1)
+    expect(deck.cards.the_witchwood_vicious_scalehide).toBe(1)
+    expect(countDeckCards(deck)).toBe(30)
+    expect(new DeckRules().validate(deck)).toEqual([])
   })
 
   it('uses Spirit Lash instead of the Reno Raza healing workaround', () => {
@@ -185,15 +242,21 @@ describe('Future Past Uther OTK player recipe', () => {
     expect(deck.cards.future_past_snake_oil).toBeUndefined()
   })
 
-  it('keeps Snake Oil out of decks and leaves the historical AI roster unchanged', () => {
+  it('keeps Snake Oil out of decks and limits legacy Future Past cards to Caverns', () => {
     const token = CARD_CATALOG.require('future_past_snake_oil')
     const rules = new DeckRules()
     expect(isCollectibleDeckCard(token)).toBe(false)
     expect(rules.isCardAllowedInDeck(FUTURE_PAST_UTHER_OTK_DECK, token)).toBe(false)
-    expect(CURATED_OPPONENT_DECKS).toHaveLength(49)
+    expect(CURATED_OPPONENT_DECKS).toHaveLength(27)
     expect(
-      CURATED_OPPONENT_DECKS.slice(0, 36).every(({ deck }) =>
-        Object.keys(deck.cards).every((id) => !id.startsWith('future_past_'))
+      CURATED_OPPONENT_DECKS.filter(
+        ({ definition }) =>
+          !definition.id.startsWith('shortlist-') &&
+          definition.id !== 'rogue-crystal-caverns'
+      ).every(({ deck }) =>
+        Object.keys(deck.cards).every(
+          (id) => CARD_CATALOG.require(id).expansionId !== 'future-past'
+        )
       )
     ).toBe(true)
   })

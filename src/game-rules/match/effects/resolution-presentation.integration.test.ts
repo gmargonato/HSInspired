@@ -1355,15 +1355,22 @@ describe('explicit action VFX', () => {
       const f = damagePhaseFixture(cardId)
       const target = f.summon('basic_chillwind_yeti')
       const friend = f.summon('basic_chillwind_yeti', f.self)
-      const r = f.s.match.dispatch({
+      let r = f.s.match.dispatch({
         type: 'play-card',
         participantId: f.self,
         cardInstanceId: f.player(f.self).hand.find((card) => card.cardId === cardId)!
           .instanceId,
-        ...(cardId === 'future_past_bob_the_bartender'
-          ? { position: 0, choice: 0 }
-          : {})
+        ...(cardId === 'future_past_bob_the_bartender' ? { position: 0 } : {})
       })
+      expect(r.accepted).toBe(true)
+      if (cardId === 'future_past_bob_the_bartender')
+        r = f.s.match.dispatch({
+          type: 'choose-card-option',
+          participantId: f.self,
+          sourceCardInstanceId:
+            f.s.match.getState().pendingCardChoice!.sourceCardInstanceId,
+          choice: 0
+        })
       expect(r.accepted).toBe(true)
       expect(cues(r.events)).toMatchObject([
         { vfxId: 'frost-blast-enemy-board', targetInstanceIds: [target.instanceId] }

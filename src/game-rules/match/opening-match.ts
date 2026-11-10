@@ -1011,6 +1011,7 @@ export function createOpeningMatch(
       rng,
       participantId: command.participantId,
       sourceCardInstanceId: command.sourceCardInstanceId,
+      targets: command.targets,
       choice: command.choice,
       nextEntityOrdinal,
       recordTrace: recordEffectTrace

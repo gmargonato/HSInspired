@@ -17,6 +17,7 @@ import { effectiveBoardMinionKeywords } from '../../../game-rules/match/rules/mi
 import { hasKnownCthunPayoff, unpaidActionPenalty } from './expert-ai-action-safety'
 import { wastesImmediateTemporaryMana } from './expert-temporary-mana'
 import { wastesEmptySelectorSpell } from './expert-empty-selector'
+import { predictableEndTurnDraws } from './expert-resource-evaluation'
 import { canonicalCommandKey } from '../../../game-rules/match/ai/legal-commands'
 import {
   revealsTacticalInformation,
@@ -131,6 +132,7 @@ export interface ExpertActionOutcome {
     | 'attack-before-buff'
     | 'attack-before-setup'
     | 'wasted-before-clear'
+    | 'draw-overflow'
 }
 
 /** Conservatively keep setup attacks when a bounded search cannot rule out an answer. */
@@ -1022,6 +1024,34 @@ export function inspectExpertAction(
     const card = state.players
       .find((p) => p.participantId === actorId)
       ?.hand.find((c) => c.instanceId === command.cardInstanceId)
+    const definition = card && CARD_CATALOG.get(card.cardId)
+    if (
+      !shouldStop() &&
+      definition?.effects.some(
+        (effect) =>
+          ['cast', 'battlecry'].includes(effect.trigger) &&
+          JSON.stringify(effect.actions ?? []).includes('"action":"draw"')
+      )
+    ) {
+      const overflow = root.analyze((fork) => {
+        const result = fork.dispatch(command)
+        if (!result.accepted || result.state.phase === 'ended') return 0
+        const self = result.state.players.find(
+          (player) => player.participantId === actorId
+        )!
+        const burns = result.events.filter(
+          (event) => event.type === 'card-burned' && event.participantId === actorId
+        ).length
+        const pendingBurns = Math.max(
+          0,
+          self.hand.length + predictableEndTurnDraws(self) - 10
+        )
+        return burns + pendingBurns
+      })
+      // Soft advice: a necessary weapon removal or emergency answer may still win.
+      if (overflow > 0)
+        return { penalty: Math.min(0.25, overflow * 0.05), reason: 'draw-overflow' }
+    }
     if (
       card &&
       CARD_CATALOG.get(card.cardId)?.type !== 'Spell' &&
@@ -1038,13 +1068,20 @@ export function inspectExpertAction(
       ...self.board,
       ...before!.selfOriginalDeck.cards
     ])
+    // Extra locked mana is a liability, not a material payoff for an empty cast.
+    // Keep actual Overload-triggered buffs, cost changes and summons in position().
     const payoffPosition = (
       player: AiObservedPlayer,
       spentCard?: string,
       lostMinions: readonly string[] = []
     ) =>
       position(
-        player,
+        player.participantId === actorId
+          ? {
+              ...player,
+              effects: { ...player.effects, overload: self.effects.overload }
+            }
+          : player,
         spentCard,
         lostMinions,
         player.participantId === actorId && !ritualPayoff
@@ -1056,13 +1093,27 @@ export function inspectExpertAction(
     const healingJoust =
       definition?.effects.some((effect) => effect.actions?.some(isHealingJoust)) ===
       true
+    const target = command.type === 'play-card' ? command.targets?.[0] : undefined
+    const targetPlayer = before!.players.find(
+      (player) => player.participantId === target?.participantId
+    )
+    const targetCharacter =
+      target?.kind === 'hero'
+        ? targetPlayer?.hero
+        : target?.kind === 'minion'
+          ? targetPlayer?.board.find(
+              (minion) => minion.instanceId === target.instanceId
+            )
+          : undefined
+    const fullHealthTarget =
+      targetCharacter && targetCharacter.health >= targetCharacter.maxHealth
     // Different healing amounts can remove damaged/enrage minion benefits.
-    // This bounded review only extends to hero targets; minions stay in search.
+    // Injured minions stay in search; a full-health target heals zero in either branch.
     if (
       healingJoust &&
       (command.type !== 'play-card' ||
         command.targets?.length !== 1 ||
-        command.targets[0]?.kind !== 'hero' ||
+        (command.targets[0]?.kind !== 'hero' && !fullHealthTarget) ||
         before!.players.some((player) =>
           hasHealingDependentEffect([
             player.hero.enchantments,
@@ -1094,6 +1145,7 @@ export function inspectExpertAction(
               [
                 'damage',
                 'restore',
+                'overload',
                 'spend-all-mana',
                 'summon-random',
                 'sacrifice-and-damage'
@@ -1266,9 +1318,8 @@ export function inspectExpertAction(
       payoffPosition(self, spentCard) === payoffPosition(nextSelf, spentCard)
     )
       return { penalty: 0.25, reason: 'opponent-heal' }
-    // The public reveal is information even when no Health changes. This new
-    // grammar only reviews adverse healing, not the value of paying to reveal.
-    if (healingJoust) return { penalty: 0 }
+    // A public Joust reveal alone does not pay for a spell. Healing-dependent
+    // triggers and branches with additional effects were excluded above.
     const enemyUnchanged = before!.players
       .filter((p) => p.participantId !== actorId)
       .every((p) => {

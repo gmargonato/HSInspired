@@ -67,6 +67,7 @@ export type CardSummonPlacement = (typeof CARD_SUMMON_PLACEMENTS)[number]
 
 export const CARD_EVENT_TYPES = [
   'card-played',
+  'card-resolved',
   'card-discarded',
   'character-attacked',
   'attack-resolved',
@@ -356,6 +357,7 @@ export const CARD_ACTIONS = [
   'destroy-and-gain-stats',
   'destroy-mana-crystal',
   'destroy-secrets',
+  'choose-effect',
   'discover',
   'discover-opponent-deck-guess',
   'attack-target',

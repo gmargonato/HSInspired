@@ -215,6 +215,7 @@ function actionPhase(name: CardActionName): CapabilityPhase {
       'change-cost',
       'copy',
       'discard',
+      'choose-effect',
       'discover',
       'discover-opponent-deck-guess',
       'prevent-weapon-durability-loss',

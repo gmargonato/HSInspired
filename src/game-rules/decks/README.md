@@ -1,9 +1,19 @@
 # Curated constructed opponents
 
-Catalog version 3 retains the 27 approved version-2 adaptations and appends nine
-original Un'Goro quest decks: four per playable class, 30 cards per deck (1,080 slots), with unique names of at most
-15 characters. The supported card pool runs from Basic through Knights of the
-Frozen Throne, including all intervening Wild sets.
+The curated roster contains 27 decks, three per playable class, with 30 cards per
+list (810 slots). Twenty legacy adaptations and seven shortlisted custom decks
+remain after the cleanup in `Artifacts/deck-cleanup.md`.
+
+Legacy decks use Basic through Knights of the Frozen Throne, including intervening
+Wild sets. Crystal Caverns (`rogue-crystal-caverns`) alone also permits Future Past:
+one Swashburglar was replaced with one Vicious Scalehide, leaving one of each and
+the other 29 cards unchanged. Shortlisted decks retain their existing supported pool.
+Other remaining lists retain their existing cards, names, IDs and Expert evaluation.
+
+The provenance and replacement mappings below record earlier catalog revisions;
+some of those historical lists have since been removed from the curated roster.
+The current definitions in `curated-opponent-decks.ts` and
+`shortlisted-opponent-decks.ts` determine availability.
 
 ## Preserved version-2 input
 
@@ -24,12 +34,11 @@ other card and count remains exactly as approved.
 
 ## Selection and Expert evaluation
 
-Class selection stays uniform and seeded; selection among each class's four
-lists stays uniform and seeded. The original three lists keep their positions,
-and each class's quest list is appended. Version 3 changes the seeded list choice
-because the roster grew; it does not replace an existing list. Explicit selection uses the replacement IDs below.
-The catalog version and IDs distinguish the changed roster in match logs. Saved
-user decks, snapshots, deck schema, primary class heroes and asset keys are unchanged.
+Class selection stays uniform and seeded; selection among each class's three
+lists stays uniform and seeded. Cleanup preserves the relative order of retained
+lists. Seeded list choices change with the smaller roster. Explicit selection uses
+only retained IDs; removed IDs are rejected. Saved user decks, deck schema,
+primary class heroes and asset keys are unchanged.
 
 The replacement package assigns no Expert strategy profiles. All 27 definitions
 therefore omit `expertStrategyProfileId` and use general Expert evaluation. In
@@ -38,7 +47,7 @@ ramp/C'Thun/Jade pilot profiles. The profile implementation remains available
 unchanged for explicitly bound callers. The development menu now routes to the
 new Token, Combo and Jade Druid IDs and names. No new evaluator bonuses are added.
 
-## Replacement mapping
+## Historical replacement mapping
 
 | Retired catalog ID                     | Replacement catalog ID                | Display name    |
 | -------------------------------------- | ------------------------------------- | --------------- |
@@ -77,7 +86,7 @@ copy limits, names, seeded selection and routing. This is not a 27-deck round-ro
 or evidence of whole-game Expert win rate. Historical performance does not
 establish performance under this project's custom card costs and mechanics.
 
-## Version-3 quest additions
+## Historical version-3 quest additions
 
 The nine additions use original Un'Goro quests and only supporting cards released
 by Knights of the Frozen Throne. They are researched, source-inspired local
@@ -133,7 +142,7 @@ Limitations: Historically fringe/control rather than top-tier. Lower custom thre
 
 Historical source: [QUEST ROGUE DECK LIST GUIDE](https://www.hearthpwn.com/decks/793687-quest-rogue-deck-list-guide), page last updated 2017-04-18.
 
-Local changes: No card substitutions.
+Local changes: 1 Swashburglar replaced with 1 Vicious Scalehide (Future Past).
 
 Limitations: Historically strong archetype, though source predates five-play nerf. Current five-play requirement is supported by six generated Flame Elementals plus bounce. Requires coherent repeated-target choices; vulnerable before payoff.
 

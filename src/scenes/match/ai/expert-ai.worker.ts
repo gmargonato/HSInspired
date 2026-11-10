@@ -1,5 +1,5 @@
 import { inspectExpertPublicThreat } from './expert-public-threat'
-import type { AiDecisionResponse } from '../../../desktop/contracts/ipc/ai'
+import type { AiDecisionResponse, JsonObject } from '../../../desktop/contracts/ipc/ai'
 import type { AiDecisionChoice } from '../../../desktop/contracts/ipc/ai-deliberation'
 import { aiActionIntent } from './ai-action-intent'
 import {
@@ -22,7 +22,12 @@ import {
   type ExpertWorldAction,
   type ExpertWorldRequest
 } from './expert-ai-world-runner'
-import { LocalAiDecisionApi } from './local-ai-decision-api'
+import {
+  LocalAiDecisionApi,
+  type LocalAiCandidateTrace,
+  type LocalAiDecisionTrace
+} from './local-ai-decision-api'
+import { EXPERT_CONTINUATION_POLICY } from './expert-continuation-value'
 import type {
   ExpertAiWorkerRequest,
   ExpertAiWorkerResponse
@@ -48,6 +53,45 @@ function sequenceFor(candidate: ExpertCandidateTrace | undefined): readonly stri
   return sequence?.length
     ? sequence
     : [candidate?.description ?? 'Take the selected legal action.']
+}
+
+function candidateStatistics(trace: LocalAiDecisionTrace | null): JsonObject[] {
+  if (!trace) return []
+  // Keep the chosen action visible even when it falls outside the trace shortlist.
+  // Missing shortlist details remain null; root visits alone are not suffix support.
+  const selected = trace.candidates.find((c) => c.actionId === trace.chosenActionId)
+  const entries: Partial<LocalAiCandidateTrace>[] = [
+    ...(trace.chosenActionId
+      ? [
+          selected ?? {
+            ...trace.rootVisitDistribution?.find(
+              (c) => c.actionId === trace.chosenActionId
+            ),
+            actionId: trace.chosenActionId
+          }
+        ]
+      : []),
+    ...trace.candidates.filter((c) => c.actionId !== trace.chosenActionId)
+  ]
+  return entries.slice(0, 8).map((candidate) => ({
+    actionId: candidate.actionId ?? null,
+    description: candidate.description?.slice(0, 240) ?? null,
+    selectedInWorld: candidate.actionId === trace.chosenActionId,
+    visits: candidate.visits ?? 0,
+    rootMean: candidate.meanValue ?? null,
+    recommendationValue: candidate.recommendationValue ?? null,
+    continuationEstimate: candidate.continuationEstimate
+      ? { ...candidate.continuationEstimate }
+      : null,
+    rankingComponents: candidate.rankingComponents
+      ? { ...candidate.rankingComponents }
+      : null,
+    finalRecommendationValue: candidate.finalRecommendationValue ?? null,
+    provenWin: candidate.provenWin ?? false,
+    publicAttackSurvival: candidate.publicAttackSurvival ?? false,
+    outcome: candidate.outcome ?? null,
+    publicReply: candidate.publicReply ?? null
+  }))
 }
 
 function aggregateResponse(
@@ -127,6 +171,11 @@ function aggregateResponse(
     finishReason: 'expert-sampled-search',
     usage: {
       policyRevision: EXPERT_AI_POLICY_REVISION,
+      selectedCandidateId: selectedId,
+      continuationPolicy: {
+        ...EXPERT_CONTINUATION_POLICY,
+        rootFloor: 'observed-mean-with-positive-singleton-shrinkage'
+      },
       decisionPriority: candidate?.provenWin
         ? 'verified-win'
         : [...scores.values()].some((score) => score.publicLethal)
@@ -146,6 +195,10 @@ function aggregateResponse(
         iterations: result.trace?.sampleCount ?? null,
         rootLegalActionCount: result.trace?.rootLegalActionCount ?? null,
         boundaryEvaluations: result.trace?.boundaryEvaluations ?? 0,
+        comparisonVisits: result.trace?.comparisonVisits ?? 0,
+        sampledChanceLines: result.trace?.sampledChanceLines ?? 0,
+        sampledChanceSeeds: result.trace?.sampledChanceSeeds ?? 0,
+        candidateStatistics: candidateStatistics(result.trace),
         orderingReview: result.trace?.orderingReview
           ? { ...result.trace.orderingReview }
           : null,
@@ -218,6 +271,8 @@ function aggregateResponse(
         .map(([candidateId, score]) => ({
           candidateId,
           votes: score.votes,
+          visits: score.visits,
+          selectedByConsensus: candidateId === selectedId,
           expectedValue: score.score / Math.max(1, score.samples),
           sampledWorlds: score.samples
         }))

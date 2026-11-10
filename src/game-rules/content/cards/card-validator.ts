@@ -291,6 +291,7 @@ const ACTION_FIELDS = new Set([
   'vfx',
   'winActions',
   'loseActions',
+  'options',
   'ingredientPool',
   'recipes',
   'classes'
@@ -314,6 +315,7 @@ const ACTION_REQUIRED_FIELDS: Partial<Record<CardActionName, readonly string[]>>
   'mark-draw-scaling': ['target'],
   'resurrect-discovered-minion': ['reference'],
   draw: ['player', 'count'],
+  'choose-effect': ['options'],
   discover: ['player', 'count', 'source'],
   'draw-until': ['player', 'handSize'],
   equip: ['cardId'],
@@ -987,6 +989,11 @@ function actionsValue(value: unknown, path: string): void {
         ['play-order', 'reverse-play-order'],
         `${actionPath}.damageOrder`
       )
+    }
+    if (actionName === 'choose-effect') {
+      choiceValue({ options: record['options'] }, `${actionPath}.options`)
+      if ((record['options'] as unknown[]).length === 0)
+        fail(`${actionPath}.options`, 'must contain at least one option')
     }
     if (actionName === 'damage-group') {
       actionsValue(record['actions'], `${actionPath}.actions`)

@@ -1,3 +1,4 @@
+import { enumerateLegalCommands } from '../ai/legal-commands'
 import { CARD_CATALOG } from '../../content/cards'
 import { createAiFixture, type AiFixtureOptions } from '../testing/ai-scenario-builder'
 import { createOpeningMatchFromCheckpoint } from '../opening-match'
@@ -631,6 +632,7 @@ function createYoreScenario(o: Partial<AiFixtureOptions> = {}) {
   const play = (cardId: string, t?: ReturnType<typeof target>, choice?: number) => {
     const card = me().hand.find((x) => x.cardId === cardId)!
     expect(card, cardId).toBeTruthy()
+    const bob = cardId === 'future_past_bob_the_bartender'
     const r = m.dispatch({
       type: 'play-card',
       participantId: id,
@@ -638,10 +640,21 @@ function createYoreScenario(o: Partial<AiFixtureOptions> = {}) {
       ...(CARD_CATALOG.get(cardId)?.type === 'Minion'
         ? { position: me().board.length }
         : {}),
-      ...(t ? { targets: [t] } : {}),
-      ...(choice === undefined ? {} : { choice })
+      ...(!bob && t ? { targets: [t] } : {}),
+      ...(bob || choice === undefined ? {} : { choice })
     })
     if (!r.accepted) throw new Error(`${r.code}: ${r.message}`)
+    if (bob && choice !== undefined) {
+      const selected = m.dispatch({
+        type: 'choose-card-option',
+        participantId: id,
+        sourceCardInstanceId: card.instanceId,
+        choice,
+        ...(t ? { targets: [t] } : {})
+      })
+      if (!selected.accepted) throw new Error(selected.message)
+      return selected
+    }
     return r
   }
   const end = () => {
@@ -1322,6 +1335,154 @@ describe('Yore: Dream cards and corruption', () => {
 })
 
 describe('Yore: Bob choices', () => {
+  it('burns a repeated recruited copy into a full hand while still granting Coins', () => {
+    const s = createYoreScenario({
+      aiHand: [yoreCard('bob_the_bartender'), ...Array(9).fill('classic_wisp')],
+      aiBoard: [{ cardId: 'league_of_explorers_brann_bronzebeard' }],
+      opponentBoard: [{ cardId: 'basic_chillwind_yeti' }]
+    })
+    s.play(yoreCard('bob_the_bartender'), s.target('enemy'), 1)
+    const pending = s.m.getState().pendingCardChoice!
+    const result = s.m.dispatch({
+      type: 'choose-card-option',
+      participantId: s.id,
+      sourceCardInstanceId: pending.sourceCardInstanceId,
+      choice: 1,
+      targets: [s.target('enemy')]
+    })
+    expect(result.accepted).toBe(true)
+    expect(s.me().hand).toHaveLength(10)
+    expect(result.events.some((event) => event.type === 'card-burned')).toBe(true)
+    expect(
+      s.foe().hand.filter((card) => card.cardId === 'basic_the_coin')
+    ).toHaveLength(6)
+  })
+
+  it('commits Bob before offering actions and restores the mandatory choice', () => {
+    const s = createYoreScenario({ aiHand: [yoreCard('bob_the_bartender')] })
+    const r = s.play(yoreCard('bob_the_bartender'))
+    expect(s.me().mana.available).toBe(4)
+    expect(
+      s.me().board.some((card) => card.cardId === yoreCard('bob_the_bartender'))
+    ).toBe(true)
+    expect(s.m.getState().pendingCardChoice?.options).toHaveLength(4)
+    expect(
+      r.events.findIndex((event) => event.type === 'battlecry-repetition-started')
+    ).toBeLessThan(r.events.findIndex((event) => event.type === 'card-choice-started'))
+    expect(s.m.dispatch({ type: 'end-turn', participantId: s.id }).accepted).toBe(false)
+    const restored = createOpeningMatchFromCheckpoint(s.m.getCheckpoint())
+    expect(
+      restored.dispatch({
+        type: 'choose-card-option',
+        participantId: s.id,
+        sourceCardInstanceId:
+          restored.getState().pendingCardChoice!.sourceCardInstanceId,
+        choice: 0
+      }).accepted
+    ).toBe(true)
+    expect(restored.getState().pendingCardChoice).toBeUndefined()
+  })
+
+  it('keeps Bob separate from Fandral Choose One effects', () => {
+    const s = createYoreScenario({
+      aiHand: [yoreCard('bob_the_bartender')],
+      aiBoard: [{ cardId: 'whispers_of_the_old_gods_fandral_staghelm' }],
+      opponentBoard: [{ cardId: 'basic_chillwind_yeti' }]
+    })
+    s.play(yoreCard('bob_the_bartender'))
+    const pending = s.m.getState().pendingCardChoice!
+    expect(pending.options).toHaveLength(4)
+    expect(
+      s.m.dispatch({
+        type: 'choose-card-option',
+        participantId: s.id,
+        sourceCardInstanceId: pending.sourceCardInstanceId,
+        choice: 0
+      }).accepted
+    ).toBe(true)
+    expect(s.foe().board[0]!.frozenUntilTurn).toBeGreaterThan(0)
+    expect(s.me().hand).toHaveLength(0)
+    expect(s.m.getState().pendingDiscover).toBeUndefined()
+  })
+
+  it('validates Recruit targets and exposes the same legal choices to AI', () => {
+    const s = createYoreScenario({
+      aiHand: [yoreCard('bob_the_bartender')],
+      opponentBoard: [{ cardId: 'basic_chillwind_yeti' }]
+    })
+    s.play(yoreCard('bob_the_bartender'))
+    const pending = s.m.getState().pendingCardChoice!
+    const command = {
+      type: 'choose-card-option' as const,
+      participantId: s.id,
+      sourceCardInstanceId: pending.sourceCardInstanceId,
+      choice: 1
+    }
+    expect(s.m.dispatch(command).accepted).toBe(false)
+    expect(s.m.dispatch({ ...command, targets: [s.target()] }).accepted).toBe(false)
+    expect(s.m.getState().pendingCardChoice).toEqual(pending)
+    const commands = s.m.analyze((fork) => enumerateLegalCommands(fork, s.id))
+    expect(commands).toContainEqual({ ...command, targets: [s.target('enemy')] })
+    expect(s.m.dispatch({ ...command, targets: [s.target('enemy')] }).accepted).toBe(
+      true
+    )
+    expect(
+      s.foe().hand.filter((card) => card.cardId === 'basic_the_coin')
+    ).toHaveLength(3)
+  })
+
+  it('treats Recruit without eligible minions as an empty branch', () => {
+    const s = createYoreScenario({ aiHand: [yoreCard('bob_the_bartender')] })
+    s.play(yoreCard('bob_the_bartender'), undefined, 1)
+    expect(s.foe().hand).toHaveLength(0)
+    expect(s.m.getState().pendingCardChoice).toBeUndefined()
+  })
+
+  it('finishes a nested Discover before opening Brann’s second action menu', () => {
+    const s = createYoreScenario({
+      aiHand: [yoreCard('bob_the_bartender')],
+      aiBoard: [{ cardId: 'league_of_explorers_brann_bronzebeard' }]
+    })
+    const play = s.play(yoreCard('bob_the_bartender'))
+    expect(
+      play.events.filter((event) => event.type === 'battlecry-repetition-started')
+    ).toHaveLength(1)
+    const first = s.m.getState().pendingCardChoice!
+    const refresh = s.m.dispatch({
+      type: 'choose-card-option',
+      participantId: s.id,
+      sourceCardInstanceId: first.sourceCardInstanceId,
+      choice: 2
+    })
+    expect(refresh.events.some((event) => event.type === 'card-choice-started')).toBe(
+      false
+    )
+    const discover = s.m.getState().pendingDiscover!
+    const selected = s.m.dispatch({
+      type: 'choose-discover-card',
+      participantId: s.id,
+      cardInstanceId: discover.candidates[0]!.instanceId
+    })
+    expect(selected.accepted).toBe(true)
+    expect(s.me().mana.available).toBe(7)
+    expect(
+      selected.events.filter((event) => event.type === 'battlecry-repetition-started')
+    ).toHaveLength(1)
+    expect(
+      selected.events.filter((event) => event.type === 'card-choice-started')
+    ).toHaveLength(1)
+    expect(
+      s.m.dispatch({
+        type: 'choose-card-option',
+        participantId: s.id,
+        sourceCardInstanceId: first.sourceCardInstanceId,
+        choice: 0
+      }).accepted
+    ).toBe(true)
+    expect(s.m.getState().pendingCardChoice).toBeUndefined()
+    expect(s.m.dispatch({ type: 'end-turn', participantId: s.id }).accepted).toBe(true)
+  })
+
   it('Bob freeze choice freezes enemy board', () => {
     const s = createYoreScenario({
       aiHand: [yoreCard('bob_the_bartender')],

@@ -154,12 +154,25 @@ export function parseCommand(value: unknown): OpeningMatchCommand | null {
   }
   if (value.type === 'choose-card-option') {
     if (
+      value.targets !== undefined &&
+      (!Array.isArray(value.targets) ||
+        value.targets.some((target) => !parseCardPlayTarget(target)))
+    )
+      return null
+    if (
       typeof value.sourceCardInstanceId !== 'string' ||
       typeof value.choice !== 'number' ||
       !Number.isInteger(value.choice)
     )
       return null
     return {
+      ...(value.targets === undefined
+        ? {}
+        : {
+            targets: (value.targets as unknown[]).map((target) =>
+              parseCardPlayTarget(target)!
+            )
+          }),
       type: 'choose-card-option',
       participantId: value.participantId as PlayerId,
       sourceCardInstanceId: value.sourceCardInstanceId,

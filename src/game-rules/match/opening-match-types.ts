@@ -384,6 +384,14 @@ export interface MinionSummonedEvent {
   readonly position: number
 }
 
+/** A Deathrattle changes a minion into its dormant form without summoning it. */
+export interface MinionWentDormantEvent {
+  readonly type: 'minion-went-dormant'
+  readonly participantId: PlayerId
+  readonly minion: BoardMinion
+  readonly position: number
+}
+
 export interface ResolutionDiagnostic {
   readonly code:
     'unsupported-capability' | 'resolution-budget-exhausted' | 'resolution-failed'
@@ -655,7 +663,14 @@ export interface OpeningMatchState {
   readonly scheduledEffects?: readonly ScheduledEffect[]
 }
 
+/** A played card whose after-play listeners wait for its blocking choices. */
+export interface PendingCardPlayResolution {
+  readonly participantId: PlayerId
+  readonly card: OpeningCard
+}
+
 export interface PendingDiscoverChoice {
+  readonly afterCardPlays?: readonly PendingCardPlayResolution[]
   readonly drawChosen?: boolean
   readonly temporary?: boolean
   readonly fromHeroPower?: boolean
@@ -705,6 +720,7 @@ export interface PendingDiscoverContinuation {
 }
 
 export interface CardChoiceOption {
+  readonly legalTargetOptions?: readonly (readonly CardPlayTargetRef[])[]
   readonly choice: number
   readonly label: string
   /** Existing card definition used to render a full-card option when available. */
@@ -716,12 +732,20 @@ export interface CardChoiceOption {
 }
 
 export interface PendingCardChoice {
+  readonly afterCardPlays?: readonly PendingCardPlayResolution[]
   readonly prompt?: string
   readonly participantId: PlayerId
   readonly sourceCardInstanceId: string
   readonly sourceCardId: CardId
   readonly options: readonly CardChoiceOption[]
   readonly resolution?:
+    | {
+        readonly type: 'effect-actions'
+        readonly battlecry?: BattlecryRepetitionStartedEvent
+        readonly source: PendingDiscoverContinuation['source']
+        readonly actions: readonly (readonly Record<string, unknown>[])[]
+        readonly actionPath: string
+      }
     | {
         readonly type: 'build-a-beast'
         readonly stage: 'first' | 'second'
@@ -859,6 +883,7 @@ export interface ChooseDiscoverCardCommand {
 }
 
 export interface ChooseCardOptionCommand {
+  readonly targets?: readonly CardPlayTargetRef[]
   readonly type: 'choose-card-option'
   readonly participantId: PlayerId
   readonly sourceCardInstanceId: string
@@ -1457,6 +1482,7 @@ export type OpeningMatchEvent =
   | DeathBatchStartedEvent
   | DeathBatchCompletedEvent
   | MinionSummonedEvent
+  | MinionWentDormantEvent
   | EffectDomainEvent
   | EffectVfxEvent
 
