@@ -1,4 +1,8 @@
 import { Text, Texture } from 'pixi.js'
+import {
+  outlinedTextStyle,
+  type TextOutline
+} from '../../../visual-components/text-style'
 import { HeroPortrait } from '../../../visual-components/hero-portrait'
 import { hasPremiumHeroPortrait } from '../../../visual-components/hero-portrait-appearance'
 import { describe, expect, it, vi } from 'vitest'
@@ -14,6 +18,62 @@ vi.mock('../../../visual-components/effects/animated-outline', () => ({
 import { HERO_HEALTH_COLORS, HeroView } from './hero-view'
 
 describe('hero identity presentation', () => {
+  it('keeps armor and health outlines proportional through updates and repeated pulses', () => {
+    const view = HeroView.create(
+      {
+        label: 'hero',
+        attack: 2,
+        health: 27,
+        maxHealth: 30,
+        armor: 5,
+        frozen: false,
+        immune: false
+      },
+      {
+        frame: Texture.EMPTY,
+        attack: Texture.EMPTY,
+        health: Texture.EMPTY,
+        armor: Texture.EMPTY,
+        frozen: Texture.EMPTY,
+        immune: Texture.EMPTY
+      }
+    )
+    try {
+      view.setHealthVisible(true)
+      const group = view.getChildByLabel('hero.stat-health')!
+      const health = group.getChildByLabel('hero.stat-health-value') as Text
+      const armorGroup = view.getChildByLabel('hero.stat-armor')!
+      const armor = armorGroup.getChildByLabel('hero.stat-armor-value') as Text
+      const reference = outlinedTextStyle('number', health.style.fontSize)
+      const ratio = reference.stroke.width / reference.fontSize
+      for (const value of [health, armor]) {
+        expect(
+          (value.style.stroke as TextOutline).width / value.style.fontSize
+        ).toBeCloseTo(ratio)
+      }
+      expect(health.style).not.toBe(armor.style)
+      const baseScale = group.scale.clone()
+      view.pulseHealth()
+      view.pulseHealth()
+      gsap.globalTimeline.progress(1)
+      expect(group.scale.x).toBe(baseScale.x)
+      expect(group.scale.y).toBe(baseScale.y)
+      view.setHealthAndArmor(30, 100, 30)
+      expect(health.style.fill).toBe(HERO_HEALTH_COLORS.normal)
+      expect(armor.text).toBe('100')
+      expect(armor.style.fill).toBe(0xffffff)
+      expect(
+        (armor.style.stroke as TextOutline).width / armor.style.fontSize
+      ).toBeCloseTo(ratio)
+      view.setHealthAndArmor(29, 0, 30)
+      expect(health.style.fill).toBe(HERO_HEALTH_COLORS.damaged)
+      expect(armorGroup.visible).toBe(false)
+      view.setHealthVisible(false)
+      expect(group.visible).toBe(false)
+    } finally {
+      view.destroy({ children: true })
+    }
+  })
   it('unlocks only the local class at 500 or more wins', () => {
     let mageWins = 499
     const stats = { getWins: (classId: string) => (classId === 'Mage' ? mageWins : 0) }

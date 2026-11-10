@@ -1,3 +1,4 @@
+import { outlinedTextStyle } from '../../../visual-components/text-style'
 import type { HealingAssets } from '../../../visual-components/assets/healing-assets'
 import { MatchControls3D } from './match-controls-3d'
 import type { MatchControlAssets } from '../../../visual-components/assets/match-control-assets'
@@ -43,6 +44,7 @@ import {
   MAX_BOARD_SIZE,
   type AttackCharacterRef,
   type BoardMinion,
+  type BoardWeapon,
   type CardPlayTargetRef,
   type HeroPowerTargetRef,
   type HistoryActionResolvedEvent,
@@ -210,7 +212,10 @@ import { GameCardSlot } from '../hand/game-card-slot'
 import { MatchResultOverlay, type MatchResult } from '../results/match-result-overlay'
 import { FatigueView } from '../hud/fatigue-view'
 import { heroHasWindfury } from '../../../game-rules/match/rules/hero-combat-keywords'
-import { boardAbilityMarkers, boardMinionAbilityMarkers } from './board-ability-markers'
+import {
+  boardWeaponAbilityMarkers,
+  boardMinionAbilityMarkers
+} from './board-ability-markers'
 import {
   effectDamageIndicatorAmount,
   effectHealIndicatorAmount
@@ -1457,6 +1462,7 @@ export class GameBoardView extends Actor {
 
   setInputBlocked(blocked: boolean): void {
     this.settingsInputBlocked = blocked
+    this.syncTurnControls(this.match.getState())
     if (blocked) {
       this.handleWindowBlur()
       this.hand.clearHover()
@@ -2170,13 +2176,26 @@ export class GameBoardView extends Actor {
     }
   }
 
+  private updateWeaponView(
+    view: WeaponView,
+    weapon: BoardWeapon,
+    turnNumber: number
+  ): void {
+    view.setStats(weapon.attack, weapon.durability)
+    const markers = boardWeaponAbilityMarkers(weapon, turnNumber)
+    view.setDeathrattle(markers.deathrattle)
+    view.setTrigger(markers.trigger)
+    view.setLifesteal(markers.lifesteal)
+    view.setPoisonous(markers.poisonous)
+  }
+
   /** Keeps an equipped weapon view synchronized with authoritative match state. */
   private syncWeaponViews(state: OpeningMatchState): void {
     for (const player of state.players) {
       const view = this.weaponViews.get(player.participantId)
       if (player.weapon) {
         if (view?.instanceId === player.weapon.instanceId)
-          view.setStats(player.weapon.attack, player.weapon.durability)
+          this.updateWeaponView(view, player.weapon, state.turnNumber)
         continue
       }
       if (!view) continue
@@ -2753,11 +2772,15 @@ export class GameBoardView extends Actor {
     const turnFace = turnControlFace(state, this.localParticipantId)
     const localTurnTexture =
       this.options.gameAssets[turnFace] ?? this.options.gameAssets.endTurn
-    const inputEnabled =
+    const feedbackAvailable =
+      !this.settingsInputBlocked &&
+      !this.matchResultShown &&
       state.phase === 'turns' &&
       this.turnLayer.visible &&
       isLocalTurn &&
-      !this.turnInProgress &&
+      !this.turnInProgress
+    const inputEnabled =
+      feedbackAvailable &&
       !this.heroPowerTargeting &&
       !this.cardPlay.current &&
       !this.isGameplayBlocked(state)
@@ -2765,7 +2788,8 @@ export class GameBoardView extends Actor {
       localTurnTexture,
       inputEnabled,
       inputEnabled && !this.localPlayerHasAvailableAction(),
-      turnFace
+      turnFace,
+      feedbackAvailable
     )
   }
 
@@ -3907,10 +3931,8 @@ export class GameBoardView extends Actor {
       const label = new Text({
         text: `${hero.displayName}\n${hero.classId.toUpperCase()}`,
         style: {
-          fontFamily: 'Belwe',
-          fontSize: 34,
+          ...outlinedTextStyle('label', 34),
           fill: 0xffffff,
-          stroke: { color: 0x17120f, width: 6 },
           align: 'center',
           lineHeight: 42
         }
@@ -5196,18 +5218,25 @@ export class GameBoardView extends Actor {
       const armorDamage = Math.max(0, numberData('armorDamage') ?? 0)
       const totalDamage = actualDamage + armorDamage
       const indicatorAmount = effectDamageIndicatorAmount(data)
+      const isFatigueDamage = event.actionPath.endsWith('.fatigue')
       const indicatorDeferredToCharacterEvent =
         (event.actionPath.startsWith('hero-power.damage.') && !event.vfxGroupId) ||
-        event.actionPath.endsWith('.fatigue')
+        isFatigueDamage
       if (target?.view instanceof MinionView && data.shieldConsumed === true)
         target.view.setDivineShield(false)
       if (target?.view && (totalDamage > 0 || indicatorAmount > 0)) {
         if (target.view instanceof MinionView) {
           const healthAfter = numberData('healthAfter')
           if (healthAfter !== undefined) target.view.setHealth(healthAfter)
-        } else if (target.view instanceof HeroView) {
+        } else if (target.view instanceof HeroView && !isFatigueDamage) {
+          // Fatigue stats advance with the later character damage burst, after its card.
           const healthAfter = numberData('healthAfter')
           if (healthAfter !== undefined) {
+            target.view.presentLethalDamage(
+              numberData('healthBefore') ?? 0,
+              healthAfter,
+              actualDamage
+            )
             const player = this.findPlayer(
               this.presentationState(),
               target.participantId
@@ -6212,6 +6241,16 @@ export class GameBoardView extends Actor {
     if (event.character.kind === 'hero') {
       const state = this.presentationState()
       const player = this.findPlayer(state, event.participantId)
+      if (event.type === 'character-damaged') {
+        this.heroViews
+          .get(event.participantId)
+          ?.presentLethalDamage(
+            event.healthBefore,
+            event.healthAfter,
+            (event.attemptedAmount ?? event.amount) -
+              (event.armorBefore - event.armorAfter)
+          )
+      }
       this.syncHeroPresentation(state, event.participantId, {
         health: event.healthAfter,
         armor: event.type === 'character-damaged' ? event.armorAfter : player.hero.armor
@@ -6693,12 +6732,15 @@ export class GameBoardView extends Actor {
     if (!isLocal && !isRemote) return
     const current = this.weaponViews.get(event.participantId)
     if (current?.instanceId === event.weapon.instanceId) {
-      current.setStats(event.weapon.attack, event.weapon.durability)
+      this.updateWeaponView(current, event.weapon, this.presentationState().turnNumber)
       return
     }
 
     const definition = CARD_CATALOG.require(event.weapon.cardId)
-    const markers = boardAbilityMarkers(definition)
+    const markers = boardWeaponAbilityMarkers(
+      event.weapon,
+      this.presentationState().turnNumber
+    )
     const layout = isLocal
       ? GAME_BOARD_LAYOUT.weapons.local
       : GAME_BOARD_LAYOUT.weapons.remote
@@ -6721,15 +6763,12 @@ export class GameBoardView extends Actor {
         deathrattle: markers.deathrattle,
         trigger: markers.trigger,
         lifesteal: markers.lifesteal,
-        temporaryAbilityLabels: [
-          ...(markers.spellDamage ? ['Spell Damage'] : []),
-          ...(markers.elusive ? ['Elusive'] : []),
-          ...(markers.immune ? ['Immune'] : [])
-        ]
+        poisonous: markers.poisonous
       },
       {
         frame: this.options.gameAssets.weapon,
         premiumFrame: this.options.gameAssets.premiumWeapon,
+        poisonous: this.options.gameAssets.boardPoisonous,
         trigger: this.options.gameAssets.boardTrigger,
         deathrattle: this.options.gameAssets.boardDeathrattle,
         lifesteal: this.options.gameAssets.minionLifesteal,
@@ -6818,7 +6857,7 @@ export class GameBoardView extends Actor {
         continue
       }
       if (current?.instanceId === player.weapon.instanceId) {
-        current.setStats(player.weapon.attack, player.weapon.durability)
+        this.updateWeaponView(current, player.weapon, state.turnNumber)
         continue
       }
       await this.presentWeaponEquipped(

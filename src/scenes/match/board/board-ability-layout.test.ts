@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { MINION_CANVAS, MINION_LAYOUT } from './minion-layout'
-import {
-  WEAPON_CANVAS,
-  WEAPON_LAYOUT,
-  weaponTemporaryAbilityBadgePlacement
-} from './weapon-layout'
+import { WEAPON_CANVAS, WEAPON_LAYOUT } from './weapon-layout'
 import type { LayoutPlacement } from '../../../visual-components/layout'
 
 function expectInsideCanvas(
@@ -66,8 +62,8 @@ describe('board ability badge layouts', () => {
     expect(MINION_LAYOUT.inspire.scale).toEqual({ x: 0.75, y: 0.75 })
     expect(MINION_LAYOUT.lifesteal.scale).toEqual({ x: 0.75, y: 0.75 })
     expect(MINION_LAYOUT.deathrattle.scale).toEqual({ x: 0.75, y: 0.75 })
-    expect(WEAPON_LAYOUT.trigger.scale).toBeUndefined()
-    expect(WEAPON_LAYOUT.deathrattle.scale).toBeUndefined()
+    expect(WEAPON_LAYOUT.trigger.scale).toEqual({ x: 0.75, y: 0.75 })
+    expect(WEAPON_LAYOUT.deathrattle.scale).toEqual({ x: 0.75, y: 0.75 })
   })
 
   it('keeps badges inside the canvas and shares the enlarged immunity cocoon', () => {
@@ -85,16 +81,12 @@ describe('board ability badge layouts', () => {
     expect(MINION_LAYOUT.immune.scale).toEqual(MINION_LAYOUT.divineShield.scale)
   })
 
-  it('spreads temporary weapon badges across a centered bottom row', () => {
-    const placements = [0, 1].map((index) =>
-      weaponTemporaryAbilityBadgePlacement(index, 2)
-    )
-
-    expect(placements.map((value) => value.position)).toEqual([
-      { x: 100, y: 190 },
-      { x: 140, y: 190 }
-    ])
-    placements.forEach((value) => expectInsideCanvas(value, WEAPON_CANVAS))
+  it('matches minion ability sizes on weapons', () => {
+    for (const key of ['deathrattle', 'trigger', 'lifesteal', 'poisonous'] as const) {
+      expect(WEAPON_LAYOUT[key].size).toEqual(MINION_LAYOUT[key].size)
+      expect(WEAPON_LAYOUT[key].scale).toEqual(MINION_LAYOUT[key].scale)
+      expectInsideCanvas(WEAPON_LAYOUT[key], WEAPON_CANVAS)
+    }
   })
 
   it('places Aura at the top of the minion instead of in the bottom badge row', () => {

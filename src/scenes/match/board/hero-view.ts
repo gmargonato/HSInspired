@@ -15,6 +15,7 @@ import { createHealthPulse } from './health-pulse'
 import { HERO_CANVAS, HERO_LAYOUT, HERO_SPELL_PLAY } from './hero-layout'
 import { attachShadow } from '../../../visual-components/effects/shadow-caster'
 import { HeroPortrait } from '../../../visual-components/hero-portrait'
+import { outlinedTextStyle } from '../../../visual-components/text-style'
 
 export interface HeroViewModel {
   readonly label: string
@@ -72,7 +73,7 @@ function createStatGroup(
 
   const valueLabel = new Text({
     text: String(value),
-    style: { ...HERO_LAYOUT.statText, fontSize },
+    style: { ...HERO_LAYOUT.statText, ...outlinedTextStyle('number', fontSize) },
     anchor: 0.5
   })
   valueLabel.position.set(0, 0)
@@ -125,6 +126,7 @@ export class HeroView extends Container {
   private selected = false
   private baseScale = 1
   private healthVisible = false
+  private lethalHealth: number | null = null
 
   public ownerId: string | null = null
 
@@ -351,13 +353,27 @@ export class HeroView extends Container {
 
   /** Updates hero health and armor without changing attack badge visibility. */
   setHealthAndArmor(health: number, armor: number, maxHealth: number): void {
+    if (health > 0) this.lethalHealth = null
+    const displayedHealth = health === 0 ? (this.lethalHealth ?? health) : health
     this.maxHealth = maxHealth
-    this.healthLabel.text = String(health)
-    this.setHealthColor(health)
+    this.healthLabel.text = String(displayedHealth)
+    this.setHealthColor(displayedHealth)
     this.armorLabel.text = String(armor)
     if (this.armorGroup.visible !== (this.healthVisible && armor > 0))
       this.shadow.silhouette!.revision++
     this.armorGroup.visible = this.healthVisible && armor > 0
+  }
+
+  /** Retains only the lethal hit's overkill through later zero-health refreshes. */
+  presentLethalDamage(
+    healthBefore: number,
+    healthAfter: number,
+    healthDamage: number
+  ): void {
+    if (healthAfter !== 0 || healthBefore <= 0 || this.lethalHealth !== null) return
+    this.lethalHealth = Math.min(0, healthBefore - Math.max(0, healthDamage))
+    this.healthLabel.text = String(this.lethalHealth)
+    this.setHealthColor(this.lethalHealth)
   }
 
   /** Replaces both portrait layers while preserving the hero's board state. */

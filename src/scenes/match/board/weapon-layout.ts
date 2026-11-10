@@ -1,8 +1,5 @@
-import {
-  CENTER,
-  placement,
-  type LayoutPlacement
-} from '../../../visual-components/layout'
+import { outlinedTextStyle } from '../../../visual-components/text-style'
+import { CENTER, placement } from '../../../visual-components/layout'
 
 /** The local design space for one equipped board weapon. Its pivot is centered. */
 export const WEAPON_CANVAS = { width: 240, height: 210 } as const
@@ -31,6 +28,7 @@ export const WEAPON_LAYOUT = {
     { width: 41, height: 44 },
     {
       anchor: CENTER,
+      scale: 0.75,
       note: 'Bottom-center Trigger badge, layered above Deathrattle.'
     }
   ),
@@ -39,6 +37,7 @@ export const WEAPON_LAYOUT = {
     { width: 43, height: 41 },
     {
       anchor: CENTER,
+      scale: 0.75,
       note: 'Bottom-center Lifesteal badge, sharing the weapon ability slot.'
     }
   ),
@@ -47,16 +46,19 @@ export const WEAPON_LAYOUT = {
     { width: 80, height: 53 },
     {
       anchor: CENTER,
+      scale: 0.75,
       note: 'Bottom-center Deathrattle badge, layered below Trigger.'
     }
   ),
-  temporaryAbilityBadges: {
-    centerX: WEAPON_CANVAS.width / 2,
-    centerY: 190,
-    size: { width: 36, height: 36 },
-    gap: 4,
-    note: 'Centered row of temporary text badges below the authored ability art.'
-  },
+  poisonous: placement(
+    { x: WEAPON_CANVAS.width / 2, y: 153 },
+    { width: 39, height: 55 },
+    {
+      anchor: CENTER,
+      scale: 0.75,
+      note: 'Poisonous flask above Deathrattle and below Trigger.'
+    }
+  ),
   attackBadge: placement(
     { x: 75, y: 145 },
     { width: 171, height: 180 },
@@ -81,29 +83,10 @@ export const WEAPON_LAYOUT = {
     radiusY: 65
   },
   statText: {
-    fontFamily: 'Belwe',
     // The entire stat group is scaled to 24%; author the number at card scale
     // so it remains legible beside the compact board weapon.
-    fontSize: 150,
+    ...outlinedTextStyle('number', 150),
     fill: 0xffffff,
-    stroke: { color: 0x17120f, width: 8 },
     align: 'center' as const
   }
 } as const
-
-/** Parameterized bottom row so weapons with multiple missing visuals remain readable. */
-export function weaponTemporaryAbilityBadgePlacement(
-  index: number,
-  count: number
-): LayoutPlacement {
-  const row = WEAPON_LAYOUT.temporaryAbilityBadges
-  const step = row.size.width + row.gap
-  return placement(
-    {
-      x: row.centerX + (index - (count - 1) / 2) * step,
-      y: row.centerY
-    },
-    row.size,
-    { anchor: CENTER, note: row.note }
-  )
-}

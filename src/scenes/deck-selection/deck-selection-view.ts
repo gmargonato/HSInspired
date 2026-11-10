@@ -1,3 +1,4 @@
+import { outlinedTextStyle } from '../../visual-components/text-style'
 import { Container, Sprite, Text } from 'pixi.js'
 import type { RendererLogger } from '../../application/contracts/logger'
 import {
@@ -384,10 +385,8 @@ export class DeckSelectionView extends Container {
     this.pageLabel = new Text({
       text: '',
       style: {
-        fontFamily: 'Belwe',
-        fontSize: 28,
+        ...outlinedTextStyle('number', 28),
         fill: 0xffffff,
-        stroke: { color: 0x000000, width: 4 },
         align: 'center'
       }
     })

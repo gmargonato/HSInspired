@@ -30,7 +30,7 @@ async function run() {
     background: 0x202030
   })
   document.body.append(app.canvas)
-  const font = new FontFace('Belwe', `url(${fontUrl})`)
+  const font = new FontFace('Belwe', `url(${fontUrl})`, { weight: '700' })
   document.fonts.add(await font.load())
   const root = new URL('../../', location.href)
   // Captures live under .tmp/match-controls-check; assets are repository-local.
@@ -163,6 +163,97 @@ async function run() {
   hud.turnButtonLayer.position.set(-535, -162)
   app.stage.addChild(hud.turnButtonLayer)
   hud.syncEndTurnButton(endTexture, true, false)
+  // Exercise DOM pointer routing, including Pixi hit testing of disabled controls.
+  const pointer = (type: string, x: number, y: number) => {
+    const rect = app.canvas.getBoundingClientRect()
+    app.canvas.dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true,
+        pointerId: 1,
+        pointerType: 'mouse',
+        isPrimary: true,
+        button: 0,
+        buttons: type === 'pointerdown' ? 1 : 0,
+        clientX: rect.left + (x * rect.width) / 1280,
+        clientY: rect.top + (y * rect.height) / 720
+      })
+    )
+  }
+  for (const use3d of [true, false]) {
+    let submitted = 0
+    const probeHud = new GameHudView(new CardAssetResolver(), animations)
+    probeHud.mount(
+      {
+        endTurn: endTexture,
+        manaAvailable: Texture.WHITE,
+        manaSpent: Texture.WHITE,
+        manaGlow: Texture.WHITE,
+        manaOverload: Texture.WHITE,
+        deckInfo: Texture.WHITE
+      },
+      () => {
+        submitted++
+      },
+      endTexture,
+      use3d ? renderer : undefined
+    )
+    probeHud.turnButtonLayer.position.set(-1095, -290)
+    app.stage.addChild(probeHud.turnButtonLayer)
+    const button = probeHud.endTurnButton!
+    const mesh = use3d ? [...renderer.controls].at(-1)! : null
+    const advance = () =>
+      gsap.globalTimeline.time(gsap.globalTimeline.time() + 0.2, false)
+    const isDown = () =>
+      mesh
+        ? mesh.pressRoot.position.y < -0.19
+        : (button as import('../src/visual-components/controls/button').Button).content
+            .scale.x < 0.91
+    const isUp = () =>
+      mesh
+        ? Math.abs(mesh.pressRoot.position.y) < 1e-5
+        : Math.abs(
+            (button as import('../src/visual-components/controls/button').Button)
+              .content.scale.x - 1
+          ) < 1e-5
+    probeHud.syncEndTurnButton(endTexture, false, false, 'endTurn', true)
+    app.renderer.render(app.stage)
+    pointer('pointermove', 500, 200)
+    pointer('pointerdown', 500, 200)
+    advance()
+    check(isDown(), `${use3d ? '3D' : '2D'}: blocked DOM press reaches control`)
+    probeHud.syncEndTurnButton(endTexture, true, false, 'endTurn', true)
+    pointer('pointerup', 500, 200)
+    advance()
+    check(isUp() && submitted === 0, 'Unlocking held feedback never submits')
+    pointer('pointerdown', 500, 200)
+    pointer('pointerup', 500, 200)
+    check(submitted === 1, 'Fresh enabled DOM click submits once')
+    probeHud.syncEndTurnButton(endTexture, false, false, 'endTurn', true)
+    pointer('pointerdown', 500, 200)
+    advance()
+    window.dispatchEvent(new Event('blur'))
+    advance()
+    check(isUp() && submitted === 1, 'Blur clears blocked hold without submission')
+    for (const cancellation of ['pointercancel', 'pointerout']) {
+      button.emit('pointerdown', { button: 0 })
+      advance()
+      button.emit(cancellation, { button: 0 })
+      advance()
+      check(isUp() && submitted === 1, `${cancellation} releases blocked feedback`)
+      button.emit('pointerupoutside', { button: 0 })
+    }
+    probeHud.syncEndTurnButton(endTexture, true, false, 'endTurn', true)
+    button.emit('pointerdown', { button: 0 })
+    probeHud.syncEndTurnButton(endTexture, false, false, 'endTurn', true)
+    probeHud.syncEndTurnButton(endTexture, true, false, 'endTurn', true)
+    button.emit('pointerup', { button: 0 })
+    button.emit('pointertap', { button: 0 })
+    advance()
+    check(isUp() && submitted === 1, 'Blocking an enabled gesture cancels submission')
+    probeHud.syncEndTurnButton(endTexture, false, false)
+    check(button.eventMode === 'none', 'Hard disabled controls reject hit testing')
+    probeHud.dispose()
+  }
   const tick = (_time: number, delta: number) => renderer.render(delta)
   gsap.ticker.add(tick)
   const capture = async (name: string) => {
@@ -397,6 +488,9 @@ async function run() {
   )
   await finish(Promise.all(powers.map((p) => p.flipDown())))
   await capture('03-exhausted-backs')
+  // Hidden-window visibility varies by platform; pin the state this check exercises.
+  Object.defineProperty(document, 'hidden', { configurable: true, value: true })
+  renderer.render()
   const exhaustedCount = renderer.renderCount
   renderer.render(16)
   check(
@@ -436,6 +530,34 @@ async function run() {
   powers[1].setCost(12)
   powers[1].setCostColor('increased')
   await capture('04-replacement-and-costs')
+  for (const cost of [0, 1, 2, 10, 27, 99, 100, 999]) {
+    powers.forEach((power) => power.setCost(cost))
+    renderer.render()
+    for (const control of heroControls) {
+      // Inspect the actual production texture, including antialiasing and miter corners.
+      const entry = (
+        control as unknown as {
+          textMaps: Map<string, { canvas: HTMLCanvasElement }>
+        }
+      ).textMaps.get('CostUberText')!
+      const { width, height } = entry.canvas
+      const data = entry.canvas.getContext('2d')!.getImageData(0, 0, width, height).data
+      let painted = 0
+      let clipped = false
+      for (let y = 0; y < height; y++)
+        for (let x = 0; x < width; x++) {
+          if (data[(y * width + x) * 4 + 3] > 0) {
+            painted++
+            if (x < 2 || y < 2 || x >= width - 2 || y >= height - 2) clipped = true
+          }
+        }
+      check(
+        painted > 0 && !clipped,
+        `Cost ${cost}: complete outlined glyphs fit the canvas`
+      )
+    }
+    await capture(`cost-${cost}`)
+  }
   powers.forEach((p) => p.setPremium(false))
   // Exercise visible-window animation even though this capture window is hidden.
   Object.defineProperty(document, 'hidden', { configurable: true, value: false })

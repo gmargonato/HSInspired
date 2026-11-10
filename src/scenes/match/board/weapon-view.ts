@@ -3,18 +3,13 @@ import {
   applyAnchoredPlacement,
   applyPlacement
 } from '../../../visual-components/layout'
-import { createTemporaryAbilityBadge } from './temporary-ability-badge'
 import {
   AnimatedOutline,
   type OutlineTuning,
   type OutlinePaletteInput
 } from '../../../visual-components/effects/animated-outline'
 import { createWeaponOutlineProxy, weaponOutlineShapeKey } from './weapon-outline-shape'
-import {
-  WEAPON_CANVAS,
-  WEAPON_LAYOUT,
-  weaponTemporaryAbilityBadgePlacement
-} from './weapon-layout'
+import { WEAPON_CANVAS, WEAPON_LAYOUT } from './weapon-layout'
 import { AnimationScope } from '../../../visual-components/animation/animations'
 import { attachShadow } from '../../../visual-components/effects/shadow-caster'
 import {
@@ -33,7 +28,7 @@ export interface WeaponViewModel {
   readonly deathrattle: boolean
   readonly trigger: boolean
   readonly lifesteal: boolean
-  readonly temporaryAbilityLabels: readonly string[]
+  readonly poisonous: boolean
 }
 
 export interface WeaponViewTextures {
@@ -41,6 +36,7 @@ export interface WeaponViewTextures {
   readonly premiumFrame: Texture
   readonly trigger: Texture
   readonly deathrattle: Texture
+  readonly poisonous: Texture
   readonly lifesteal: Texture
   readonly attack: Texture
   readonly durability: Texture
@@ -124,6 +120,7 @@ export class WeaponView extends Container {
   private readonly printedDurability: number
   private readonly deathrattle: Sprite
   private readonly trigger: Sprite
+  private readonly poisonous: Sprite
   private readonly lifesteal: Sprite
   private readonly hoverOutlines = new Map<Texture, AnimatedOutline>()
   private hoverOutline: AnimatedOutline
@@ -220,6 +217,12 @@ export class WeaponView extends Container {
     this.deathrattle.label = 'weapon.deathrattle'
     this.addChild(this.deathrattle)
 
+    this.poisonous = new Sprite(textures.poisonous)
+    applyAnchoredPlacement(this.poisonous, WEAPON_LAYOUT.poisonous)
+    this.poisonous.visible = model.poisonous
+    this.poisonous.label = 'weapon.poisonous'
+    this.addChild(this.poisonous)
+
     this.trigger = new Sprite(textures.trigger)
     applyAnchoredPlacement(this.trigger, WEAPON_LAYOUT.trigger)
     this.trigger.visible = model.trigger
@@ -231,18 +234,6 @@ export class WeaponView extends Container {
     this.lifesteal.visible = model.lifesteal
     this.lifesteal.label = 'weapon.lifesteal'
     this.addChild(this.lifesteal)
-
-    model.temporaryAbilityLabels.forEach((text, index) => {
-      const badge = createTemporaryAbilityBadge(
-        text,
-        weaponTemporaryAbilityBadgePlacement(
-          index,
-          model.temporaryAbilityLabels.length
-        ),
-        `weapon.temporary-ability-${index}`
-      )
-      this.addChild(badge)
-    })
 
     const attack = createStatGroup(
       'weapon.stat-attack',
@@ -302,6 +293,10 @@ export class WeaponView extends Container {
 
   setTrigger(visible: boolean): void {
     this.trigger.visible = visible
+  }
+
+  setPoisonous(visible: boolean): void {
+    this.poisonous.visible = visible
   }
 
   setLifesteal(visible: boolean): void {

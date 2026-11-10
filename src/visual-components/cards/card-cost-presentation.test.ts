@@ -12,10 +12,14 @@ import { CARD_CATALOG, asCardId } from '../../game-rules/content/cards'
 import { CardView } from './card-view'
 import { CardAssetResolver } from '../assets/card-asset-resolver'
 import { setPremiumMode } from './premium-appearance'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { cardCostColor } from './card-cost-presentation'
 import { buildCardRenderTree } from './card-render-builder'
 import { supportsPremiumFormat } from '../../game-rules/progression/premium-support'
+
+// These CPU tests mount premium cards; their ticker consults browser visibility.
+beforeEach(() => vi.stubGlobal('document', { hidden: true }))
+afterEach(() => vi.unstubAllGlobals())
 
 describe('card cost presentation', () => {
   it('keeps an unchanged cost neutral', () => {

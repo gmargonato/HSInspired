@@ -1,3 +1,4 @@
+import { outlinedTextStyle } from '../../../visual-components/text-style'
 import { Container, Rectangle, Sprite, Text, type Texture } from 'pixi.js'
 import type { FederatedPointerEvent } from 'pixi.js'
 import {
@@ -61,18 +62,14 @@ const EFFECT_STYLE = {
 } as const
 
 const PLAQUE_STYLE = {
-  fontFamily: 'Belwe',
-  fontSize: 15,
+  ...outlinedTextStyle('label', 15),
   fill: 0xffffff,
-  stroke: { color: 0x000000, width: 3 },
   align: 'center'
 } as const
 
 const TYPE_STYLE = {
-  fontFamily: 'Belwe',
-  fontSize: 20,
+  ...outlinedTextStyle('label', 20),
   fill: 0xffffff,
-  stroke: { color: 0x000000, width: 4 },
   align: 'center'
 } as const
 

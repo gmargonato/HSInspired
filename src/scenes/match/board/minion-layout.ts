@@ -1,3 +1,4 @@
+import { outlinedTextStyle } from '../../../visual-components/text-style'
 import { CENTER, placement } from '../../../visual-components/layout'
 
 /** The local design space for one board minion. Its pivot is the canvas center. */
@@ -46,10 +47,8 @@ export const MINION_LAYOUT = {
     }
   ),
   dormantProgressTextStyle: {
-    fontFamily: 'Belwe',
-    fontSize: 32,
+    ...outlinedTextStyle('number', 32),
     fill: 0xffffff,
-    stroke: { color: 0x000000, width: 4 },
     align: 'center' as const
   },
   legendaryFrame: placement(
@@ -218,10 +217,8 @@ export const MINION_LAYOUT = {
     radiusY: 75
   },
   statText: {
-    fontFamily: 'Belwe',
-    fontSize: 30,
+    ...outlinedTextStyle('number', 30),
     fill: 0xffffff,
-    stroke: { color: 0x17120f, width: 5 },
     align: 'center' as const
   },
   /** Sleeping Zzz origin inside the artwork (towards center) drifting diagonally up-right. */

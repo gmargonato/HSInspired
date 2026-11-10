@@ -1,3 +1,4 @@
+import { outlinedTextStyle } from '../../../visual-components/text-style'
 import { Container, Graphics, Rectangle, Sprite, Text, type Texture } from 'pixi.js'
 import type { HeroPowerDefinition } from '../../../game-rules/content/hero-powers'
 import {
@@ -141,10 +142,8 @@ export class HeroPowerCardView extends Container {
     const costLabel = new Text({
       text: String(cost),
       style: {
-        fontFamily: 'Belwe',
-        fontSize: 90,
+        ...outlinedTextStyle('number', 90),
         fill: 0xffffff,
-        stroke: { color: 0x17120f, width: 8 },
         align: 'center'
       },
       anchor: 0.5
@@ -156,10 +155,8 @@ export class HeroPowerCardView extends Container {
     const titleLabel = new Text({
       text: definition.displayName,
       style: {
-        fontFamily: 'Belwe',
-        fontSize: 42,
+        ...outlinedTextStyle('label', 42),
         fill: 0xffffff,
-        stroke: { color: 0x17120f, width: 7 },
         align: 'center',
         wordWrap: true,
         wordWrapWidth: layout.title.size.width

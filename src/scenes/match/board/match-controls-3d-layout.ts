@@ -17,6 +17,7 @@ export const MATCH_CONTROLS_3D_LAYOUT = {
       frameSpecular: 0x555555
     },
     heroPower: {
+      goldReflectionMultiplier: 1.5,
       ambient: 1.4,
       key: { color: 0xfff6ea, intensity: 1.15, position: [-3, 8, 4] },
       fill: { color: 0xffffff, intensity: 0.45, position: [4, 3, -5] },

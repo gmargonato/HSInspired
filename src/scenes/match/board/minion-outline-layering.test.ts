@@ -557,6 +557,7 @@ describe('MinionView outline layering', () => {
       premiumFrame: Texture.WHITE,
       trigger: Texture.EMPTY,
       deathrattle: Texture.EMPTY,
+      poisonous: Texture.EMPTY,
       lifesteal: Texture.EMPTY,
       attack: Texture.EMPTY,
       durability: Texture.EMPTY
@@ -569,7 +570,7 @@ describe('MinionView outline layering', () => {
       deathrattle: false,
       trigger: false,
       lifesteal: false,
-      temporaryAbilityLabels: []
+      poisonous: false
     }
     const views = await Promise.all([
       WeaponView.create({ ...model, premiumSide: 'local' }, weaponTextures, undefined),
@@ -590,12 +591,56 @@ describe('MinionView outline layering', () => {
     }
   })
 
+  it('updates weapon ability art while preserving stacking and pulse scale', async () => {
+    const texture = new Proxy({} as WeaponViewTextures, { get: () => Texture.WHITE })
+    const view = await WeaponView.create(
+      {
+        label: 'test.weapon.abilities',
+        attack: 2,
+        durability: 2,
+        printedDurability: 2,
+        deathrattle: true,
+        trigger: true,
+        lifesteal: false,
+        poisonous: false
+      },
+      texture,
+      undefined
+    )
+    try {
+      const deathrattle = view.getChildByLabel('weapon.deathrattle') as Sprite
+      const poisonous = view.getChildByLabel('weapon.poisonous') as Sprite
+      const trigger = view.getChildByLabel('weapon.trigger') as Sprite
+      const lifesteal = view.getChildByLabel('weapon.lifesteal') as Sprite
+      expect(view.getChildIndex(deathrattle)).toBeLessThan(
+        view.getChildIndex(poisonous)
+      )
+      expect(view.getChildIndex(poisonous)).toBeLessThan(view.getChildIndex(trigger))
+      for (const marker of [deathrattle, poisonous, trigger, lifesteal]) {
+        expect(marker.scale.x).toBe(0.75)
+        expect(marker.scale.y).toBe(0.75)
+      }
+      view.setPoisonous(true)
+      view.setLifesteal(true)
+      expect(poisonous.visible).toBe(true)
+      expect(lifesteal.visible).toBe(true)
+      view.setLifesteal(false)
+      expect(lifesteal.visible).toBe(false)
+      await view.presentAbilityPulse('trigger', 0.01)
+      expect(trigger.scale.x).toBe(0.75)
+      expect(view.getChildByLabel('weapon.trigger.pulse')).toBeNull()
+    } finally {
+      view.destroy({ children: true })
+    }
+  })
+
   it('colors durability relative to the printed weapon value', async () => {
     const weaponTextures: WeaponViewTextures = {
       frame: Texture.EMPTY,
       premiumFrame: Texture.WHITE,
       trigger: Texture.EMPTY,
       deathrattle: Texture.EMPTY,
+      poisonous: Texture.EMPTY,
       lifesteal: Texture.EMPTY,
       attack: Texture.EMPTY,
       durability: Texture.EMPTY
@@ -609,7 +654,7 @@ describe('MinionView outline layering', () => {
         deathrattle: false,
         trigger: false,
         lifesteal: false,
-        temporaryAbilityLabels: []
+        poisonous: false
       },
       weaponTextures,
       undefined

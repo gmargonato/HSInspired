@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import type { ControlModelData } from '../../../visual-components/assets/match-control-assets'
+import { MATCH_CONTROLS_3D_LAYOUT as layout } from './match-controls-3d-layout'
 
 type SourceMaterial = ControlModelData['materials'][string]
 
@@ -20,7 +21,11 @@ export function configureGoldReflection(
       goldReflection: { value: reflection },
       goldMask: { value: mask },
       goldColor: { value: color('_ReflectionColor') },
-      goldIntensity: { value: source.floats._ReflectionIntensity },
+      goldIntensity: {
+        value:
+          source.floats._ReflectionIntensity *
+          layout.lighting.heroPower.goldReflectionMultiplier
+      },
       goldRotation: { value: source.floats._ReflectionRotation }
     })
     shader.fragmentShader =

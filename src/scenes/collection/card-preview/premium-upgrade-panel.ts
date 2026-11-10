@@ -1,3 +1,4 @@
+import { outlinedTextStyle } from '../../../visual-components/text-style'
 import { Container, Rectangle, Sprite, Text, type FederatedPointerEvent } from 'pixi.js'
 import type { CardDefinition } from '../../../game-rules/content/cards'
 import { premiumUpgradeCost } from '../../../game-rules/progression/arcane-dust'
@@ -64,11 +65,9 @@ export class PremiumUpgradePanel extends Container {
     const text = new Text({
       text: '',
       style: {
-        fontFamily: 'Belwe',
-        fontSize,
+        ...outlinedTextStyle('number', fontSize),
         fill: 0xffffff,
-        align: 'center',
-        stroke: { color: 0x000000, width: 3 }
+        align: 'center'
       }
     })
     text.label = `card-preview.${label}`

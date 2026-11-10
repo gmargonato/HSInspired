@@ -1,3 +1,5 @@
+import type { TextOutline } from '../text-style'
+
 /** Shared geometry primitives for the semantic card render tree. */
 export interface CardPoint {
   readonly x: number
@@ -18,7 +20,7 @@ export interface CardTextStyle {
   readonly align: 'left' | 'center'
   readonly fontWeight?: 'normal' | 'bold'
   readonly letterSpacing?: number
-  readonly stroke?: { readonly color: number; readonly width: number }
+  readonly stroke?: TextOutline
   readonly wordWrap?: boolean
   readonly wordWrapWidth?: number
   readonly lineHeight?: number

@@ -1,3 +1,4 @@
+import { outlinedTextStyle } from '../../visual-components/text-style'
 import {
   ColorMatrixFilter,
   Container,
@@ -415,10 +416,8 @@ export class CollectionView extends Actor {
       const label = new Text({
         text: formatManaFilterLabel(value),
         style: {
-          fontFamily: 'Belwe',
-          fontSize: 24,
+          ...outlinedTextStyle('number', 24),
           fill: 0xffffff,
-          stroke: { color: 0x000000, width: 4 },
           align: 'center'
         }
       })

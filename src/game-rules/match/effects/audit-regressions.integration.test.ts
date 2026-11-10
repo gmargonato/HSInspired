@@ -479,7 +479,7 @@ describe('approved broad printed effects', () => {
     })
   })
   it.each([0, 1])(
-    'Brann doubles hero Choose One branch %i without doubling Armor',
+    'Brann leaves hero Choose One branch %i and Armor unchanged',
     (choice) => {
       const f = fixture()
       f.summon('league_of_explorers_brann_bronzebeard')
@@ -496,7 +496,7 @@ describe('approved broad printed effects', () => {
         choice === 0
           ? 'knights_of_the_frozen_throne_frost_widow'
           : 'knights_of_the_frozen_throne_scarab_beetle'
-      expect(f.player().board.filter((c) => c.cardId === summon)).toHaveLength(4)
+      expect(f.player().board.filter((c) => c.cardId === summon)).toHaveLength(2)
       expect(result.events.filter((e) => e.type === 'hero-replaced')).toHaveLength(1)
       const definition = CARD_CATALOG.require(cardId)
       expect(f.player().hero.armor).toBe(
@@ -504,6 +504,40 @@ describe('approved broad printed effects', () => {
       )
     }
   )
+  it('Brann does not repeat a targeted Choose One effect or announce a Battlecry', () => {
+    const f = fixture()
+    f.summon('league_of_explorers_brann_bronzebeard')
+    const victim = f.summon('basic_chillwind_yeti', f.foe)
+    const id = f.add('classic_keeper_of_the_grove')
+    f.mana()
+    const result = f.command({
+      type: 'play-card',
+      participantId: f.me,
+      cardInstanceId: id,
+      choice: 0,
+      position: 1,
+      targets: [f.target(victim)]
+    })
+    expect(f.player(f.foe).board.find((c) => c.instanceId === victim)?.health).toBe(3)
+    expect(
+      result.events.filter((e) => e.type === 'battlecry-repetition-started')
+    ).toEqual([])
+  })
+
+  it('Fandral combines Malfurion choices once even with Brann present', () => {
+    const f = fixture()
+    f.summon('league_of_explorers_brann_bronzebeard')
+    f.summon('whispers_of_the_old_gods_fandral_staghelm')
+    f.play('knights_of_the_frozen_throne_malfurion_the_pestilent')
+    for (const cardId of [
+      'knights_of_the_frozen_throne_frost_widow',
+      'knights_of_the_frozen_throne_scarab_beetle'
+    ]) {
+      expect(f.player().board.filter((c) => c.cardId === cardId)).toHaveLength(2)
+    }
+    expect(f.player().hero.armor).toBe(5)
+  })
+
   it.each([
     ['basic_grimscale_oracle', 1, 0],
     ['classic_murloc_warleader', 2, 1]

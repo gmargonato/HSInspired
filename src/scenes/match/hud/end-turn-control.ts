@@ -10,6 +10,8 @@ export class EndTurnControl extends Actor {
   readonly sprite: Sprite
   private readonly mesh: ControlMeshView
   private enabled = false
+  private allowBlockedPress = false
+  private gestureCanSubmit = true
   private held = false
   private physicallyPressed = false
   private gestureRevision = 0
@@ -40,7 +42,14 @@ export class EndTurnControl extends Actor {
     this.mesh.settle(face === 'enemyTurn' ? 'ENDTURN_WAITING' : 'ENDTURN_YOUR_TURN')
     this.mesh.setTurnText(face === 'extraTurn')
     this.on('pointerdown', (event) => {
-      if (event.button !== 0 || !this.enabled || this.mesh.busy) return
+      if (
+        event.button !== 0 ||
+        (!this.enabled && !this.allowBlockedPress) ||
+        this.face === 'enemyTurn' ||
+        this.mesh.busy
+      )
+        return
+      this.gestureCanSubmit = this.enabled
       this.held = true
       ++this.gestureRevision
       this.physicallyPressed = true
@@ -50,13 +59,26 @@ export class EndTurnControl extends Actor {
     this.on('pointerup', this.handlePointerUp)
     this.on('pointerout', this.releaseAnimation)
     this.on('pointerupoutside', this.handlePointerUp)
-    this.on('pointercancel', () => this.release())
+    this.on('pointercancel', this.cancelPress)
     this.on('pointertap', (event) => {
-      if (event.button === 0 && this.enabled && !this.mesh.busy) onClick()
+      if (
+        event.button === 0 &&
+        this.enabled &&
+        this.gestureCanSubmit &&
+        !this.mesh.busy
+      ) {
+        this.gestureCanSubmit = false
+        onClick()
+      }
     })
-    window.addEventListener('blur', this.release)
+    window.addEventListener('blur', this.cancelPress)
     window.addEventListener('pointerup', this.handlePointerUp)
-    window.addEventListener('pointercancel', this.release)
+    window.addEventListener('pointercancel', this.cancelPress)
+  }
+
+  private cancelPress = (): void => {
+    this.gestureCanSubmit = false
+    this.release()
   }
 
   private handlePointerUp = (event: { button: number }): void => {
@@ -86,10 +108,15 @@ export class EndTurnControl extends Actor {
   isTextureFlipping(): boolean {
     return this.mesh.busy
   }
-  setEnabled(enabled: boolean): void {
+  /** Optional blocked feedback accepts presses without granting click permission. */
+  setEnabled(enabled: boolean, allowBlockedPress = false): void {
+    if (this.enabled && !enabled) this.cancelPress()
     this.enabled = enabled
-    if (!enabled) this.release()
-    this.eventMode = enabled && !this.mesh.busy ? 'static' : 'none'
+    this.allowBlockedPress = allowBlockedPress
+    const receptive =
+      (enabled || allowBlockedPress) && !this.mesh.busy && this.face !== 'enemyTurn'
+    if (!receptive) this.cancelPress()
+    this.eventMode = receptive ? 'static' : 'none'
     this.cursor = enabled ? 'pointer' : 'default'
   }
 
@@ -104,18 +131,19 @@ export class EndTurnControl extends Actor {
       const promise = this.mesh.play(
         face === 'enemyTurn' ? 'ENDTURN_WAITING' : 'ENDTURN_YOUR_TURN'
       )
-      this.setEnabled(this.enabled)
+      this.setEnabled(this.enabled, this.allowBlockedPress)
       await promise
     }
-    if (!this.destroyed && revision === this.revision) this.setEnabled(this.enabled)
+    if (!this.destroyed && revision === this.revision)
+      this.setEnabled(this.enabled, this.allowBlockedPress)
   }
 
   override dispose(): void {
     ++this.revision
     ++this.gestureRevision
-    window.removeEventListener('blur', this.release)
+    window.removeEventListener('blur', this.cancelPress)
     window.removeEventListener('pointerup', this.handlePointerUp)
-    window.removeEventListener('pointercancel', this.release)
+    window.removeEventListener('pointercancel', this.cancelPress)
     this.mesh.dispose()
     super.dispose()
   }

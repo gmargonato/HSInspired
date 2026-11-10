@@ -74,3 +74,15 @@ materials remain the adaptations documented in the README. Audio, Unity shader
 effects, and gameplay timing beyond this local input sequence are not ported.
 The checks verify input behavior and sampled transforms, not frame-by-frame
 visual equivalence to a running Hearthstone client.
+
+## Blocked End Turn feedback
+
+Read-only IL inspection on 2026-11-10 confirms mouse handlers play the normal
+press/release clips before DoEndTurnButton checks response-packet blocking.
+Internal locks and waiting states suppress presses entirely. Installed curves
+match assets/models/match/match-controls.json.
+
+The match permits feedback during temporary local-turn blocks, including targeting
+and choices. Gestures started blocked cannot submit after unlocking. 3D retains
+the original clips; 2D retains its 0.9 scale and 80/120 ms press/release timings.
+Blocked presses never dispatch or flip. Opponent turns, flips and modals stay inactive.

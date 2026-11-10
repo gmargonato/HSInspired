@@ -1,3 +1,4 @@
+import { outlinedTextStyle } from '../../../visual-components/text-style'
 import { CENTER, placement } from '../../../visual-components/layout'
 
 /** Local design space for one board hero portrait. */
@@ -84,10 +85,8 @@ export const HERO_LAYOUT = {
     }
   ),
   statText: {
-    fontFamily: 'Belwe',
-    fontSize: 30,
+    ...outlinedTextStyle('number', 30),
     fill: 0xffffff,
-    stroke: { color: 0x17120f, width: 5 },
     align: 'center' as const
   },
   armorLabelFontSize: 120,

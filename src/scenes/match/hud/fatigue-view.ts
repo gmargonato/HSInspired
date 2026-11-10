@@ -1,3 +1,4 @@
+import { outlinedTextStyle } from '../../../visual-components/text-style'
 import { Container, Sprite, Text, type Texture } from 'pixi.js'
 import { AnimationScope } from '../../../visual-components/animation/animations'
 import {
@@ -44,11 +45,8 @@ export class FatigueView extends Container {
     this.message = new Text({
       text: '',
       style: {
-        fontFamily: 'Franklin Gothic Condensed',
-        fontSize: 34,
-        fontWeight: 'bold',
+        ...outlinedTextStyle('fatigue', 34),
         fill: 0x2b1b12,
-        stroke: { color: 0xf1d9ae, width: 3 },
         align: 'center',
         wordWrap: true,
         wordWrapWidth: FATIGUE_LAYOUT.message.size.width,

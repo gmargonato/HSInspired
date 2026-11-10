@@ -2,7 +2,12 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const root = path.resolve(__dirname, '..')
-const output = path.join(root, '.tmp', 'match-controls-check')
+const typography = process.argv.includes('--typography')
+const output = path.join(
+  root,
+  '.tmp',
+  typography ? 'typography-check' : 'match-controls-check'
+)
 
 async function main() {
   fs.mkdirSync(output, { recursive: true })
@@ -29,6 +34,12 @@ async function main() {
         (await window.webContents.capturePage()).toPNG()
       )
     )
+    ipcMain.handle('image', (_, name, data) =>
+      fs.writeFileSync(
+        path.join(output, name + '.png'),
+        Buffer.from(data.split(',')[1], 'base64')
+      )
+    )
     ipcMain.once('result', (_, result) => {
       clearTimeout(timer)
       fs.writeFileSync(
@@ -45,7 +56,12 @@ async function main() {
     return
   }
   const source = fs.readFileSync(
-    path.join(root, 'scripts/check-match-controls-renderer.ts'),
+    path.join(
+      root,
+      typography
+        ? 'scripts/check-typography-renderer.ts'
+        : 'scripts/check-match-controls-renderer.ts'
+    ),
     'utf8'
   )
   await require('esbuild').build({
@@ -59,7 +75,8 @@ async function main() {
       '.png': 'dataurl',
       '.jpg': 'dataurl',
       '.woff2': 'dataurl',
-      '.ttf': 'dataurl'
+      '.ttf': 'dataurl',
+      '.otf': 'dataurl'
     },
     alias: { '@assets': path.join(root, 'assets') },
     plugins: [
@@ -91,12 +108,16 @@ async function main() {
   )
   const env = { ...process.env }
   delete env.ELECTRON_RUN_AS_NODE
-  const child = require('node:child_process').spawn(require('electron'), [__filename], {
-    cwd: root,
-    env,
-    stdio: 'inherit',
-    windowsHide: true
-  })
+  const child = require('node:child_process').spawn(
+    require('electron'),
+    [__filename, ...process.argv.slice(2)],
+    {
+      cwd: root,
+      env,
+      stdio: 'inherit',
+      windowsHide: true
+    }
+  )
   child.on('error', (error) => {
     console.error(error)
     process.exitCode = 1

@@ -1,3 +1,4 @@
+import { outlinedTextStyle } from '../text-style'
 import type { CardType } from '../../game-rules/content/cards'
 import { resolveCardAssetDefinition } from '../assets/card-assets'
 import {
@@ -77,23 +78,18 @@ export interface CardProfile {
 
 // Shared typography and display sizes.
 const NAME_STYLE_BASE: CardTextStyle = {
-  fontFamily: 'Belwe',
-  fontSize: 47,
+  ...outlinedTextStyle('label', 47),
   fill: 0xffffff,
   align: 'center',
-  stroke: { color: 0x000000, width: 7 },
   wordWrap: false,
   breakWords: false
 }
 
 const RULES_STYLE_BASE: CardTextStyle = {
-  fontFamily: 'Franklin Gothic Condensed',
-  fontSize: 44,
+  ...outlinedTextStyle('rules-ink', 44),
   fill: 0x19130e,
   align: 'center',
-  fontWeight: 'normal',
   letterSpacing: -0.5,
-  stroke: { color: 0x19130e, width: 0.75 },
   lineHeight: 50,
   breakWords: true,
   tagStyles: { keyword: { fontWeight: 'bold' } }
@@ -110,21 +106,17 @@ const WEAPON_RULES_STYLE: CardTextStyle = {
 }
 
 const RACE_STYLE: CardTextStyle = {
-  fontFamily: 'Belwe',
-  fontSize: 30,
+  ...outlinedTextStyle('label', 30),
   fill: 0xffffff,
   align: 'center',
-  stroke: { color: 0x000000, width: 4 },
   wordWrap: true,
   breakWords: true
 }
 
 const STAT_STYLE: CardTextStyle = {
-  fontFamily: 'Belwe',
-  fontSize: 150,
+  ...outlinedTextStyle('card-number', 150),
   fill: 0xffffff,
-  align: 'center',
-  stroke: { color: 0x17120f, width: 8 }
+  align: 'center'
 }
 const TIGHT_STAT_STYLE: CardTextStyle = {
   ...STAT_STYLE,
@@ -148,7 +140,7 @@ const SHARED_RULES: RulesLayout = {
     premium: {
       ...RULES_STYLE_BASE,
       fill: 0xffffff,
-      stroke: { color: 0xffffff, width: 0.75 }
+      ...outlinedTextStyle('rules-light-ink', RULES_STYLE_BASE.fontSize)
     }
   }
 }
@@ -247,7 +239,7 @@ export const CARD_PROFILES: Readonly<Record<CardVisualTemplate, CardProfile>> = 
         premium: assetPlacement('card.name.minion.premium', { x: 0, y: 0 })
       },
       text: placement({ x: 0, y: -18 }, { width: 570, height: 72 }, { anchor: CENTER }),
-      style: { ...NAME_STYLE_BASE, fontSize: 50 },
+      style: { ...NAME_STYLE_BASE, ...outlinedTextStyle('label', 50) },
       curve: { startY: 24, control1Y: 50, control2Y: -60, endY: 18, rotationScale: 1 }
     },
     rules: SHARED_RULES,

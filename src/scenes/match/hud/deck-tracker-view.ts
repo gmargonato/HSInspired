@@ -1,3 +1,4 @@
+import { outlinedTextStyle } from '../../../visual-components/text-style'
 import { Container, Graphics, Rectangle, Sprite, Text, type Texture } from 'pixi.js'
 import type { FederatedWheelEvent } from 'pixi.js'
 import type { OpeningCard } from '../../../game-rules/match'
@@ -158,10 +159,8 @@ export class DeckTrackerView extends Actor {
     const cost = new Text({
       text: String(entry.card?.cost ?? '?'),
       style: {
-        fontFamily: 'Belwe',
-        fontSize: 17,
+        ...outlinedTextStyle('compact-number', 17),
         fill: 0xffffff,
-        stroke: { color: 0x000000, width: 2 },
         letterSpacing: -1,
         align: 'center'
       }
@@ -198,10 +197,8 @@ export class DeckTrackerView extends Actor {
     const name = new Text({
       text: entry.card?.name ?? entry.cardId,
       style: {
-        fontFamily: 'Belwe',
-        fontSize: 18,
+        ...outlinedTextStyle('label', 18),
         fill: 0xffffff,
-        stroke: { color: 0x000000, width: 3 },
         letterSpacing: -1,
         align: 'left'
       }
@@ -222,10 +219,8 @@ export class DeckTrackerView extends Actor {
     const copies = new Text({
       text: entry.drawPosition ? `#${entry.drawPosition}` : String(entry.count),
       style: {
-        fontFamily: 'Belwe',
-        fontSize: 18,
+        ...outlinedTextStyle('compact-number', 18),
         fill: 0xf4d44d,
-        stroke: { color: 0x000000, width: 2 },
         letterSpacing: -1,
         align: 'center'
       }

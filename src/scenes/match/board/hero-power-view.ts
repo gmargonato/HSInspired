@@ -1,3 +1,4 @@
+import { outlinedTextStyle } from '../../../visual-components/text-style'
 import type { MatchControls3D, ControlMeshView } from './match-controls-3d'
 import {
   Container,
@@ -42,10 +43,8 @@ const UNAVAILABLE_SHAKE = {
 } as const
 
 const COST_LABEL_STYLE = {
-  fontFamily: 'Belwe',
-  fontSize: 32,
+  ...outlinedTextStyle('number', 32),
   fill: 0xffffff,
-  stroke: { color: 0x17120f, width: 5 },
   align: 'center'
 } as const
 

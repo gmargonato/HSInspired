@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { GAME_BOARD_LAYOUT } from '../game-scene-layout'
 import { CARD_CANVAS } from '../../../visual-components/cards/card-layout'
+import { outlinedTextStyle } from '../../../visual-components/text-style'
 import { SECRET_LAYOUT } from './secret-layout'
 
 function edge(
@@ -27,12 +28,16 @@ describe('Secret layout', () => {
   })
 
   it('centers the Belwe count over each Secret badge', () => {
+    const reference = outlinedTextStyle('number', SECRET_LAYOUT.countTextStyle.fontSize)
     expect(SECRET_LAYOUT.count.position).toEqual({ x: 0, y: -5 })
     expect(SECRET_LAYOUT.countTextStyle).toMatchObject({
       fontFamily: 'Belwe',
       fill: 0xffffff,
-      stroke: { color: 0x000000 }
+      stroke: reference.stroke
     })
+    expect(
+      SECRET_LAYOUT.countTextStyle.stroke.width / SECRET_LAYOUT.countTextStyle.fontSize
+    ).toBeCloseTo(reference.stroke.width / reference.fontSize)
   })
 
   it('spaces the Quest cards around the full-size arrow and centers progress on it', () => {

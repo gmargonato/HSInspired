@@ -1,3 +1,4 @@
+import { outlinedTextStyle } from '../../../visual-components/text-style'
 import { Container, Sprite, Text, type Texture } from 'pixi.js'
 import type { OpeningMatchState } from '../../../game-rules/match'
 import {
@@ -35,10 +36,8 @@ export class DeckInfoView extends Container {
     const heading = new Text({
       text: 'Deck and Hand',
       style: {
-        fontFamily: 'Belwe',
-        fontSize: DECK_INFO_LAYOUT.headingFontSize,
-        fill: 0xffffff,
-        stroke: { color: 0x000000, width: 3 }
+        ...outlinedTextStyle('label', DECK_INFO_LAYOUT.headingFontSize),
+        fill: 0xffffff
       }
     })
     this.heading = heading

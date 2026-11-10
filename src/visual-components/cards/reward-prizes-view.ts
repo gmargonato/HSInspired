@@ -1,3 +1,4 @@
+import { outlinedTextStyle, type TextOutlineRole } from '../text-style'
 import { Container, Graphics, Rectangle, Sprite, Text } from 'pixi.js'
 import {
   CARD_CATALOG,
@@ -107,7 +108,7 @@ export class ArenaRewardsView extends Actor {
       const dust = new Sprite(this.assets.rewardDust)
       dust.label = `${this.labelPrefix}.reward-dust.${index}`
       applyAnchoredPlacement(dust, LAYOUT.dust)
-      const amount = this.text(String(prize.amount), 52)
+      const amount = this.text(String(prize.amount), 52, 'number')
       amount.label = `${this.labelPrefix}.reward-amount.${index}`
       applyAnchoredPlacement(amount, LAYOUT.amount)
       view.addChild(dust, amount)
@@ -153,16 +154,13 @@ export class ArenaRewardsView extends Actor {
     this.confirm.setEnabled(true)
   }
 
-  private text(value: string, fontSize: number): Text {
+  private text(value: string, fontSize: number, role: TextOutlineRole = 'label'): Text {
     const text = new Text({
       text: value,
       style: {
-        fontFamily: 'Belwe',
-        fontSize,
+        ...outlinedTextStyle(role, fontSize),
         fill: 0xffffff,
-        fontWeight: '700',
         align: 'center',
-        stroke: { color: 0x000000, width: 4 },
         wordWrap: true,
         wordWrapWidth: 280
       }

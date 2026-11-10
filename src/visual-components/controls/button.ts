@@ -42,6 +42,9 @@ export class Button extends Actor {
   private hovered = false
   private pressed = false
   private enabled = true
+  private allowBlockedPress = false
+  private gestureCanSubmit = true
+  private releaseListenersInstalled = false
   private interactionEnabled = true
   private flippingTexture = false
   private pendingTexture: Texture | null = null
@@ -97,8 +100,17 @@ export class Button extends Actor {
     return this.baseY
   }
 
-  setEnabled(enabled: boolean): void {
+  /** Optional blocked feedback accepts presses without granting click permission. */
+  setEnabled(enabled: boolean, allowBlockedPress = false): void {
+    if (this.enabled && !enabled) this.cancelPress()
     this.enabled = enabled
+    this.allowBlockedPress = allowBlockedPress
+    if (allowBlockedPress && !this.releaseListenersInstalled) {
+      this.releaseListenersInstalled = true
+      window.addEventListener('blur', this.cancelPress)
+      window.addEventListener('pointercancel', this.cancelPress)
+      window.addEventListener('pointerup', this.releasePointer)
+    }
     this.syncInteractionState()
   }
 
@@ -131,13 +143,14 @@ export class Button extends Actor {
   }
 
   private syncInteractionState(): void {
-    const enabled = this.enabled && !this.flippingTexture
+    const enabled = (this.enabled || this.allowBlockedPress) && !this.flippingTexture
+    this.cursor = this.enabled && enabled ? 'pointer' : 'default'
     if (this.interactionEnabled === enabled) return
     this.interactionEnabled = enabled
     this.eventMode = enabled ? 'static' : 'none'
-    this.cursor = enabled ? 'pointer' : 'default'
 
     if (!enabled) {
+      this.gestureCanSubmit = false
       this.hovered = false
       this.pressed = false
       this.killTweensOf(this.content.scale)
@@ -219,7 +232,7 @@ export class Button extends Actor {
   }
 
   private onHoverStart = (): void => {
-    if (!this.interactionEnabled) return
+    if (!this.interactionEnabled || !this.enabled) return
     this.hovered = true
     if (!this.pressed) this.tweenHoverScale()
     if (!this.pressed && this.highlightOnHover) {
@@ -230,6 +243,7 @@ export class Button extends Actor {
   private onHoverEnd = (): void => {
     if (!this.interactionEnabled) return
     this.hovered = false
+    if (this.allowBlockedPress) this.endPress()
     if (!this.pressed) this.tweenHoverScale()
     if (!this.pressed && this.highlightOnHover) {
       this.tweenBrightness(this.idleBrightness, 0.15)
@@ -238,6 +252,7 @@ export class Button extends Actor {
 
   private onPressStart = (event: FederatedPointerEvent): void => {
     if (!this.interactionEnabled || event.button !== 0) return
+    this.gestureCanSubmit = this.enabled
     this.pressed = true
     this.killTweensOf(this.content.scale)
     if (this.pressFromLeft) this.killTweensOf(this.content)
@@ -269,6 +284,7 @@ export class Button extends Actor {
   }
 
   private onPressOutside = (): void => {
+    this.gestureCanSubmit = false
     this.hovered = false
     this.endPress()
   }
@@ -309,7 +325,13 @@ export class Button extends Actor {
   private handleClick = (event: FederatedPointerEvent): void => {
     // Pixi dispatches pointertap for right mouse clicks as well as rightclick.
     // Buttons with a right-click action must not also run their left-click action.
-    if (!this.interactionEnabled || event.button !== 0) return
+    if (
+      !this.interactionEnabled ||
+      !this.enabled ||
+      !this.gestureCanSubmit ||
+      event.button !== 0
+    )
+      return
 
     const result = this.onClick?.()
     if (result) {
@@ -317,6 +339,25 @@ export class Button extends Actor {
         this.onError?.(error)
       })
     }
+  }
+
+  private cancelPress = (): void => {
+    this.gestureCanSubmit = false
+    this.hovered = false
+    if (this.pressed) this.endPress()
+  }
+
+  private releasePointer = (event: PointerEvent): void => {
+    if (event.button === 0 && this.pressed) this.endPress()
+  }
+
+  override dispose(): void {
+    if (this.releaseListenersInstalled) {
+      window.removeEventListener('blur', this.cancelPress)
+      window.removeEventListener('pointercancel', this.cancelPress)
+      window.removeEventListener('pointerup', this.releasePointer)
+    }
+    super.dispose()
   }
 
   private tweenHoverScale(): void {

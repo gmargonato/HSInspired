@@ -1,3 +1,4 @@
+import { outlinedTextStyle } from '../../visual-components/text-style'
 import { hasPremiumHeroPortrait } from '../../visual-components/hero-portrait-appearance'
 import type { PlayerStatsStore } from '../../application/contracts/player-stats-store'
 import {
@@ -862,10 +863,8 @@ export class DeckPanelView extends Actor {
     this.deckEditorCount = new Text({
       text: '',
       style: {
-        fontFamily: 'Belwe',
-        fontSize: 24,
+        ...outlinedTextStyle('compact-number', 24),
         fill: DECK_EDITOR_COUNT_FILL,
-        stroke: { color: 0x000000, width: 4 },
         letterSpacing: -1,
         align: 'center'
       }
@@ -1250,10 +1249,8 @@ export class DeckPanelView extends Actor {
     const cost = new Text({
       text: String(card?.cost ?? 0),
       style: {
-        fontFamily: 'Belwe',
-        fontSize: 17,
+        ...outlinedTextStyle('compact-number', 17),
         fill: 0xffffff,
-        stroke: { color: 0x000000, width: 2 },
         letterSpacing: -1,
         align: 'center'
       }
@@ -1270,10 +1267,8 @@ export class DeckPanelView extends Actor {
     const name = new Text({
       text: card?.name ?? cardId,
       style: {
-        fontFamily: 'Belwe',
-        fontSize: 18,
+        ...outlinedTextStyle('label', 18),
         fill: 0xffffff,
-        stroke: { color: 0x000000, width: 3 },
         letterSpacing: -1,
         align: 'left'
       }
@@ -1310,10 +1305,8 @@ export class DeckPanelView extends Actor {
     const copies = new Text({
       text: String(count),
       style: {
-        fontFamily: 'Belwe',
-        fontSize: 18,
+        ...outlinedTextStyle('compact-number', 18),
         fill: 0xf4d44d,
-        stroke: { color: 0x000000, width: 2 },
         letterSpacing: -1,
         align: 'center'
       }

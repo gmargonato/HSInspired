@@ -1,3 +1,4 @@
+import { outlinedTextStyle } from '../../visual-components/text-style'
 import { Rectangle, Sprite, Text } from 'pixi.js'
 import { Actor } from '../../visual-components/lifecycle/actor'
 import { Button } from '../../visual-components/controls/button'
@@ -45,10 +46,8 @@ export class MainMenuSeasonView extends Actor {
       const legendRankNumber = new Text({
         text: String(reward.previousRank.legendRank),
         style: {
-          fontFamily: 'Belwe',
-          fontSize: 60,
+          ...outlinedTextStyle('number', 60),
           fill: 0xf7e08c,
-          stroke: { color: 0x000000, width: 5 },
           align: 'center'
         }
       })

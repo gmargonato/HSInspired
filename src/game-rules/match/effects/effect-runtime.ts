@@ -39,6 +39,8 @@ import {
   integer,
   clamp,
   cardDefinition,
+  cardHasTrigger,
+  isBattlecryBlock,
   entityKey,
   MAX_BOARD_SIZE
 } from './effect-primitives'
@@ -2374,16 +2376,14 @@ export class EffectRuntime {
       case 'add-other-class-card':
         break
       case 'play-battlecry-minion':
-        progressDelta =
-          playedMinion && minion!.effects.some((block) => block.trigger === 'battlecry')
-            ? 1
-            : 0
+        progressDelta = playedMinion && cardHasTrigger(minion!, 'battlecry') ? 1 : 0
         break
       case 'play-battlecry-card':
         progressDelta =
           event.type === 'card-played' &&
           event.kind === 'play' &&
-          definition?.effects.some((block) => block.trigger === 'battlecry')
+          definition &&
+          cardHasTrigger(definition, 'battlecry')
             ? 1
             : 0
         break
@@ -4309,6 +4309,7 @@ export class EffectRuntime {
         displayAmount,
         actualDamage,
         armorDamage: effectiveArmorDamage,
+        healthBefore,
         healthAfter: player.hero.health,
         armorAfter: player.hero.armor
       })
@@ -11765,7 +11766,7 @@ export class EffectRuntime {
       choiceTiming,
       effectPreview: this.playEffectPreview(definition, targetFrame),
       battlecryConditions: definition.effects.flatMap((block, effectIndex) =>
-        block.trigger === 'battlecry' && block.condition
+        isBattlecryBlock(block) && block.condition
           ? [
               this.queries.previewHandCondition(
                 block.condition,
@@ -12520,19 +12521,21 @@ export class EffectRuntime {
         ? this.heroTriggerMultiplier(frame.controllerId, trigger)
         : 1
     const repetitions = Math.max(minionRepetitions, heroRepetitions)
-    const announceBattlecry = trigger === 'battlecry' && frame.source.kind === 'minion'
     let announcedRepetition = -1
     for (const [index, block] of card.effects.entries()) {
       if (block.trigger !== trigger || (skipChoice && block.choice)) continue
+      const battlecry = isBattlecryBlock(block)
+      const blockRepetitions = battlecry ? repetitions : 1
       // Repeated Battlecries share a death checkpoint: a second stat swap can
       // restore a zero-Health target before it leaves the board.
       this.withEffectPhase(() => {
-        for (let repetition = 0; repetition < repetitions; repetition += 1) {
+        for (let repetition = 0; repetition < blockRepetitions; repetition += 1) {
           // Announce each repetition pass once (on its first matching block) so
           // the presentation layer can play the Battlecry banner before the
           // visible trigger resolves.
           if (
-            announceBattlecry &&
+            battlecry &&
+            frame.source.kind === 'minion' &&
             repetition > announcedRepetition &&
             !(
               repetition > 0 &&
@@ -12542,7 +12545,9 @@ export class EffectRuntime {
             announcedRepetition = repetition
             this.emitBattlecryRepetitionStarted(frame, repetition, repetitions)
           }
-          frame.battlecryRepetition = { repetition, repetitions }
+          frame.battlecryRepetition = battlecry
+            ? { repetition, repetitions }
+            : undefined
           this.runBlock(
             block,
             frame,
@@ -16875,9 +16880,6 @@ export class EffectRuntime {
       }
       for (const [index, block] of definition.effects.entries()) {
         if (block.trigger === 'battlecry' && block.choice) {
-          // Deferred Battlecries announce their trigger too, so the banner
-          // plays when the choice actually resolves.
-          this.emitBattlecryRepetitionStarted(frame, 0, 1)
           this.runBlock(block, frame, `pending-choice.battlecry[${index}]`)
         }
       }

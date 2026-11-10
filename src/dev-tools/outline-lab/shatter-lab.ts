@@ -109,10 +109,11 @@ export class ShatterLab extends Container {
         deathrattle: false,
         trigger: false,
         lifesteal: false,
-        temporaryAbilityLabels: []
+        poisonous: false
       },
       {
         frame: assets.weapon,
+        poisonous: assets.boardPoisonous,
         premiumFrame: assets.premiumWeapon,
         trigger: assets.boardTrigger,
         deathrattle: assets.boardDeathrattle,

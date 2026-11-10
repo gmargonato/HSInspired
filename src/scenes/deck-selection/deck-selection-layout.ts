@@ -1,3 +1,4 @@
+import { outlinedTextStyle } from '../../visual-components/text-style'
 /**
  * Geometry for the Deck Selection screen. All values are 1920x1080
  * design-canvas pixels at 1x.
@@ -92,16 +93,13 @@ export const DECK_SELECTION_LAYOUT = {
     { anchor: CENTER, note: 'Legend placement remains centered in the medal.' }
   ),
   rankNumberStyle: {
-    fontFamily: 'Belwe',
-    fontSize: 42,
+    ...outlinedTextStyle('number', 42),
     fill: 0xffffff,
-    stroke: { color: 0x000000, width: 4 },
     align: 'center' as const
   },
   legendNumberStyle: {
-    fontSize: 60,
-    fill: 0xf7e08c,
-    stroke: { color: 0x000000, width: 5 }
+    ...outlinedTextStyle('number', 60),
+    fill: 0xf7e08c
   },
 
   /** Current page label in the bottom-center footer recess. */

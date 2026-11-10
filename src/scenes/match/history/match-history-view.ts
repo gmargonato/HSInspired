@@ -1,3 +1,4 @@
+import { outlinedTextStyle } from '../../../visual-components/text-style'
 import {
   Container,
   Graphics,
@@ -581,10 +582,8 @@ export class MatchHistoryView extends Actor {
     const label = new Text({
       text,
       style: {
-        fontFamily: 'Belwe',
-        fontSize: size,
+        ...outlinedTextStyle('number', size),
         fill: color,
-        stroke: { color: 0x17120f, width: 6 },
         align: 'center'
       },
       anchor: 0.5

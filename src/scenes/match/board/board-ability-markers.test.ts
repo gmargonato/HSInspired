@@ -19,6 +19,7 @@ import {
 } from '../../../game-rules/match'
 import {
   boardAbilityMarkers,
+  boardWeaponAbilityMarkers,
   boardMinionAbilityMarkers,
   boardMinionRuntimeMarkers
 } from './board-ability-markers'
@@ -773,5 +774,71 @@ describe('hero Windfury presentation', () => {
     expect(
       hasWind({ ...ordinary, enchantments: [{ ...enchantment, continuous: true }] }, 2)
     ).toBe(false)
+  })
+})
+
+describe('weapon runtime ability markers', () => {
+  const weapon: BoardWeapon = {
+    instanceId: 'weapon',
+    cardId: CARD_CATALOG.require('basic_fiery_war_axe').id,
+    attack: 3,
+    durability: 2,
+    maxDurability: 2
+  }
+  const grant: RuntimeEnchantment = {
+    id: 'poison',
+    sourceInstanceId: 'spell',
+    sourceCardId: null,
+    keywords: ['poisonous']
+  }
+  it('keeps Poisonous across turns without transferring to a replacement', () => {
+    const enchanted = { ...weapon, enchantments: [grant] }
+    expect(boardWeaponAbilityMarkers(enchanted, 1).poisonous).toBe(true)
+    expect(boardWeaponAbilityMarkers(enchanted, 3).poisonous).toBe(true)
+    expect(boardWeaponAbilityMarkers(weapon, 3).poisonous).toBe(false)
+  })
+  it('honors Lifesteal grants, delayed starts, expiration, and removal', () => {
+    const enchanted = {
+      ...weapon,
+      enchantments: [
+        {
+          ...grant,
+          keywords: ['lifesteal'] as const,
+          startsOnTurn: 2,
+          expiresOnTurn: 2
+        }
+      ]
+    }
+    expect(boardWeaponAbilityMarkers(enchanted, 1).lifesteal).toBe(false)
+    expect(boardWeaponAbilityMarkers(enchanted, 2).lifesteal).toBe(true)
+    expect(boardWeaponAbilityMarkers(enchanted, 3).lifesteal).toBe(false)
+    const innate = {
+      ...weapon,
+      cardId: CARD_CATALOG.require('knights_of_the_frozen_throne_grave_vengeance').id
+    }
+    expect(boardWeaponAbilityMarkers(innate, 3).lifesteal).toBe(true)
+    expect(
+      boardWeaponAbilityMarkers(
+        {
+          ...innate,
+          enchantments: [{ ...grant, keywords: [], removedKeywords: ['lifesteal'] }]
+        },
+        3
+      ).lifesteal
+    ).toBe(false)
+  })
+  it('shows Ice Breaker as a conditional trigger rather than Poisonous', () => {
+    expect(
+      boardWeaponAbilityMarkers(
+        {
+          ...weapon,
+          cardId: CARD_CATALOG.require('knights_of_the_frozen_throne_ice_breaker').id
+        },
+        1
+      )
+    ).toMatchObject({ trigger: true, poisonous: false })
+    expect(
+      boardAbilityMarkers(CARD_CATALOG.require('classic_emperor_cobra'))
+    ).toMatchObject({ poisonous: true, trigger: false })
   })
 })

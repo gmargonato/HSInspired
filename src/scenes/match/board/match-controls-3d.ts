@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { outlinedTextStyle } from '../../../visual-components/text-style'
 import { Rectangle, Sprite, Texture, type Texture as PixiTexture } from 'pixi.js'
 import { Actor } from '../../../visual-components/lifecycle/actor'
 import { isArtworkVisible } from '../../../visual-components/effects/premium-artwork-breath'
@@ -384,14 +385,44 @@ export class ControlMeshView extends Actor {
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.font = `${cost ? 410 : 140}px Belwe`
     if (cost) {
-      ctx.lineWidth = 15
-      ctx.strokeStyle = '#172035'
-      ctx.strokeText(text, 256, 260)
+      const style = outlinedTextStyle('number', 410)
+      ctx.font = `${style.fontWeight} ${style.fontSize}px ${style.fontFamily}`
+      ctx.lineWidth = style.stroke.width
+      ctx.lineJoin = style.stroke.join
+      ctx.miterLimit = style.stroke.miterLimit
+      ctx.strokeStyle = '#' + style.stroke.color.toString(16).padStart(6, '0')
+      ctx.fillStyle = this.costColor
+      const metrics = ctx.measureText(text)
+      const centerX = canvas.width / 2
+      const centerY = canvas.height / 2 + 4
+      // Leave room for the outline and fit both passes uniformly. Canvas's
+      // fillText(maxWidth) alone compresses the fill without its stroke.
+      const halfWidth = Math.max(
+        metrics.actualBoundingBoxLeft,
+        metrics.actualBoundingBoxRight
+      )
+      const halfHeight = Math.max(
+        metrics.actualBoundingBoxAscent,
+        metrics.actualBoundingBoxDescent
+      )
+      const fit = Math.min(
+        1,
+        (canvas.width * 0.48) / (halfWidth + style.stroke.width),
+        (Math.min(centerY, canvas.height - centerY) - canvas.height * 0.02) /
+          (halfHeight + style.stroke.width)
+      )
+      ctx.save()
+      ctx.translate(centerX, centerY)
+      ctx.scale(fit, fit)
+      ctx.strokeText(text, 0, 0)
+      ctx.fillText(text, 0, 0)
+      ctx.restore()
+    } else {
+      ctx.font = '140px Belwe'
+      ctx.fillStyle = '#211e17'
+      ctx.fillText(text, canvas.width / 2, canvas.height / 2 + 4, canvas.width * 0.96)
     }
-    ctx.fillStyle = cost ? this.costColor : '#211e17'
-    ctx.fillText(text, canvas.width / 2, canvas.height / 2 + 4, canvas.width * 0.96)
     texture.needsUpdate = true
     this.owner.invalidate()
   }

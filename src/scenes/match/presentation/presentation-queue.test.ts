@@ -8164,7 +8164,7 @@ it('shatters a broken weapon immediately and releases its snapshot', async () =>
       deathrattle: false,
       trigger: false,
       lifesteal: false,
-      temporaryAbilityLabels: []
+      poisonous: false
     },
     new Proxy({} as WeaponViewTextures, { get: () => Texture.WHITE }),
     Texture.WHITE

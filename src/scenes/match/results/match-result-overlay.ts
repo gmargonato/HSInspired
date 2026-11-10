@@ -1,3 +1,4 @@
+import { outlinedTextStyle } from '../../../visual-components/text-style'
 import {
   Container,
   Rectangle,
@@ -54,10 +55,8 @@ export class MatchResultOverlay extends Container {
     this.continuePrompt = new Text({
       text: 'Click to continue',
       style: {
-        fontFamily: 'Belwe',
-        fontSize: 42,
+        ...outlinedTextStyle('label', 42),
         fill: 0xffffff,
-        stroke: { color: 0x000000, width: 6 },
         align: 'center'
       }
     })
@@ -72,10 +71,8 @@ export class MatchResultOverlay extends Container {
     this.dustText = new Text({
       text: '',
       style: {
-        fontFamily: 'Belwe',
-        fontSize: 48,
-        fill: 0xffffff,
-        stroke: { color: 0x000000, width: 5 }
+        ...outlinedTextStyle('number', 48),
+        fill: 0xffffff
       }
     })
     this.dustText.label = 'game.match-result.dust-text'

@@ -128,6 +128,28 @@ applies to all opponent modes and never delays the attack. With the current
 
 ## Card appearance tuning
 
+Outlined runtime text uses `visual-components/text-style.ts`. Board and UI numeric
+outlines use 10% of font size; compact list counters have a minimum width of one
+local design pixel. Complete-card numbers use the `card-number` preset at 8%,
+including mana, attack, health, armor, and durability. This preset applies in the
+hand, collection, and previews and stays the same through hovering and dragging.
+Words and titles use 7/47 of font size. Resolve
+the style after any font-size override, including each title-fitting candidate.
+Container and viewport scaling then scale letters and outlines together.
+Rules ink, fatigue messages, and sleeping Zs have named presets preserving their
+original treatment. Fill colors and geometry remain owned by each component.
+Pixi labels and the Three hero-power canvas share the same policy; no per-frame
+stroke correction or physical-pixel clamp is applied. Artwork lettering and
+unoutlined text are independent of this policy.
+
+`npm run test:typography` renders production board views, 2D/3D powers, and
+standard/premium cards in a hidden isolated Electron window. It checks fitted
+titles, cached card output, stat updates and each presentation's outline preset.
+It also renders Cruel Taskmaster at resting and hovered hand sizes, including
+buffed/damaged values, and writes 720p/1080p/1440p captures at resolutions 1 and 2
+to `.tmp/typography-check`.
+It uses temporary profile data and does not start the game or a server.
+
 `visual-components/cards/card-layout.ts` owns positions, sizes, typography, curves,
 and layer order. `CARD_PROFILES` groups the settings by minion, spell, weapon, and
 hero; differing finishes have adjacent `standard` and `premium` entries.

@@ -1232,11 +1232,19 @@ export class GameCombatPresentation {
     view: CombatView,
     result: {
       readonly attack: number
+      readonly healthBefore: number
+      readonly attemptedDamage: number
+      readonly armorBefore?: number
       readonly healthAfter: number
       readonly armorAfter?: number
     }
   ): void {
     if (view instanceof HeroView) {
+      view.presentLethalDamage(
+        result.healthBefore,
+        result.healthAfter,
+        result.attemptedDamage - ((result.armorBefore ?? 0) - (result.armorAfter ?? 0))
+      )
       const player = view.ownerId
         ? this.context.presentedPlayer(view.ownerId)
         : undefined
@@ -1255,6 +1263,9 @@ export class GameCombatPresentation {
     view: CombatView,
     result: {
       readonly attack: number
+      readonly healthBefore: number
+      readonly attemptedDamage: number
+      readonly armorBefore?: number
       readonly healthAfter: number
       readonly armorAfter?: number
     }

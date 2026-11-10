@@ -1,3 +1,4 @@
+import { outlinedTextStyle } from '../../../visual-components/text-style'
 import {
   Container,
   Graphics,
@@ -77,11 +78,8 @@ export class GameLoadingView extends Container {
     this.status = new Text({
       text: 'Loading match',
       style: {
-        fontFamily: 'Belwe',
-        fontWeight: 'bold',
-        fontSize: 28,
+        ...outlinedTextStyle('label', 28),
         fill: 0xffffff,
-        stroke: { color: 0x101018, width: 4 },
         align: 'center'
       }
     })

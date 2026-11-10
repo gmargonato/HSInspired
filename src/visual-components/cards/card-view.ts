@@ -11,6 +11,7 @@ import {
   type Renderer
 } from 'pixi.js'
 import 'pixi.js/advanced-blend-modes'
+import { outlinedTextStyle } from '../text-style'
 import type { CardDefinition } from '../../game-rules/content/cards'
 import type { CardCostResource } from '../../game-rules/match/rules/card-cost-resource'
 import { observeShadows } from '../effects/shadow-visibility'
@@ -161,7 +162,10 @@ function createCurvedText(layer: CardTextLayer, boxWidth: number): Container {
   const measurement = new Text({ text: layer.text, style: layer.style })
   if (layer.fit === 'width') fitTitleToWidth(measurement, boxWidth)
   const glyphScale = measurement.scale.x
-  const style = { ...layer.style, fontSize: measurement.style.fontSize }
+  const style = {
+    ...layer.style,
+    ...outlinedTextStyle('label', measurement.style.fontSize)
+  }
   measurement.style.stroke = { color: 0x000000, width: 0 }
   const characters = Array.from(layer.text)
   // Prefix measurements retain the font's spacing and kerning between letters.
@@ -300,11 +304,13 @@ function fitTitleToWidth(text: Text, boxWidth: number): void {
     measureWidth: (fontSize) => {
       text.scale.set(1)
       text.style.fontSize = fontSize
+      text.style.stroke = outlinedTextStyle('label', fontSize).stroke
       return text.width
     }
   })
 
   text.style.fontSize = fit.fontSize
+  text.style.stroke = outlinedTextStyle('label', fit.fontSize).stroke
   text.scale.set(fit.scale)
 }
 

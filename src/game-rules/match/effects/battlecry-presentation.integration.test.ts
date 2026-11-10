@@ -125,8 +125,15 @@ describe('Battlecry repetition boundary events', () => {
     expect(battlecryStarted(result.events)).toEqual([])
   })
 
-  it('announces a deferred after-placement Battlecry when the choice resolves', () => {
+  it('resolves a deferred Choose One under Brann without announcing a Battlecry', () => {
     const { scenario, participantId } = setup()
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-summon-minion',
+        participantId,
+        cardId: BRANN
+      }).accepted
+    ).toBe(true)
     const card = prepareHand(scenario, participantId, DRUID_OF_THE_FLAME)
 
     const play = scenario.match.dispatch({
@@ -148,13 +155,15 @@ describe('Battlecry repetition boundary events', () => {
     expect(choice.accepted).toBe(true)
     if (!choice.accepted) return
 
-    const started = battlecryStarted(choice.events)
-    expect(started).toHaveLength(1)
-    expect(started[0]).toMatchObject({
-      participantId,
-      repetition: 0,
-      repetitions: 1
+    expect(battlecryStarted(choice.events)).toEqual([])
+    expect(
+      boardOf(scenario, participantId).find(
+        (minion) => minion.instanceId === card.instanceId
+      )
+    ).toMatchObject({
+      cardId: 'blackrock_mountain_druid_of_the_flame_2_5',
+      attack: 2,
+      health: 5
     })
-    expect(started[0]!.minion.instanceId).toBe(card.instanceId)
   })
 })

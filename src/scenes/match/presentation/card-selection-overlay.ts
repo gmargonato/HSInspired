@@ -1,3 +1,4 @@
+import { outlinedTextStyle } from '../../../visual-components/text-style'
 import type { GhostTextures } from '../../../visual-components/effects/ghost-materials'
 import { Container, Graphics, Sprite, Text, type Renderer, type Texture } from 'pixi.js'
 import type { HeroPowerId } from '../../../game-rules/content/cards'
@@ -58,11 +59,9 @@ export class CardSelectionOverlay extends Container {
   private readonly prompt = new Text({
     text: '',
     style: {
-      fontFamily: 'Belwe',
-      fontSize: 30,
+      ...outlinedTextStyle('label', 30),
       fill: 0xffffff,
-      align: 'center',
-      stroke: { color: 0x000000, width: 5 }
+      align: 'center'
     }
   })
   private readonly toggleOutline: GhostAura
@@ -124,10 +123,8 @@ export class CardSelectionOverlay extends Container {
     this.toggleLabel = new Text({
       text: 'Hide',
       style: {
-        fontFamily: 'Belwe',
-        fontSize: 35,
-        fill: 0xffffff,
-        stroke: { color: 0x000000, width: 4 }
+        ...outlinedTextStyle('label', 35),
+        fill: 0xffffff
       }
     })
     this.toggleLabel.anchor.set(0.5)
@@ -394,10 +391,8 @@ export class CardSelectionOverlay extends Container {
           const label = new Text({
             text: choice.label,
             style: {
-              fontFamily: 'Belwe',
-              fontSize: 24,
+              ...outlinedTextStyle('label', 24),
               fill: 0xffffff,
-              stroke: { color: 0x000000, width: 5 },
               align: 'center',
               wordWrap: true,
               wordWrapWidth: 275
@@ -461,10 +456,8 @@ export class CardSelectionOverlay extends Container {
       const label = new Text({
         text: option.label,
         style: {
-          fontFamily: 'Belwe',
-          fontSize: 24,
+          ...outlinedTextStyle('label', 24),
           fill: 0xffffff,
-          stroke: { color: 0x000000, width: 5 },
           align: 'center',
           wordWrap: true,
           wordWrapWidth: 275

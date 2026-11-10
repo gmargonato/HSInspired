@@ -1,3 +1,4 @@
+import { outlinedTextStyle } from '../../../visual-components/text-style'
 import { CENTER, placement } from '../../../visual-components/layout'
 import { CARD_CANVAS } from '../../../visual-components/cards/card-layout'
 
@@ -37,17 +38,13 @@ export const SECRET_LAYOUT = {
     }
   ),
   countTextStyle: {
-    fontFamily: 'Belwe',
-    fontSize: 50,
+    ...outlinedTextStyle('number', 50),
     fill: 0xffffff,
-    stroke: { color: 0x000000, width: 5 },
     align: 'center' as const
   },
   questProgressTextStyle: {
-    fontFamily: 'Belwe',
-    fontSize: 32,
+    ...outlinedTextStyle('number', 32),
     fill: 0xffffff,
-    stroke: { color: 0x000000, width: 4 },
     align: 'center' as const
   },
   pairedBadgeOffset: 42,
@@ -72,10 +69,8 @@ export const SECRET_LAYOUT = {
       }
     ),
     progressTextStyle: {
-      fontFamily: 'Belwe',
-      fontSize: 48,
+      ...outlinedTextStyle('number', 48),
       fill: 0xffffff,
-      stroke: { color: 0x000000, width: 5 },
       align: 'center' as const
     },
     scale: 0.4

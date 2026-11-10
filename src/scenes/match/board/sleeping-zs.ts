@@ -1,9 +1,9 @@
+import { outlinedTextStyle } from '../../../visual-components/text-style'
 import { Container, Text } from 'pixi.js'
 import { Actor } from '../../../visual-components/lifecycle/actor'
 import { MINION_LAYOUT } from './minion-layout'
 
 const SLEEPING_Z_COLOR = 0x3cff3c
-const SLEEPING_Z_STROKE = 0x0f2a0f
 
 /** Bright-green Zzz that spawns at the minion's top-right and drifts right while growing. */
 export class SleepingZs extends Actor {
@@ -53,11 +53,8 @@ export class SleepingZs extends Actor {
     const text = new Text({
       text: 'Z',
       style: {
-        fontFamily: 'Franklin Gothic Condensed',
-        fontWeight: 'bold',
-        fontSize: baseFontSize,
+        ...outlinedTextStyle('sleep', baseFontSize),
         fill: SLEEPING_Z_COLOR,
-        stroke: { color: SLEEPING_Z_STROKE, width: 6 },
         align: 'center'
       }
     })

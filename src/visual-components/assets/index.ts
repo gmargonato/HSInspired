@@ -3061,7 +3061,7 @@ export const ASSET_DEFINITIONS: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.gameTable,
     'localGoldenFrame',
     localGoldenFrameImage,
-    592,
+    629,
     274,
     'game-scene'
   ),
@@ -3070,7 +3070,7 @@ export const ASSET_DEFINITIONS: readonly AssetDefinition[] = [
     ASSET_BUNDLE_IDS.gameTable,
     'remoteGoldenFrame',
     remoteGoldenFrameImage,
-    620,
+    637,
     234,
     'game-scene'
   ),

@@ -1,3 +1,4 @@
+import { outlinedTextStyle } from '../../visual-components/text-style'
 import { Container, Graphics, Rectangle, Sprite, Text, type Texture } from 'pixi.js'
 import type { FederatedPointerEvent, FederatedWheelEvent } from 'pixi.js'
 import type { Deck } from '../../game-rules/decks'
@@ -73,10 +74,8 @@ export class DeckListView {
     this.countLabel = new Text({
       text: '',
       style: {
-        fontFamily: 'Belwe',
-        fontSize: 24,
+        ...outlinedTextStyle('compact-number', 24),
         fill: DECK_EDITOR_COUNT_FILL,
-        stroke: { color: 0x000000, width: 4 },
         letterSpacing: -1,
         align: 'center'
       }

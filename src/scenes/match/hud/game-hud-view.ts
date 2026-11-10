@@ -1,3 +1,4 @@
+import { outlinedTextStyle } from '../../../visual-components/text-style'
 import { EndTurnControl, type TurnControlFace } from './end-turn-control'
 import {
   createEndTurnOutlineProxy,
@@ -52,6 +53,7 @@ export class GameHudView {
   private endTurnHoverSuppressed = false
   private endTurnTexture: Texture | null = null
   private endTurnEnabled = false
+  private endTurnBlockedPress = false
   private endTurnExhausted = false
   deckCountLabels: { local: Text; remote: Text } | null = null
   manaLabels: { local: Text; remote: Text } | null = null
@@ -191,10 +193,12 @@ export class GameHudView {
     texture: Texture,
     enabled: boolean,
     exhausted: boolean,
-    face: TurnControlFace = 'endTurn'
+    face: TurnControlFace = 'endTurn',
+    allowBlockedPress = false
   ): void {
     this.endTurnTexture = texture
     this.endTurnEnabled = enabled
+    this.endTurnBlockedPress = allowBlockedPress
     this.endTurnExhausted = exhausted
     const button = this.endTurnButton
     if (!button) return
@@ -365,10 +369,8 @@ export class GameHudView {
     const label = new Text({
       text: '',
       style: {
-        fontFamily: 'Belwe',
-        fontSize,
+        ...outlinedTextStyle('number', fontSize),
         fill: 0xffffff,
-        stroke: { color: 0x17120f, width: 6 },
         align: 'center'
       }
     })
@@ -381,7 +383,7 @@ export class GameHudView {
   private syncEndTurnVisualState(): void {
     const button = this.endTurnButton
     if (!button) return
-    button.setEnabled(this.endTurnEnabled)
+    button.setEnabled(this.endTurnEnabled, this.endTurnBlockedPress)
     this.syncEndTurnOutlines()
   }
 

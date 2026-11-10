@@ -1,3 +1,7 @@
+import {
+  outlinedTextStyle,
+  type TextOutlineRole
+} from '../../visual-components/text-style'
 import type { PlayerStatsStore } from '../../application/contracts/player-stats-store'
 import {
   BlurFilter,
@@ -173,11 +177,8 @@ export class ArenaView extends Actor {
     this.heading = new Text({
       text: '',
       style: {
-        fontFamily: 'Belwe',
-        fontSize: 31,
-        fontWeight: '700',
+        ...outlinedTextStyle('label', 31),
         fill: 0xffffff,
-        stroke: { color: 0x1a1116, width: 5 },
         align: 'center'
       }
     })
@@ -217,11 +218,8 @@ export class ArenaView extends Actor {
     this.deckCount = new Text({
       text: '0/30',
       style: {
-        fontFamily: 'Belwe',
-        fontSize: 22,
-        fontWeight: '700',
-        fill: 0xffffff,
-        stroke: { color: 0x000000, width: 4 }
+        ...outlinedTextStyle('compact-number', 22),
+        fill: 0xffffff
       }
     })
     this.deckCount.label = 'arena.deck-count'
@@ -820,10 +818,8 @@ export class ArenaView extends Actor {
     const cost = new Text({
       text: String(card.cost),
       style: {
-        fontFamily: 'Belwe',
-        fontSize: 17,
+        ...outlinedTextStyle('compact-number', 17),
         fill: 0xffffff,
-        stroke: { color: 0x000000, width: 2 },
         letterSpacing: -1,
         align: 'center'
       }
@@ -859,10 +855,8 @@ export class ArenaView extends Actor {
     const name = new Text({
       text: card.name,
       style: {
-        fontFamily: 'Belwe',
-        fontSize: 18,
+        ...outlinedTextStyle('label', 18),
         fill: 0xffffff,
-        stroke: { color: 0x000000, width: 3 },
         letterSpacing: -1,
         align: 'left'
       }
@@ -886,10 +880,8 @@ export class ArenaView extends Actor {
     const copies = new Text({
       text: String(count),
       style: {
-        fontFamily: 'Belwe',
-        fontSize: 18,
+        ...outlinedTextStyle('compact-number', 18),
         fill: 0xf4d44d,
-        stroke: { color: 0x000000, width: 2 },
         letterSpacing: -1,
         align: 'center'
       }
@@ -962,7 +954,13 @@ export class ArenaView extends Actor {
     key.eventMode = 'none'
     this.statisticsLayer.addChild(key)
 
-    const wins = this.createOutlinedText(String(this.snapshot.wins), 58)
+    const wins = this.createOutlinedText(
+      String(this.snapshot.wins),
+      58,
+      0xffffff,
+      true,
+      'number'
+    )
     wins.label = 'arena.wins'
     applyAnchoredPlacement(wins, ARENA_LAYOUT.statistics.wins)
     this.statisticsLayer.addChild(wins)
@@ -1187,7 +1185,8 @@ export class ArenaView extends Actor {
     text: string,
     fontSize: number,
     fill = 0xffffff,
-    withStroke = true
+    withStroke = true,
+    role: TextOutlineRole = 'label'
   ): Text {
     const value = new Text({
       text,
@@ -1198,7 +1197,7 @@ export class ArenaView extends Actor {
         fill,
         ...(withStroke
           ? {
-              stroke: { color: 0x000000, width: Math.max(2, Math.round(fontSize / 10)) }
+              ...outlinedTextStyle(role, fontSize)
             }
           : {}),
         align: 'center'

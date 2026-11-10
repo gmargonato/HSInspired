@@ -86,6 +86,46 @@ function summon(scenario: Scenario, participantId: string, cardId: string): void
 }
 
 describe('effect-runtime query language', () => {
+  it('excludes Choose One cards from Battlecry selectors', () => {
+    const scenario = createMatchScenario({ seed: 410 })
+    scenario.confirmBothMulligans()
+    const [participantId] = activeParticipants(scenario)
+    expect(
+      scenario.match.dispatch({
+        type: 'dev-clear-zone',
+        participantId,
+        zone: 'hand'
+      }).accepted
+    ).toBe(true)
+    const choices = [
+      'classic_keeper_of_the_grove',
+      'knights_of_the_frozen_throne_malfurion_the_pestilent'
+    ]
+    for (const cardId of ['basic_nightblade', ...choices])
+      addCard(scenario, participantId, cardId)
+    const state = scenario.match.getState()
+    const runtime = queryRuntime(
+      new EffectRuntime(state, scenario.rng, state.nextEntityOrdinal ?? 0)
+    )
+    const source = entityRef('hero', participantId, participantId + ':hero', 'hero')
+    const frame = runtime.frameFor(source, null, [])
+    for (const hasBattlecry of [true, false]) {
+      const matches = runtime.select(
+        {
+          controller: 'self',
+          type: 'card',
+          zone: 'hand',
+          selection: 'all',
+          filter: { hasBattlecry }
+        },
+        frame
+      )
+      expect(matches.map((card) => card.cardId)).toEqual(
+        hasBattlecry ? ['basic_nightblade'] : choices
+      )
+    }
+  })
+
   it('keeps both Defender of Argus effects on its original neighbors', () => {
     const scenario = createMatchScenario({ seed: 410 })
     scenario.confirmBothMulligans()

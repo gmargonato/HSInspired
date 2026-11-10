@@ -7,7 +7,7 @@ import {
   type CardId,
   type CardTrigger
 } from '../../content/cards'
-import type { BoardMinion } from '../opening-match-types'
+import type { BoardMinion, BoardWeapon } from '../opening-match-types'
 
 export interface BoardAbilityMarkers {
   readonly taunt: boolean
@@ -48,6 +48,8 @@ const IN_PLAY_TRIGGER_TYPES: ReadonlySet<CardTrigger> = new Set([
 function isPoisonEffect(effect: CardEffectBlock): boolean {
   return (
     effect.trigger === 'on-damage' &&
+    !effect.condition &&
+    !effect.event?.filter &&
     (effect.actions ?? []).some((action) => action.action === 'destroy')
   )
 }
@@ -121,6 +123,21 @@ export function boardAbilityMarkers(
     elusive: keywords.has('spell-immune'),
     immune: keywords.has('immune')
   }
+}
+
+/** Weapon indicators follow the same effective keywords used by combat. */
+export function boardWeaponAbilityMarkers(
+  weapon: BoardWeapon,
+  turnNumber: number
+): Pick<BoardAbilityMarkers, 'deathrattle' | 'trigger' | 'lifesteal' | 'poisonous'> {
+  const definition = CARD_CATALOG.require(weapon.cardId)
+  return boardAbilityMarkers({
+    ...definition,
+    keywords: effectiveBoardMinionKeywords(
+      { keywords: definition.keywords, enchantments: weapon.enchantments },
+      turnNumber
+    )
+  })
 }
 
 /**

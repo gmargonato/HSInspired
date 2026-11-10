@@ -1,3 +1,4 @@
+import { outlinedTextStyle } from '../../../visual-components/text-style'
 import { CENTER, placement } from '../../../visual-components/layout'
 
 /** Local design space for one transient damage burst. */
@@ -29,10 +30,8 @@ export const DAMAGE_INDICATOR_LAYOUT = {
   ),
   amountRotation: -10 * (Math.PI / 180),
   textStyle: {
-    fontFamily: 'Belwe',
-    fontSize: 56,
+    ...outlinedTextStyle('number', 56),
     fill: 0xffffff,
-    stroke: { color: 0x17120f, width: 8 },
     align: 'center' as const
   }
 } as const

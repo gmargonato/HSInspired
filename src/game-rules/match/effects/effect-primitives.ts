@@ -2,6 +2,7 @@ import {
   CARD_CATALOG,
   type CardId,
   type CardDefinition,
+  type CardEffectBlock,
   type CardTrigger
 } from '../../content/cards'
 import type { EntityRef } from './effect-context'
@@ -25,7 +26,15 @@ export function cardDefinition(cardId: CardId): CardDefinition | undefined {
 }
 
 export function cardHasTrigger(card: CardDefinition, trigger: CardTrigger): boolean {
-  return card.effects.some((effect) => effect.trigger === trigger)
+  return card.effects.some((effect) =>
+    trigger === 'battlecry' ? isBattlecryBlock(effect) : effect.trigger === trigger
+  )
+}
+
+export function isBattlecryBlock(effect: CardEffectBlock): boolean {
+  // Choose One blocks share Battlecry play timing in the authored data, but
+  // their choices are not Battlecries. Discover Battlecries use actions instead.
+  return effect.trigger === 'battlecry' && effect.choice === undefined
 }
 
 export function entityKey(ref: EntityRef): string {
