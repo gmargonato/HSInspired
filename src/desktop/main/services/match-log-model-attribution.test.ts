@@ -1003,7 +1003,7 @@ describe('AI decision Markdown', () => {
     transcript.accept(decisionRequest('r1', 4))
     const response = decisionResponse('r1', 4)
     const usage = response.data.usage as JsonObject
-    const summary = usage.searchSummary as JsonObject
+    const summary = usage.searchSummary as Record<string, JsonValue>
     summary.failedWorlds = failures
     transcript.accept(response)
     const markdown = transcript.render()
