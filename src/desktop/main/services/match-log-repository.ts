@@ -163,40 +163,9 @@ export class MatchLogRepository {
         ? { configuredModel: (metadata.aiConfig as JsonObject).modelId }
         : {})
     }
-    const generated = metadata.generatedOpponent as JsonObject | undefined
-    const curated = metadata.curatedOpponent as JsonObject | undefined
-    const construction = Array.isArray(generated?.construction)
-      ? generated.construction
-      : []
-    const constructionText = construction
-      .map((value) => {
-        if (!value || typeof value !== 'object' || Array.isArray(value)) return ''
-        const step = value as JsonObject
-        return `[${String(step.layer)}] ${String(step.selected)} — ${String(step.reason)} (candidates: ${String(step.candidates)}; deck: ${String(step.deckSize)}/30)\n`
-      })
-      .join('')
-    const source = curated?.source as JsonObject | undefined
-    const strategy = curated?.strategy as JsonObject | undefined
-    const curatedText = curated
-      ? `Curated opponent deck: ${String(curated.deckName)} (${String(curated.classId)})\n` +
-        `Catalog version: ${String(curated.catalogVersion)}\n` +
-        (typeof source?.title === 'string' ? `Source: ${source.title}\n` : '') +
-        (typeof source?.publishedAt === 'string'
-          ? `Published: ${source.publishedAt}\n`
-          : '') +
-        (typeof source?.url === 'string' ? `Source URL: ${source.url}\n` : '') +
-        (typeof strategy?.text === 'string' ? `Strategy: ${strategy.text}\n` : '') +
-        '\n'
-      : ''
     await writeFile(
       join(directory, 'match.txt'),
-      'Match started.\n' +
-        curatedText +
-        (constructionText
-          ? '\nOpponent deck construction (generator rules and selections)\n' +
-            constructionText +
-            '\n'
-          : ''),
+      `Match log\n\nStarted: ${timestamp.replace('T', ' at ').replace('Z', ' UTC')}\n`,
       { flag: 'wx' }
     )
     await writeFile(

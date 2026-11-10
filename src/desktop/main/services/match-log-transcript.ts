@@ -22,30 +22,47 @@ const card = (value: unknown): string => {
   )
 }
 
-/** Stateful only for participant labels; entity snapshots are refreshed per command. */
+/** Turn ownership shortens actor labels; entity snapshots are refreshed per command. */
 export class MatchLogTranscript {
   private readonly labels = new Map<string, string>()
+  private turnOwner?: string
 
   format(record: MatchLogRecord): string {
     const data = record.data as Data
     const output: string[] = []
-    const add = (text: string): void => {
-      output.push(text)
+    const add = (text: string, keepActor = false): void => {
+      const prefix = this.turnOwner ? `${this.turnOwner} ` : ''
+      const body =
+        !keepActor && prefix && text.startsWith(prefix)
+          ? text.slice(prefix.length)
+          : text
+      output.push(`- ${body.charAt(0).toUpperCase()}${body.slice(1)}`)
     }
     const who = (id: unknown): string => this.labels.get(String(id)) ?? 'A player'
     if (record.kind === 'match-start') {
-      for (const participant of list(data.participants)) {
+      const participants = list(data.participants)
+      for (const participant of participants) {
         this.labels.set(
           String(participant.participantId),
-          participant.label === 'Local Player' ? 'Local Player' : 'Remote Player'
+          participant.label === 'Local Player' ? 'LP' : 'RP'
         )
-        add(`${who(participant.participantId)} is playing ${card(participant.heroId)}.`)
       }
-      add(`${who(data.firstPlayerId)} goes first.`)
-      for (const hand of list(data.hands))
-        add(
-          `${who(hand.participantId)}'s opening hand: ${values(hand.cards).map(card).join(', ') || 'empty'}.`
+      for (const label of ['Local Player', 'Remote Player']) {
+        const participant = participants.find((player) => player.label === label)
+        if (!participant) continue
+        const hero = HERO_CATALOG.get(String(participant.heroId))
+        output.push(
+          `${label} (${who(participant.participantId)}): ${card(participant.heroId)} (${hero?.classId ?? 'unknown class'})`
         )
+      }
+      output.push(`First player: ${who(data.firstPlayerId)}`, '\nOpening hands\n')
+      for (const label of ['LP', 'RP']) {
+        const hand = list(data.hands).find(
+          (entry) => who(entry.participantId) === label
+        )
+        if (hand)
+          add(`${label}: ${values(hand.cards).map(card).join(', ') || 'empty'}.`)
+      }
     } else if (record.kind === 'command') {
       const command = object(data.command)
       const actor = who(data.actor)
@@ -117,7 +134,7 @@ export class MatchLogTranscript {
       let action: string
       switch (command.type) {
         case 'play-card':
-          action = `play ${card(source.cardId)}${source.cost !== undefined ? ` for ${source.cost} mana` : ''}${targetText}`
+          action = `play ${card(source.cardId)}${source.cost !== undefined ? ` for ${source.cost} mana` : ''}${targetText}${command.position !== undefined ? `, in board position ${Number(command.position) + 1}` : ''}`
           break
         case 'use-hero-power':
           action = `use the hero power${targetText}`
@@ -224,8 +241,11 @@ export class MatchLogTranscript {
                 events.some((other) => other.type === 'turn-started')
               )
                 break
-              add(`\nTurn ${event.turnNumber ?? 1} - ${owner}`)
-              add(`${owner} has ${object(event.mana).available} mana.`)
+              this.turnOwner = owner
+              output.push(
+                `\nTurn ${event.turnNumber ?? 1} - ${owner}\n`,
+                `Mana: ${object(event.mana).available}${object(event.mana).maximum !== undefined ? `/${object(event.mana).maximum}` : ''}\n`
+              )
               if (Number(object(event.mana).overloadLocked ?? 0) > 0)
                 add(
                   `${owner} has ${object(event.mana).overloadLocked} mana crystals locked by Overload.`
@@ -375,13 +395,39 @@ export class MatchLogTranscript {
             case 'dev-minion-summoned': {
               const minion = object(event.minion),
                 key = String(minion.instanceId)
+              const previous = known.get(key)
               known.set(key, { ...minion, participantId: event.participantId })
               remove(key)
               const board = boards.get(String(event.participantId)) ?? []
               board.splice(Number(event.position), 0, key)
               boards.set(String(event.participantId), board)
               mark(key, 'entered')
-              if (event.type !== 'minion-played')
+              if (command.type === 'play-card' && command.cardInstanceId === key) {
+                // The engine also emits minion-summoned after the Battlecry.
+                // Show the entrance once; subsequent effect events describe changes.
+                if (
+                  event.type === 'minion-played' ||
+                  !events.some(
+                    (other) =>
+                      other.type === 'minion-played' &&
+                      object(other.minion).instanceId === key
+                  )
+                )
+                  output.push(
+                    `  - ${card(minion.cardId)} enters with ${minion.attack} attack and ${minion.health} health.`
+                  )
+                else if (previous?.cardId !== minion.cardId)
+                  add(
+                    `${owner}'s ${card(previous?.cardId)} is now ${card(minion.cardId)} with ${minion.attack} attack and ${minion.health} health.`
+                  )
+                else if (
+                  previous?.attack !== minion.attack ||
+                  previous?.health !== minion.health
+                )
+                  add(
+                    `${owner}'s ${card(minion.cardId)} now has ${minion.attack} attack and ${minion.health} health.`
+                  )
+              } else if (event.type !== 'minion-played')
                 add(
                   `${owner} summons ${card(minion.cardId)} with ${minion.attack} attack and ${minion.health} health in position ${Number(event.position) + 1}.`
                 )
@@ -654,7 +700,8 @@ export class MatchLogTranscript {
           add(
             ended.winnerId
               ? `${who(ended.winnerId)} wins.`
-              : 'The match ends in a draw.'
+              : 'The match ends in a draw.',
+            true
           )
       }
     }
