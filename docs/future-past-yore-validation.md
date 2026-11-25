@@ -181,8 +181,8 @@ harness is not included in the repository change or this final test run.
   changed-file ESLint, changed-file Prettier, and whitespace checks.
 - Full-repository lint remains blocked by the unchanged unused `deriveSourceFiles`
   helper in `scripts/card-testing.cjs`.
-- Full-repository formatting flags six unchanged files: `config/outline-tunings.json`,
-  `config/vfx-templates.json`, `scripts/card-testing.cjs`,
+- Full-repository formatting flags six unchanged files: `src/visual-components/effects/outline-tunings.json`,
+  `src/visual-components/effects/vfx-templates.json`, `scripts/card-testing.cjs`,
   `src/game-rules/match/testing/card-testing-scenario.ts`,
   `src/scenes/arena/arena-model.test.ts`, and
   `src/visual-components/effects/fireball-authored.json`.

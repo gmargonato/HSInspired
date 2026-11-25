@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import rawConfig from '../../../config/outline-tunings.json'
+import rawConfig from './outline-tunings.json'
 import { parseOutlineTuningConfig } from '../../desktop/contracts/ipc/outline-tuning'
 import {
   getOutlineTuning,
@@ -20,7 +20,7 @@ describe('shader tuning registry', () => {
   it('saves Windfury tuning for new production effects', () => {
     const updated = {
       ...initialConfig,
-      windfury: { ...initialConfig.windfury, speed: 1.8, thickness: 2 }
+      windfury: { ...initialConfig.windfury, speed: 1.8, intensity: 2 }
     }
     updateOutlineTuningConfig(updated)
     expect(WINDFURY_CONFIG).toEqual(updated.windfury)

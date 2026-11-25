@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import rawConfig from '../../../../config/card-class-colors.json'
+import { readFileSync } from 'node:fs'
+
+const rawConfig = JSON.parse(
+  readFileSync(
+    new URL('../../../visual-components/cards/card-class-colors.json', import.meta.url),
+    'utf8'
+  )
+)
 import {
   CARD_CLASS_BUILDER_CLASSES,
   parseCardClassBuilderConfig

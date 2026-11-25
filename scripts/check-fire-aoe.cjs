@@ -108,7 +108,7 @@ async function main() {
     import { MatchVfxPresenter, matchVfxAreas } from './src/scenes/match/presentation/match-vfx-presenter';
     import { getVfxTemplate } from './src/visual-components/effects/vfx-templates';
     import { VfxLab } from './src/dev-tools/vfx-lab/vfx-lab';
-    import rawLibrary from './config/vfx-templates.json';
+    import rawLibrary from './src/visual-components/effects/vfx-templates.json';
     const { ipcRenderer } = require('electron');
     const fs = require('node:fs');
     const checks = [];

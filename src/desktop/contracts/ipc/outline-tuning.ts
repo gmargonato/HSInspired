@@ -489,7 +489,7 @@ export interface OutlineTuningConfig {
   readonly godRaysDust: GodRaysDustTuning
   readonly shatter: ShatterTuning
   readonly windfury: WindfuryTuning
-  readonly version: 14
+  readonly version: 15
   readonly aura: {
     readonly presets: Readonly<Record<OutlinePresetName, AuraTuning>>
     readonly palettes: Readonly<Record<OutlinePaletteName, AuraPalette>>
@@ -537,7 +537,7 @@ export function parseOutlineTuningConfig(value: unknown): OutlineTuningConfig {
     value && typeof value === 'object' && 'version' in value ? value.version : undefined
   const config = record(
     value,
-    version === 14
+    version === 14 || version === 15
       ? ['version', 'aura', 'ghost', 'shatter', 'godRays', 'godRaysDust', 'windfury']
       : version === 13
         ? ['version', 'aura', 'ghost', 'shatter', 'godRays', 'godRaysDust']
@@ -558,7 +558,8 @@ export function parseOutlineTuningConfig(value: unknown): OutlineTuningConfig {
     config.version !== 11 &&
     config.version !== 12 &&
     config.version !== 13 &&
-    config.version !== 14
+    config.version !== 14 &&
+    config.version !== 15
   )
     throw new Error('Invalid shader tuning version')
   const aura = record(config.aura, ['presets', 'palettes'])
@@ -567,7 +568,8 @@ export function parseOutlineTuningConfig(value: unknown): OutlineTuningConfig {
     config.version === 11 ||
       config.version === 12 ||
       config.version === 13 ||
-      config.version === 14
+      config.version === 14 ||
+      config.version === 15
       ? OUTLINE_PRESET_NAMES
       : LEGACY_PRESET_NAMES
   )
@@ -580,7 +582,8 @@ export function parseOutlineTuningConfig(value: unknown): OutlineTuningConfig {
           config.version === 11 ||
           config.version === 12 ||
           config.version === 13 ||
-          config.version === 14
+          config.version === 14 ||
+          config.version === 15
             ? name
             : AURA_LEGACY_PRESETS[name]
         ],
@@ -625,7 +628,8 @@ export function parseOutlineTuningConfig(value: unknown): OutlineTuningConfig {
     config.version !== 11 &&
     config.version !== 12 &&
     config.version !== 13 &&
-    config.version !== 14
+    config.version !== 14 &&
+    config.version !== 15
   ) {
     const old = record(ghost.tuning, [
       'windDirection',
@@ -686,23 +690,27 @@ export function parseOutlineTuningConfig(value: unknown): OutlineTuningConfig {
       config.version === 11 ||
       config.version === 12 ||
       config.version === 13 ||
-      config.version === 14
+      config.version === 14 ||
+      config.version === 15
       ? config.shatter
       : SHATTER_DEFAULTS,
     Object.keys(SHATTER_DEFAULTS)
   )
   return {
-    version: 14,
+    version: 15,
     windfury: parseWindfuryTuning(
-      config.version === 14 ? config.windfury : WINDFURY_DEFAULTS
+      config.version === 15 ? config.windfury : WINDFURY_DEFAULTS
     ),
     godRaysDust: parseGodRaysDustTuning(
-      config.version === 13 || config.version === 14
+      config.version === 13 || config.version === 14 || config.version === 15
         ? config.godRaysDust
         : GOD_RAYS_DUST_DEFAULTS
     ),
     godRays: parseGodRaysTuning(
-      config.version === 12 || config.version === 13 || config.version === 14
+      config.version === 12 ||
+        config.version === 13 ||
+        config.version === 14 ||
+        config.version === 15
         ? config.godRays
         : GOD_RAYS_DEFAULTS
     ),

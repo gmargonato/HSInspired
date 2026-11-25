@@ -341,9 +341,30 @@ export class SceneNavigator implements SceneRouter {
       if (gameScene.hasMatchEnded) return false
       operation = () => {
         const overlay = new GameSettingsScene({
-          boardCorners: {
-            ...gameScene.boardCorners,
-            onSelect: (id) => gameScene.setBoardCorner(id)
+          onOptions: async () => {
+            if (
+              !gameScene.isLoaded ||
+              gameScene.hasMatchEnded ||
+              this.sceneManager.current !== overlay
+            )
+              return
+            await this.sceneManager.push(
+              new MenuSettingsScene({
+                ai: gameScene.matchAiSettings,
+                enable3dElements: gameScene.are3dElementsEnabled,
+                boardCorners: {
+                  ...gameScene.boardCorners,
+                  onSelect: (id) => gameScene.setBoardCorner(id)
+                }
+              }),
+              { keepUnderlyingActive: true }
+            )
+          },
+          onRestart: async () => {
+            await this.sceneManager.pop(overlay)
+            if (gameScene.isLoaded && !gameScene.hasMatchEnded) {
+              await this.navigate(gameScene.createRestartRoute())
+            }
           },
           onConcede: async () => {
             await this.sceneManager.pop(overlay)

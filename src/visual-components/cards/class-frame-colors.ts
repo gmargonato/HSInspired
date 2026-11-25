@@ -1,4 +1,4 @@
-import rawConfig from '../../../config/card-class-colors.json'
+import rawConfig from './card-class-colors.json'
 import {
   CARD_CLASS_BLEND_MODES,
   CARD_CLASS_BUILDER_CLASSES,

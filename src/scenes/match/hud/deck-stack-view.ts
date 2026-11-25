@@ -15,7 +15,7 @@ type DeckTextures = {
   tradeableGlow?: Texture
 }
 
-/** Shared-texture sprites; no filters, render textures, or per-frame updates. */
+/** Shared-texture deck slices updated when the displayed count changes. */
 export class DeckStackView extends Container {
   /** Retains the original sprite's coordinate system for flights and the hover tray. */
   readonly drawOrigin: Sprite

@@ -24,6 +24,7 @@ import {
 } from './expert-action-outcome'
 import { unpaidActionPenalty } from './expert-ai-action-safety'
 import { canonicalCommandKey } from '../../../game-rules/match/ai/legal-commands'
+import { reviewAttackOpportunity } from './expert-attack-opportunity'
 
 type LocalAction = ReturnType<typeof aiActions>[number]
 type EffectRecord = Readonly<Record<string, unknown>>
@@ -1097,6 +1098,24 @@ export function selectExpertTimeoutFallbackAction(
       (action) => canonicalCommandKey(action.command) === canonicalCommandKey(win)
     )
   const scores = new Map<LocalAction, number>()
+  // Use the same bounded opportunity checks after the search budget expires.
+  // This shares the resource-probe deadline below rather than starting a search.
+  const resourceDeadline = performance.now() + EXPERT_TERMINAL_SAFETY_MAX_MS
+  const recoverOpportunity = (selected: LocalAction): LocalAction => {
+    const review = reviewAttackOpportunity(
+      session.match.getCheckpoint(),
+      session.remoteParticipantId,
+      selected.command,
+      () => performance.now() >= resourceDeadline
+    )
+    const command = review.commands?.[0]
+    return command
+      ? (actions.find(
+          (action) =>
+            canonicalCommandKey(action.command) === canonicalCommandKey(command)
+        ) ?? selected)
+      : selected
+  }
   const guardTerminalLoss = (selected: LocalAction): LocalAction => {
     const started = performance.now()
     const terminal = createExpertTerminalInspector(
@@ -1126,7 +1145,6 @@ export function selectExpertTimeoutFallbackAction(
 
   // Share the existing optional resource-probe allowance; do not add another
   // timeout budget for the delayed-damage comparison.
-  const resourceDeadline = performance.now() + EXPERT_TERMINAL_SAFETY_MAX_MS
   const stopResourceProbe = () => performance.now() >= resourceDeadline
   const delayedDamageRescue = opponent.board.some(hasExpertDelayedDamageSource)
     ? findExpertDelayedDamageRescue(
@@ -1187,7 +1205,7 @@ export function selectExpertTimeoutFallbackAction(
       bestScore = score
     }
   }
-  if (best) return guardTerminalLoss(best)
+  if (best) return guardTerminalLoss(recoverOpportunity(best))
   const pass = actions.find((action) => action.command.type === 'end-turn')
   if (pass) {
     const rescue = findExpertTimeoutCombatRescue(
@@ -1203,5 +1221,5 @@ export function selectExpertTimeoutFallbackAction(
         ) ?? pass
       )
   }
-  return guardTerminalLoss(pass ?? actions[0]!)
+  return guardTerminalLoss(recoverOpportunity(pass ?? actions[0]!))
 }

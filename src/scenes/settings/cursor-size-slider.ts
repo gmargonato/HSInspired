@@ -5,8 +5,18 @@ import {
   CURSOR_SCALE_LIMITS,
   type CursorManager
 } from '../../visual-components/controls/cursor'
-import { applyAnchoredPlacement } from '../../visual-components/layout'
+import {
+  applyAnchoredPlacement,
+  type LayoutPlacement
+} from '../../visual-components/layout'
 import { SETTINGS_LAYOUT } from './settings-layout'
+
+interface CursorSizeLayout {
+  readonly cursorSizeTitle: LayoutPlacement
+  readonly cursorSlider: LayoutPlacement
+  readonly cursorSliderHandle: LayoutPlacement
+  readonly cursorSliderTravel: { readonly minX: number; readonly maxX: number }
+}
 
 /** Live cursor preview with persistence at the end of each gesture. */
 export class CursorSizeSlider extends Container {
@@ -22,7 +32,8 @@ export class CursorSizeSlider extends Container {
     private readonly cursorManager: CursorManager,
     private readonly api: PreferencesApi,
     private readonly onInteract: () => void,
-    private readonly onError: (error: unknown) => void
+    private readonly onError: (error: unknown) => void,
+    private readonly layout: CursorSizeLayout = SETTINGS_LAYOUT
   ) {
     super()
     this.label = 'settings.cursor-size-slider'
@@ -32,14 +43,14 @@ export class CursorSizeSlider extends Container {
     })
     title.label = 'settings.cursor-size-title'
     title.eventMode = 'none'
-    applyAnchoredPlacement(title, SETTINGS_LAYOUT.cursorSizeTitle)
+    applyAnchoredPlacement(title, this.layout.cursorSizeTitle)
     const track = new Sprite(assets.cursorSlider)
     track.label = 'settings.cursor-size-track'
-    applyAnchoredPlacement(track, SETTINGS_LAYOUT.cursorSlider)
+    applyAnchoredPlacement(track, this.layout.cursorSlider)
     track.eventMode = 'static'
     this.handle = new Sprite(assets.horizontalSlider)
     this.handle.label = 'settings.cursor-size-handle'
-    applyAnchoredPlacement(this.handle, SETTINGS_LAYOUT.cursorSliderHandle)
+    applyAnchoredPlacement(this.handle, this.layout.cursorSliderHandle)
     this.handle.eventMode = 'static'
     this.addChild(title, track, this.handle)
     this.eventMode = 'static'
@@ -96,7 +107,7 @@ export class CursorSizeSlider extends Container {
   }
 
   private setFromX(x: number): void {
-    const { minX, maxX } = SETTINGS_LAYOUT.cursorSliderTravel
+    const { minX, maxX } = this.layout.cursorSliderTravel
     const { min, max } = CURSOR_SCALE_LIMITS
     const fraction = Math.max(
       0,
@@ -109,7 +120,7 @@ export class CursorSizeSlider extends Container {
   }
 
   private syncHandle(): void {
-    const { minX, maxX } = SETTINGS_LAYOUT.cursorSliderTravel
+    const { minX, maxX } = this.layout.cursorSliderTravel
     const { min, max } = CURSOR_SCALE_LIMITS
     this.handle.x =
       minX + ((this.cursorManager.getScale() - min) / (max - min)) * (maxX - minX)

@@ -210,6 +210,19 @@ function maskPublicEffectEvent(
   const cardMovement = event.cardMovement
     ? {
         ...event.cardMovement,
+        ...(event.cardMovement.replacedDeckCard
+          ? {
+              replacedDeckCard: {
+                ...event.cardMovement.replacedDeckCard,
+                minion:
+                  event.cardMovement.replacedDeckCard.boardParticipantId === viewerId
+                    ? event.cardMovement.replacedDeckCard.minion
+                    : withoutMinionDeckProvenance(
+                        event.cardMovement.replacedDeckCard.minion
+                      )
+              }
+            }
+          : {}),
         cards: event.cardMovement.cards.map((card) =>
           maskPublicCard(card, viewerId, true)
         )
@@ -229,11 +242,22 @@ function maskPublicEffectEvent(
     : undefined
   const privateDeckCopy =
     event.action === 'copy' && event.data?.copySourceZone === 'deck'
+  const deckToSecret = event.deckToSecret
+    ? {
+        ...event.deckToSecret,
+        card: maskPublicCard(
+          event.deckToSecret.card,
+          viewerId,
+          event.deckToSecret.participantId === viewerId
+        )
+      }
+    : undefined
   if (event.controllerId === viewerId && !privateDeckCopy)
     return {
       ...event,
       ...(cardMovement ? { cardMovement } : {}),
-      ...(deckAddition ? { deckAddition } : {})
+      ...(deckAddition ? { deckAddition } : {}),
+      ...(deckToSecret ? { deckToSecret } : {})
     }
   const data = event.data
     ? (maskPublicEffectData(event.data, viewerId) as Readonly<Record<string, unknown>>)
@@ -243,6 +267,7 @@ function maskPublicEffectEvent(
     sourceCardId: event.controllerId === viewerId ? event.sourceCardId : null,
     ...(cardMovement ? { cardMovement } : {}),
     ...(deckAddition ? { deckAddition } : {}),
+    ...(deckToSecret ? { deckToSecret } : {}),
     ...(data ? { data } : {})
   }
 }

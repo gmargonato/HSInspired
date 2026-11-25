@@ -554,6 +554,238 @@ function play(
   })
 }
 
+describe('deck motion engine contracts', () => {
+  it.each([false, true])(
+    'preserves the source deck for Death Grip (full hand: %s)',
+    (full) => {
+      const f = damagePhaseFixture('knights_of_the_frozen_throne_death_grip')
+      if (full) {
+        // Auctioneer fills the slot freed by playing Death Grip before its steal resolves.
+        f.summon('classic_gadgetzan_auctioneer', f.self)
+        while (f.player(f.self).hand.length < 10)
+          f.s.match.dispatch({
+            type: 'dev-add-card',
+            participantId: f.self,
+            cardId: 'classic_wisp'
+          })
+      }
+      const state = structuredClone(f.s.match.getState())
+      const own = state.players.find((p) => p.participantId === f.self)!
+      const enemy = state.players.find((p) => p.participantId === f.enemy)!
+      Object.assign(enemy.deck[0], { cardId: 'basic_chillwind_yeti' })
+      const result = resolveCardPlay({
+        state,
+        participantId: f.self,
+        cardInstanceId: own.hand[0].instanceId
+      })
+      expect(result.accepted, result.accepted ? undefined : result.message).toBe(true)
+      const cue = result.events.find(
+        (e) => e.type === (full ? 'card-burned' : 'card-generated')
+      )
+      expect(cue).toMatchObject(
+        full
+          ? { origin: 'deck', sourceParticipantId: f.enemy }
+          : { origin: { kind: 'deck', participantId: f.enemy } }
+      )
+      expect(cue).toMatchObject({
+        participantId: f.self,
+        card: { instanceId: enemy.deck[0].instanceId }
+      })
+      expect(result.events.filter((e) => e.type === 'card-drawn')).toHaveLength(
+        full ? 1 : 0
+      )
+    }
+  )
+
+  it.each([0, 4, 5])(
+    'emits only actual Secret arrivals, starting with %i Secrets',
+    (initialCount) => {
+      const f = damagePhaseFixture('the_grand_tournament_mysterious_challenger')
+      const state = structuredClone(f.s.match.getState())
+      const own = state.players.find((p) => p.participantId === f.self)!
+      const ids = [
+        'classic_ice_barrier',
+        'classic_counterspell',
+        'classic_mirror_entity',
+        'classic_ice_block',
+        'classic_spellbender',
+        'classic_vaporize'
+      ]
+      Object.assign(own, {
+        secrets: ids.slice(0, initialCount).map((cardId, i) => ({
+          ...own.deck[12 + i],
+          instanceId: 'existing-secret-' + i,
+          cardId,
+          zone: 'secret'
+        })),
+        deck: ids.flatMap((cardId, i) =>
+          [0, 1].map((j) => ({
+            ...own.deck[i * 2 + j],
+            instanceId: 'deck-secret-' + i + '-' + j,
+            cardId
+          }))
+        )
+      })
+      const result = resolveCardPlay({
+        state,
+        participantId: f.self,
+        cardInstanceId: own.hand[0].instanceId,
+        position: 0
+      })
+      expect(result.accepted, result.accepted ? undefined : result.message).toBe(true)
+      const cues = result.events.flatMap((e) =>
+        e.type === 'effect-resolved' && e.deckToSecret ? [e.deckToSecret] : []
+      )
+      expect(cues.map((cue) => cue.countAfter)).toEqual(
+        Array.from({ length: 5 - initialCount }, (_, i) => initialCount + i + 1)
+      )
+      expect(new Set(cues.map((cue) => cue.card.cardId)).size).toBe(cues.length)
+      expect(
+        result.state.players.find((p) => p.participantId === f.self)!.secrets
+      ).toHaveLength(5)
+      expect(
+        result.state.players.find((p) => p.participantId === f.self)!.deck
+      ).toHaveLength(12 - (5 - initialCount))
+    }
+  )
+
+  it.each([false, true])(
+    'captures both halves of a board/deck swap (stolen=%s)',
+    (stolen) => {
+      const f = damagePhaseFixture('mean_streets_of_gadgetzan_madam_goya')
+      const target = f.summon('basic_chillwind_yeti', f.self)
+      const state = structuredClone(f.s.match.getState())
+      if (stolen)
+        Object.assign(state.players.find((p) => p.participantId === f.self)!.board[0], {
+          ownerId: f.enemy
+        })
+      const result = resolveCardPlay({
+        state,
+        participantId: f.self,
+        cardInstanceId: f.player(f.self).hand[0].instanceId,
+        position: 0,
+        targets: [
+          { kind: 'minion', participantId: f.self, instanceId: target.instanceId }
+        ],
+        rng: createSeededRng(99)
+      })
+      expect(result.accepted, result.accepted ? undefined : result.message).toBe(true)
+      if (!result.accepted) throw Error(result.message)
+      const event = result.events.find(
+        (e) => e.type === 'effect-resolved' && e.cardMovement?.replacedDeckCard
+      )
+      if (event?.type !== 'effect-resolved') throw Error('Missing swap cue')
+      const movement = event.cardMovement!
+      const incoming = movement.replacedDeckCard!
+      expect(movement).toMatchObject({
+        destination: 'deck',
+        participantId: stolen ? f.enemy : f.self
+      })
+      expect(incoming).toMatchObject({
+        participantId: f.self,
+        boardParticipantId: f.self
+      })
+      expect(incoming.minion.instanceId).toBe(incoming.instanceId)
+      expect(
+        result.state.players.find((p) => p.participantId === f.self)!.board[
+          incoming.position
+        ]
+      ).toMatchObject(incoming.minion)
+      expect(
+        result.events.filter(
+          (e) =>
+            e.type === 'minion-summoned' && e.minion.instanceId === incoming.instanceId
+        )
+      ).toHaveLength(0)
+      const published = getOpeningMatchPublicEvents([event], f.enemy)[0]
+      if (published.type !== 'effect-resolved') throw Error('Missing public swap')
+      expect(published.cardMovement!.replacedDeckCard!.minion).not.toHaveProperty(
+        'startedInDeck'
+      )
+      const attack = incoming.minion.attack
+      Object.assign(
+        result.state.players.find((p) => p.participantId === f.self)!.board[
+          incoming.position
+        ],
+        { attack: 99 }
+      )
+      expect(incoming.minion.attack).toBe(attack)
+    }
+  )
+
+  it.each([
+    'naxxramas_mad_scientist',
+    'the_grand_tournament_mysterious_challenger',
+    'knights_of_the_frozen_throne_glacial_mysteries'
+  ])('%s emits a concealed deck-to-Secret flight', (cardId) => {
+    const s = createMatchScenario({ cardId: 'classic_ice_barrier' })
+    s.confirmBothMulligans()
+    const [active, opponent] = activePlayers(s)
+    const scientist = cardId === 'naxxramas_mad_scientist'
+    const destination = scientist ? opponent : active
+    if (scientist) summon(s, opponent, cardId)
+    const target = scientist ? player(s, opponent).board[0] : undefined
+    addCard(s, active, scientist ? 'basic_assassinate' : cardId)
+    setMana(s, active)
+    const result = play(
+      s,
+      active,
+      scientist ? 'basic_assassinate' : cardId,
+      target
+        ? [{ kind: 'minion', participantId: opponent, instanceId: target.instanceId }]
+        : []
+    )
+    expect(result.accepted, result.accepted ? undefined : result.message).toBe(true)
+    if (!result.accepted) throw Error(result.message)
+    const cues = result.events.flatMap((e) =>
+      e.type === 'effect-resolved' && e.deckToSecret ? [e] : []
+    )
+    expect(cues).toHaveLength(1)
+    expect(cues[0].deckToSecret).toMatchObject({
+      participantId: destination,
+      sourceParticipantId: destination,
+      countAfter: 1,
+      card: { cardId: 'classic_ice_barrier' }
+    })
+    for (const viewer of s.participants) {
+      const cue = getOpeningMatchPublicEvents(cues, viewer)[0]
+      if (cue.type !== 'effect-resolved') throw Error('Missing public Secret cue')
+      expect(cue.deckToSecret!.card.cardId).toBe(
+        viewer === destination ? 'classic_ice_barrier' : null
+      )
+      expect(cue.deckToSecret!.card).not.toHaveProperty('knownTo')
+    }
+    expect(
+      result.events.filter(
+        (e) => e.type === 'card-drawn' || e.type === 'card-generated'
+      )
+    ).toHaveLength(0)
+  })
+
+  it('does not make an automatically summoned Ninja leave the deck twice', () => {
+    const f = damagePhaseFixture('basic_arcane_intellect')
+    const state = structuredClone(f.s.match.getState())
+    Object.assign(state.players.find((p) => p.participantId === f.self)!.deck[0], {
+      cardId: 'journey_to_ungoro_tortollan_ninja'
+    })
+    const result = resolveCardPlay({
+      state,
+      participantId: f.self,
+      cardInstanceId: f.player(f.self).hand[0].instanceId,
+      rng: createSeededRng(19)
+    })
+    expect(result.accepted, result.accepted ? undefined : result.message).toBe(true)
+    const ninja = result.events.filter((e) => e.type === 'minion-summoned')
+    expect(ninja.length).toBeGreaterThan(0)
+    expect(
+      ninja.every((e) => e.type === 'minion-summoned' && e.sourceZone === 'revealed')
+    ).toBe(true)
+    expect(
+      result.events.some((e) => e.type === 'card-drawn' && e.origin === 'deck')
+    ).toBe(true)
+  })
+})
+
 describe('resolution presentation events', () => {
   it('preserves the hand origin of Dirty Rat pulls without treating them as plays', () => {
     const scenario = createMatchScenario({ seed: 1701 })

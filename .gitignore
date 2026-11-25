@@ -8,7 +8,5 @@ dist
 dist-card-lab
 artifacts
 scripts/artwork-card-crop/__pycache__/
-config/ai-key.local.txt
-config/openrouter-key.local.txt
 assets/original/
 assets/images/card-artwork

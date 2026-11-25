@@ -65,6 +65,7 @@ export class ShatterLab extends Container {
         immune: false
       },
       {
+        windfury: assets,
         frame: assets.minionFrame,
         premiumFrame: assets.premiumMinionFrame,
         legendaryFrame: assets.minionFrameLegendary,
@@ -115,6 +116,8 @@ export class ShatterLab extends Container {
         frame: assets.weapon,
         poisonous: assets.boardPoisonous,
         premiumFrame: assets.premiumWeapon,
+        cover: assets.weaponCover,
+        premiumCover: assets.premiumWeaponCover,
         trigger: assets.boardTrigger,
         deathrattle: assets.boardDeathrattle,
         lifesteal: assets.minionLifesteal,
@@ -141,6 +144,7 @@ export class ShatterLab extends Container {
         immune: false
       },
       {
+        windfury: assets,
         frame: heroes['hero-jaina'],
         attack: assets.minionAttack,
         health: assets.minionHealth,

@@ -82,7 +82,7 @@ async function main() {
     import { GAME_BOARD_LAYOUT } from './src/scenes/match/game-scene-layout';
     import { ghostCurve } from './src/visual-components/effects/ghost-mist-particles';
     import { parseOutlineTuningConfig } from './src/desktop/contracts/ipc/outline-tuning';
-    import tuning from './config/outline-tunings.json';
+    import tuning from './src/visual-components/effects/outline-tunings.json';
     const { ipcRenderer } = require('electron'); const checks=[];
     function check(ok,message){if(!ok)throw Error(message);checks.push(message)}
     async function run(){

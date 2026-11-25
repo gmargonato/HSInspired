@@ -168,3 +168,126 @@ export function wastesImmediateTemporaryMana(
     )
   })
 }
+
+/** Retain a pure turn-only discount when casting cannot enable another spell. */
+export function wastesTemporarySpellDiscount(
+  root: OpeningMatchAnalysis,
+  actorId: PlayerId,
+  command: TurnMatchCommand,
+  shouldStop: () => boolean = () => false
+): boolean {
+  if (command.type !== 'play-card' || shouldStop() || !root.getAiObservation)
+    return false
+  const state = root.getState()
+  const observation = root.getAiObservation(actorId, 'fair')
+  const self = observation.players.find((p) => p.participantId === actorId)!
+  const card = self.hand.find((c) => c.instanceId === command.cardInstanceId)
+  const definition = card && CARD_CATALOG.get(card.cardId)
+  if (
+    !card ||
+    definition?.type !== 'Spell' ||
+    definition.effects.length !== 1 ||
+    state.phase !== 'turns' ||
+    state.activePlayerId !== actorId ||
+    state.pendingDiscover ||
+    state.pendingCardChoice ||
+    state.pendingResolution ||
+    state.scheduledEffects?.length ||
+    self.handSize >= 10 ||
+    self.effects.pendingCostModifiers?.length ||
+    observation.players.some(
+      (p) => p.quest || p.secrets.length || (p.effects.lockAndLoadCount ?? 0) > 0
+    )
+  )
+    return false
+  const effect = definition.effects[0]!
+  const action = effect.actions?.[0]
+  if (
+    effect.trigger !== 'cast' ||
+    effect.condition ||
+    effect.actions?.length !== 1 ||
+    action?.action !== 'change-cost' ||
+    action.duration !== 'this-turn' ||
+    action.deferUntil !== 'next-matching-card-played' ||
+    typeof action.amount !== 'number' ||
+    action.amount >= 0
+  )
+    return false
+  // Other cards may draw/generate a spell or activate Combo. Leave such setups
+  // to search. This also keeps every held follow-up spell, even at zero cost.
+  if (
+    self.hand.some((c) => c.instanceId !== card.instanceId) ||
+    self.effects.nextCardCostsOpponentHealth ||
+    self.effects.nextSpellCostsHealth ||
+    (self.heroPower.available &&
+      self.heroPower.cost <= self.mana.available &&
+      /draw|discover|hand|generate/.test(
+        JSON.stringify(HERO_POWER_CATALOG.get(self.heroPower.id)?.effect)
+      )) ||
+    observation.players.some((p) =>
+      p.board.some(
+        (m) =>
+          !m.silenced &&
+          CARD_CATALOG.require(m.cardId).effects.some(
+            (e) =>
+              e.trigger === 'deathrattle' &&
+              /draw|discover|hand|generate/.test(JSON.stringify(e.actions))
+          )
+      )
+    ) ||
+    observation.players.some((p) =>
+      p.board.some(
+        (m) =>
+          m.grantedTriggers?.length ||
+          m.attachedEffects?.length ||
+          (!m.silenced &&
+            CARD_CATALOG.require(m.cardId).effects.some(
+              (e) =>
+                !['battlecry', 'on-play', 'deathrattle', 'end-of-turn'].includes(
+                  e.trigger
+                )
+            ))
+      )
+    ) ||
+    observation.selfOriginalDeck.cards.some((c) =>
+      /friendly-spells-cast-this-game|cards-played-this-game|cast-random-spells/.test(
+        JSON.stringify(CARD_CATALOG.require(c.cardId).effects)
+      )
+    )
+  )
+    return false
+  return root.analyze((fork) => {
+    if (!fork.getAiObservation || !fork.getRandomState || shouldStop()) return false
+    const rng = JSON.stringify(fork.getRandomState())
+    const result = fork.dispatch(command)
+    if (
+      !result.accepted ||
+      result.state.phase !== 'turns' ||
+      result.state.pendingDiscover ||
+      result.state.pendingCardChoice ||
+      result.state.pendingResolution ||
+      revealsTacticalInformation(result.events) ||
+      result.events.some((e) => e.type === 'trigger-activated') ||
+      rng !== JSON.stringify(fork.getRandomState()) ||
+      shouldStop()
+    )
+      return false
+    const normalize = (value: typeof observation) =>
+      JSON.stringify({
+        ...value,
+        revision: 0,
+        players: value.players.map((p) =>
+          p.participantId === actorId
+            ? {
+                ...p,
+                hand: [],
+                handSize: 0,
+                mana: { ...p.mana, available: 0 },
+                effects: { ...p.effects, pendingCostModifiers: [] }
+              }
+            : p
+        )
+      })
+    return normalize(observation) === normalize(fork.getAiObservation(actorId, 'fair'))
+  })
+}

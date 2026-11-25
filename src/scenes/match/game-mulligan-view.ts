@@ -9,12 +9,13 @@ import type { OpeningCard } from '../../game-rules/match'
 import { GAME_BOARD_LAYOUT } from './game-scene-layout'
 import { OPENING_TIMING } from './presentation/game-presentation-timing'
 import { completeTimeline } from './presentation/game-presentation-animation'
+import { CARD_MOTION_LAYOUT } from './presentation/card-motion-layout'
 
 interface MulliganCardTransport {
   readonly travelLayer: Container
-  prepareAtDeck(slot: GameCardSlot, index: number): void
+  prepareAtDeck(slot: GameCardSlot): void
   hasDrawOrigin(slot: GameCardSlot): boolean
-  departDeck(slot: GameCardSlot, duration: number, delay: number): Promise<void>
+  departDeck(slot: GameCardSlot, delay: number): Promise<void>
 }
 
 /** Owns opening selection, its controls, presentation, and pointer listeners.
@@ -257,7 +258,7 @@ export class GameMulliganView {
     await Promise.all(
       this.initialSlots.slice(start, end).map((slot, offset) => {
         const index = start + offset
-        this.transport.prepareAtDeck(slot, index)
+        this.transport.prepareAtDeck(slot)
         this.transport.travelLayer.addChild(slot)
         return this.animateSlot(slot, index, this.initialSlots.length, duration, offset)
       })
@@ -281,7 +282,7 @@ export class GameMulliganView {
       slot.skew.set(0, 0)
       slot.rotation = 0
       return this.transport
-        .departDeck(slot, duration, staggerIndex * OPENING_TIMING.localRevealStagger)
+        .departDeck(slot, staggerIndex * CARD_MOTION_LAYOUT.mulligan.stagger)
         .then(() => {
           if (!slot.destroyed && !this.layer.destroyed) this.layer.addChild(slot)
         })
@@ -293,7 +294,7 @@ export class GameMulliganView {
       rotation: 0,
       alpha: 1,
       duration,
-      delay: staggerIndex * OPENING_TIMING.localRevealStagger,
+      delay: staggerIndex * CARD_MOTION_LAYOUT.mulligan.stagger,
       ease: 'power2.out'
     })
     timeline.to(
@@ -302,7 +303,7 @@ export class GameMulliganView {
         x: GAME_BOARD_LAYOUT.mulligan.cards.scale,
         y: GAME_BOARD_LAYOUT.mulligan.cards.scale,
         duration,
-        delay: staggerIndex * OPENING_TIMING.localRevealStagger,
+        delay: staggerIndex * CARD_MOTION_LAYOUT.mulligan.stagger,
         ease: 'power2.out'
       },
       0
@@ -313,7 +314,7 @@ export class GameMulliganView {
         x: 0,
         y: 0,
         duration,
-        delay: staggerIndex * OPENING_TIMING.localRevealStagger,
+        delay: staggerIndex * CARD_MOTION_LAYOUT.mulligan.stagger,
         ease: 'power2.out'
       },
       0

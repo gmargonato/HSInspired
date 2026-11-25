@@ -2,7 +2,14 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import rawConfig from '../../../../config/card-class-colors.json'
+import { readFileSync } from 'node:fs'
+
+const rawConfig = JSON.parse(
+  readFileSync(
+    new URL('../../../visual-components/cards/card-class-colors.json', import.meta.url),
+    'utf8'
+  )
+)
 import { parseCardClassBuilderConfig } from '../../contracts/ipc/card-class-builder'
 import { CardClassBuilderRepository } from './card-class-builder-repository'
 
@@ -18,7 +25,13 @@ describe('CardClassBuilderRepository', () => {
   it('atomically persists the latest queued production configuration', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'hs-card-class-builder-'))
     directories.push(directory)
-    const filePath = join(directory, 'config', 'card-class-colors.json')
+    const filePath = join(
+      directory,
+      'src',
+      'visual-components',
+      'cards',
+      'card-class-colors.json'
+    )
     const repository = new CardClassBuilderRepository(filePath)
     const first = parseCardClassBuilderConfig(rawConfig)
     const second = parseCardClassBuilderConfig({

@@ -10,8 +10,6 @@ files:
   - '!assets/**'
   - '!.github/**'
   - '!scripts/**'
-  - '!config/*key*.local.txt'
-  - '!config/ai.json'
   - '!**/*.psd'
   - '!eslint.config.*'
   - '!tsconfig*.json'

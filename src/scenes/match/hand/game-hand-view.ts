@@ -47,7 +47,7 @@ interface HandCallbacks {
 
 interface HandCardTransport {
   hasDrawOrigin(slot: GameCardSlot): boolean
-  departDeck(slot: GameCardSlot, duration: number, delay: number): Promise<void>
+  departDeck(slot: GameCardSlot, delay: number): Promise<void>
 }
 
 /** Owns hand membership, resting/hover presentation, input listeners, and held-card resources.
@@ -432,11 +432,7 @@ export class GameHandView {
       slot.scale.set(transform.scale)
       slot.skew.set(0, 0)
       slot.zIndex = transform.zIndex
-      return this.transport.departDeck(
-        slot,
-        Math.max(positionDuration, scaleDuration),
-        delay
-      )
+      return this.transport.departDeck(slot, delay)
     }
 
     const timeline = this.animations.timeline()

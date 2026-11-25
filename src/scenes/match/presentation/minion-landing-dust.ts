@@ -6,7 +6,8 @@ import { MINION_LANDING_DUST_LAYOUT as DUST } from './minion-landing-dust-layout
 export function hasMinionLandingDust(event: OpeningMatchEvent): boolean {
   return (
     event.type === 'minion-played' ||
-    (event.type === 'minion-summoned' && event.sourceZone === 'hand')
+    (event.type === 'minion-summoned' &&
+      (event.sourceZone === 'hand' || event.sourceZone === 'deck'))
   )
 }
 

@@ -1,4 +1,4 @@
-import rawConfig from '../../../config/outline-tunings.json'
+import rawConfig from './outline-tunings.json'
 import {
   OUTLINE_PALETTE_NAMES,
   OUTLINE_PRESET_NAMES,
@@ -42,7 +42,7 @@ export function getOutlineTuning(preset: OutlinePresetName): OutlineTuning {
 
 export function getOutlineTuningConfig(): OutlineTuningConfig {
   return parseOutlineTuningConfig({
-    version: 14,
+    version: 15,
     windfury: WINDFURY_CONFIG,
     godRaysDust: GOD_RAYS_DUST_CONFIG,
     godRays: GOD_RAYS_CONFIG,

@@ -425,6 +425,40 @@ export class HandCardPerspective {
     this.current.y = clampUnit(target.y)
   }
 
+  /** Read the rigid displayed pose without changing drag behavior or its resources. */
+  captureFlightPose(layer: Container) {
+    const bounds = this.cardView.getLocalBounds()
+    const convert = (point: PerspectivePoint): PerspectivePoint =>
+      layer.toLocal(this.mesh.toGlobal(point))
+    const origin = convert({ x: 0, y: 0 }),
+      axis = convert({ x: 1, y: 0 })
+    const scale = Math.hypot(axis.x - origin.x, axis.y - origin.y)
+    return {
+      center: convert({ x: this.texture.width / 2, y: this.texture.height / 2 }),
+      width: bounds.width * scale,
+      height: bounds.height * scale,
+      cameraDepth: PERSPECTIVE_DEPTH * scale,
+      offset: {
+        x:
+          (bounds.x - this.shadowFrame.x + bounds.width / 2 - this.texture.width / 2) *
+          scale,
+        y:
+          (bounds.y -
+            this.shadowFrame.y +
+            bounds.height / 2 -
+            this.texture.height / 2) *
+          scale
+      },
+      rotation: Math.atan2(axis.y - origin.y, axis.x - origin.x),
+      tiltX:
+        -(Number.isFinite(this.applied.y) ? this.applied.y : this.current.y) *
+        MAX_TILT_X_DEG,
+      tiltY:
+        (Number.isFinite(this.applied.x) ? this.applied.x : this.current.x) *
+        MAX_TILT_Y_DEG
+    }
+  }
+
   /** Snapshot the displayed warp in normalized texture coordinates. */
   captureCorners(): PerspectiveCorners {
     const width = this.texture.width

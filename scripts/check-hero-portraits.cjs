@@ -46,6 +46,8 @@ async function main() {
     import { prepareHeroPortraitTextures, getHeroPortraitLayers, premiumHeroPortrait } from './src/visual-components/assets/hero-portrait-textures';
     import { AssetScope, registerAssetBundle } from './src/visual-components/assets/asset-scope';
     import { HeroView } from './src/scenes/match/board/hero-view';
+    import { prewarmHeroHover } from './src/scenes/match/loading/hero-hover-warmup';
+    import { acquireAuraField, hasAuraField } from './src/visual-components/effects/aura-field-cache';
     import { gsap } from './src/visual-components/animation/animations';
     import frame from './assets/images/heroes/frames/hero-frame.png';
     import premiumFrame from './assets/images/heroes/frames/hero-frame -premium.png';
@@ -155,6 +157,38 @@ async function main() {
       const copy=view.createPortrait();
       check(copy.children[0] instanceof HeroPortrait && copy.children[0].texture===assembly.texture, 'Result and destruction copies retain the full portrait');
       app.renderer.render(copy);copy.destroy({children:true});view.destroy({children:true});
+      for (const premium of [false,true]) {
+        const texture=premium ? premiumHeroPortrait(assets['hero-jaina']) : assets['hero-jaina'];
+        const field=acquireAuraField(app.renderer,texture);
+        const heroes=[];
+        try {
+          prewarmHeroHover(app.renderer,texture);
+          check(hasAuraField(app.renderer,texture),'Hero hover warmup retains the '+(premium?'premium':'standard')+' field');
+          for (const [side,x] of [['local',250],['remote',750]]) {
+            const hero=HeroView.create({label:'hero.hover.'+side,attack:0,health:30,maxHealth:30,armor:0,frozen:false,immune:false},{frame:texture,attack:Texture.EMPTY,health:Texture.EMPTY,armor:Texture.EMPTY,frozen:Texture.EMPTY,immune:Texture.EMPTY});
+            hero.position.set(x,350);hero.scale.set(.7);app.stage.addChild(hero);heroes.push(hero);
+          }
+          const capture=()=>app.renderer.extract.canvas({target:app.stage,frame:new Rectangle(0,0,1080,860),resolution:1});
+          const before=capture().getContext('2d').getImageData(0,0,1080,860).data;
+          for(const hero of heroes)hero.setHoverAura(true);
+          const originalCanvas=app.renderer.extract.canvas;
+          let readbacks=0;
+          app.renderer.extract.canvas=function(...args){readbacks++;return originalCanvas.apply(this,args);};
+          try { app.renderer.render({container:app.stage}); }
+          finally { app.renderer.extract.canvas=originalCanvas; }
+          check(readbacks===0,'First '+(premium?'premium':'standard')+' hero hover reuses the prepared silhouette without readback');
+          const image=capture(),after=image.getContext('2d').getImageData(0,0,1080,860).data;
+          for(const [side,start,end] of [['local',0,500],['remote',500,1080]]) {
+            let whitePixels=0;
+            for(let y=0;y<860;y++)for(let x=start;x<end;x++) {
+              const i=(y*1080+x)*4;
+              if(before[i+3]===0 && after[i+3]>16 && after[i]>200 && after[i+1]>200 && after[i+2]>200)whitePixels++;
+            }
+            check(whitePixels>10,side+' '+(premium?'premium':'standard')+' hero has a visible exterior white hover aura');
+          }
+          await ipcRenderer.invoke('image','hero-hover-'+(premium?'premium':'standard'),image.toDataURL());
+        } finally { for(const hero of heroes)hero.destroy({children:true});field.release(); }
+      }
       await menu.releaseAll();check(!a['hero-jaina'].destroyed,'Overlapping scene retains menu portrait textures');
       await overlap.releaseAll();check(a['hero-jaina'].destroyed,'Final menu owner disposes generated portrait textures');
       check(!game.heroPortraitFrame.destroyed,'Match ownership retains the shared frame after menus release');

@@ -1,3 +1,6 @@
+import type { WindfuryTextures } from '../effects/windfury-material'
+import windfuryWindImage from '@assets/images/effects/windfury-wind.png'
+import windfuryMoteImage from '@assets/images/effects/windfury-mote.png'
 import { MATCH_CONTROL_ASSETS } from './match-control-assets'
 import { HEALING_ASSETS } from './healing-assets'
 import type { GhostTextures } from '../effects/ghost-materials'
@@ -160,6 +163,7 @@ import settingsDropDownButtonImage from '@assets/images/ui/settings/settings-dro
 import settingsBaseFrameLargeImage from '@assets/images/ui/settings/settings-base-frame-large.png'
 import settingsConcedeImage from '@assets/images/ui/settings/settings-concede.png'
 import settingsRestartImage from '@assets/images/ui/settings/settings-restart.png'
+import settingsOptionsImage from '@assets/images/ui/settings/settings-options.png'
 import settingsQuitImage from '@assets/images/ui/settings/settings-quit.png'
 import gameBoardBaseImage from '@assets/images/table/board.png'
 import localGoldenFrameImage from '@assets/images/table/local-golden-frame.png'
@@ -252,6 +256,8 @@ import heroArmorImage from '@assets/images/cards/armor.png'
 import minionWillDieImage from '@assets/images/board/character-will-die.png'
 import weaponImage from '@assets/images/board/weapon.png'
 import premiumWeaponImage from '@assets/images/board/premium-weapon.png'
+import weaponCoverImage from '@assets/images/board/weapon-cover.png'
+import premiumWeaponCoverImage from '@assets/images/board/premium-weapon-cover.png'
 import searchClearImage from '@assets/images/cards/silence.png'
 import searchNoResultsImage from '@assets/images/ui/collection/search-no-results.png'
 import cardDeckLimitFrameImage from '@assets/images/ui/collection/card-deck-limit-frame.png'
@@ -304,13 +310,18 @@ import {
   type DeckHeroAssetKey,
   type MatchHeroAssetKey
 } from './hero-assets'
-import { HERO_POWER_ASSET_SOURCES, type HeroPowerAssetKey } from './hero-power-assets'
+import {
+  HERO_POWER_ASSET_SOURCES,
+  heroPowerArtworkSize,
+  type HeroPowerAssetKey
+} from './hero-power-assets'
 import { CARD_ASSET_DEFINITIONS, type CardAssetDefinition } from './card-assets'
 import { registerAssetBundle } from './asset-scope'
 import heroPortraitFrameImage from '@assets/images/heroes/frames/hero-frame.png'
 import heroPortraitPremiumFrameImage from '@assets/images/heroes/frames/hero-frame -premium.png'
 import heroPortraitMaskImage from '@assets/images/heroes/frames/hero-artwork-mask.png'
 import { prepareHeroPortraitTextures } from './hero-portrait-textures'
+import { prepareHeroPowerTextures } from './hero-power-textures'
 import { HERO_ARTWORK_PLACEMENTS } from '../hero-portrait-layout'
 
 export { AssetScope } from './asset-scope'
@@ -587,6 +598,24 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     64,
     64,
     'arena'
+  ),
+  asset(
+    'scene.game.windfury-wind',
+    ASSET_BUNDLE_IDS.game,
+    'windfuryWind',
+    windfuryWindImage,
+    128,
+    128,
+    'game'
+  ),
+  asset(
+    'scene.game.windfury-mote',
+    ASSET_BUNDLE_IDS.game,
+    'windfuryMote',
+    windfuryMoteImage,
+    64,
+    64,
+    'game'
   ),
   asset(
     'scene.game.ghost-mote',
@@ -1219,6 +1248,15 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     'game-settings'
   ),
   asset(
+    'scene.game-settings.options-button',
+    ASSET_BUNDLE_IDS.gameSettings,
+    'optionsButton',
+    settingsOptionsImage,
+    294,
+    97,
+    'game-settings'
+  ),
+  asset(
     'scene.game-settings.restart-button',
     ASSET_BUNDLE_IDS.gameSettings,
     'restartButton',
@@ -1684,6 +1722,24 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
     heroArmorImage,
     163,
     200,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.weapon-cover',
+    ASSET_BUNDLE_IDS.game,
+    'weaponCover',
+    weaponCoverImage,
+    128,
+    128,
+    'game-scene'
+  ),
+  asset(
+    'scene.game.weapon-cover-premium',
+    ASSET_BUNDLE_IDS.game,
+    'premiumWeaponCover',
+    premiumWeaponCoverImage,
+    128,
+    128,
     'game-scene'
   ),
   asset(
@@ -2452,8 +2508,8 @@ const bespokeAssetDefinitions: readonly AssetDefinition[] = [
       ASSET_BUNDLE_IDS.game,
       key,
       source,
-      500,
-      500,
+      heroPowerArtworkSize(key as HeroPowerAssetKey),
+      heroPowerArtworkSize(key as HeroPowerAssetKey),
       'game-scene'
     )
   ),
@@ -3123,7 +3179,20 @@ for (const bundle of manifestBundles) {
     prepare:
       bundle.name === ASSET_BUNDLE_IDS.deckPresentation ||
       bundle.name === ASSET_BUNDLE_IDS.game
-        ? (assets) => prepareHeroPortraitTextures(assets as Record<string, Texture>)
+        ? (assets) => {
+            const portraits = prepareHeroPortraitTextures(
+              assets as Record<string, Texture>
+            )
+            if (bundle.name !== ASSET_BUNDLE_IDS.game) return portraits
+            const powers = prepareHeroPowerTextures(portraits.assets)
+            return {
+              assets: powers.assets,
+              dispose: () => {
+                powers.dispose()
+                portraits.dispose()
+              }
+            }
+          }
         : undefined,
     // Pixi pools alpha-mask filters across scenes. Destroying a card-frame
     // TextureSource leaves those pooled filters with a dead WebGPU bind group,
@@ -3258,7 +3327,7 @@ export interface DeckPresentationAssets extends Record<DeckHeroAssetKey, Texture
 export interface GameAssets extends Record<
   HeroPowerAssetKey | MatchHeroAssetKey,
   Texture
->, GhostTextures {
+>, GhostTextures, WindfuryTextures {
   heroPowerAura1: Texture
   heroSpellPlay: Texture
   heroPowerAura2: Texture
@@ -3342,6 +3411,8 @@ export interface GameAssets extends Record<
   minionWillDie: Texture
   weapon: Texture
   premiumWeapon: Texture
+  weaponCover: Texture
+  premiumWeaponCover: Texture
   minionSummonRays: Texture
   spellPlayAura: Texture
   minionPlayAura: Texture
@@ -3435,6 +3506,7 @@ export interface GameSettingsAssets {
   background: Texture
   baseFrameLarge: Texture
   concedeButton: Texture
+  optionsButton: Texture
   restartButton: Texture
   quitButton: Texture
 }

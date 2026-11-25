@@ -1,3 +1,4 @@
+import type { WindfuryTextures } from '../../../visual-components/effects/windfury-material'
 import type { WindfuryTuning } from '../../../desktop/contracts/ipc/windfury-tuning'
 import { Container, Rectangle, Sprite, Text, Texture } from 'pixi.js'
 import {
@@ -29,6 +30,7 @@ export interface HeroViewModel {
 }
 
 export interface HeroViewTextures {
+  readonly windfury?: WindfuryTextures
   readonly frame: Texture
   readonly attack: Texture
   readonly health: Texture
@@ -114,6 +116,7 @@ export class HeroView extends Container {
   private readonly attackOutline: AnimatedOutline
   private readonly attentionProxy: Sprite
   private readonly attentionOutline: AnimatedOutline
+  private pointerHover = false
   private aiAttention = false
   private attackWarning = false
   private readonly targetingOutlineProxy: Sprite
@@ -123,6 +126,7 @@ export class HeroView extends Container {
   private canAttackEnabled = false
   private targetingOutlineEnabled = false
   private targetableEnabled = false
+  private hoverableEnabled = false
   private selected = false
   private baseScale = 1
   private healthVisible = false
@@ -137,7 +141,11 @@ export class HeroView extends Container {
     this.eventMode = 'none'
     this.pivot.set(HERO_CANVAS.width / 2, HERO_CANVAS.height / 2)
 
-    this.windfury = new WindfuryEffect(HERO_LAYOUT.windfury, 'hero.windfury')
+    this.windfury = new WindfuryEffect(
+      HERO_LAYOUT.windfury,
+      'hero.windfury',
+      textures.windfury
+    )
     this.windfury.setEnabled(model.windfury ?? false)
     this.addChild(this.windfury.rear)
 
@@ -165,6 +173,7 @@ export class HeroView extends Container {
       HERO_LAYOUT.attackBadge,
       model.attack
     )
+    applyAnchoredPlacement(attack.badge, HERO_LAYOUT.attackBadgeArtwork)
     this.attackGroup = attack.group
     this.attackLabel = attack.value
     this.attackGroup.visible = model.attack > 0
@@ -421,6 +430,16 @@ export class HeroView extends Container {
     this.windfury.setEnabled(enabled)
   }
 
+  playWindfuryBurst(): void {
+    this.windfury.playBurst()
+  }
+
+  scheduleWindfuryReminder(eligible: () => boolean): void {
+    this.windfury.scheduleReminder(
+      () => !this.destroyed && this.canAttackEnabled && eligible()
+    )
+  }
+
   setWindfuryTuning(tuning: WindfuryTuning): void {
     this.windfury.setTuning(tuning)
   }
@@ -488,12 +507,23 @@ export class HeroView extends Container {
 
   setAiAttention(enabled: boolean): void {
     this.aiAttention = enabled
-    this.attentionOutline.setEnabled(this.aiAttention || this.attackWarning)
+    this.syncWhiteOutline()
   }
 
   setAttackWarning(enabled: boolean): void {
     this.attackWarning = enabled
-    this.attentionOutline.setEnabled(this.aiAttention || this.attackWarning)
+    this.syncWhiteOutline()
+  }
+
+  setHoverAura(enabled: boolean): void {
+    this.pointerHover = enabled
+    this.syncWhiteOutline()
+  }
+
+  private syncWhiteOutline(): void {
+    this.attentionOutline.setEnabled(
+      this.pointerHover || this.aiAttention || this.attackWarning
+    )
   }
 
   isCanAttack(): boolean {
@@ -502,8 +532,18 @@ export class HeroView extends Container {
 
   setTargetable(enabled: boolean): void {
     this.targetableEnabled = enabled
-    this.eventMode = enabled ? 'static' : 'none'
-    this.cursor = enabled ? 'pointer' : 'default'
+    this.syncPointerInputState()
+  }
+
+  /** Keeps pointer enter/leave available without granting click targetability. */
+  setHoverable(enabled: boolean): void {
+    this.hoverableEnabled = enabled
+    this.syncPointerInputState()
+  }
+
+  private syncPointerInputState(): void {
+    this.eventMode = this.targetableEnabled || this.hoverableEnabled ? 'static' : 'none'
+    this.cursor = this.targetableEnabled ? 'pointer' : 'default'
   }
 
   isTargetable(): boolean {

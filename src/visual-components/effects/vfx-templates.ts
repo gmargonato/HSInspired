@@ -1,6 +1,6 @@
 import { CARD_CATALOG } from '../../game-rules/content/cards'
 import { HERO_POWER_CATALOG } from '../../game-rules/content/hero-powers'
-import rawLibrary from '../../../config/vfx-templates.json'
+import rawLibrary from './vfx-templates.json'
 import {
   parseVfxTemplateLibrary,
   type VfxTemplate,

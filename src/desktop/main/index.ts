@@ -184,14 +184,18 @@ void app
     if (is.dev) {
       registerCardClassBuilderIpc(
         new CardClassBuilderRepository(
-          join(appPath, 'config', 'card-class-colors.json')
+          join(appPath, 'src', 'visual-components', 'cards', 'card-class-colors.json')
         )
       )
       registerOutlineTuningIpc(
-        new OutlineTuningRepository(join(appPath, 'config', 'outline-tunings.json'))
+        new OutlineTuningRepository(
+          join(appPath, 'src', 'visual-components', 'effects', 'outline-tunings.json')
+        )
       )
       registerVfxTemplateIpc(
-        new VfxTemplateRepository(join(appPath, 'config', 'vfx-templates.json'))
+        new VfxTemplateRepository(
+          join(appPath, 'src', 'visual-components', 'effects', 'vfx-templates.json')
+        )
       )
     }
     registerDeckIpc(new DeckRepository(join(app.getPath('userData'), 'decks.json')))

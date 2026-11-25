@@ -28,7 +28,8 @@ export class BoardCornerSelector extends Container {
 
   constructor(
     assets: Pick<GameSettingsAssets, 'resolutionField' | 'resolutionButton'>,
-    private readonly selection: BoardCornerSelection
+    private readonly selection: BoardCornerSelection,
+    private readonly onOpen: () => void = () => undefined
   ) {
     super()
     this.label = 'settings.board-corners'
@@ -74,6 +75,7 @@ export class BoardCornerSelector extends Container {
   }
 
   closeOptions(): void {
+    this.zIndex = 0
     this.panel.visible = this.dismiss.visible = false
     window.removeEventListener('keydown', this.onKeyDown, true)
   }
@@ -84,6 +86,8 @@ export class BoardCornerSelector extends Container {
 
   private toggle(): void {
     if (this.panel.visible) return this.closeOptions()
+    this.onOpen()
+    this.zIndex = 10
     this.list.y = 0
     this.panel.visible = this.dismiss.visible = true
     this.rebuild()

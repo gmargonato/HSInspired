@@ -226,7 +226,12 @@ equal(
 
 // Exercise the actual library values as new presets are added or tuned.
 const library = contract.parseVfxTemplateLibrary(
-  JSON.parse(fs.readFileSync(path.join(root, 'config/vfx-templates.json'), 'utf8'))
+  JSON.parse(
+    fs.readFileSync(
+      path.join(root, 'src/visual-components/effects/vfx-templates.json'),
+      'utf8'
+    )
+  )
 )
 for (const template of library.templates.filter((value) => value.family === 'aoe')) {
   const tuning = template.tuning.fire

@@ -252,19 +252,21 @@ export class OutlineLabShaderControls {
     shared?.append(buttons)
   }
 
-  showWindfury(tuning: WindfuryTuning, onChange: Change, reset: () => void): void {
+  showWindfury(
+    tuning: WindfuryTuning,
+    onChange: Change,
+    reset: () => void,
+    burst?: () => void
+  ): void {
     this.shader.value = 'windfury'
     const labels: Record<keyof WindfuryTuning, string> = {
       speed: 'Speed (0 pauses)',
-      thickness: 'Ribbon thickness',
-      ribbons: 'Ribbon count',
-      trailLength: 'Trail length (half-turns)',
-      width: 'Orbit width',
-      orbitDepth: 'Orbit depth',
-      spacing: 'Ribbon spacing',
-      opacity: 'Opacity',
-      softness: 'Edge softness',
-      color: 'Wind color'
+      scale: 'Size',
+      intensity: 'Intensity',
+      fresnelWidth: 'Fresnel width',
+      fresnelIntensity: 'Fresnel intensity',
+      fresnelAlpha: 'Fresnel alpha',
+      color: 'Wind tint'
     }
     this.render(
       [
@@ -275,7 +277,7 @@ export class OutlineLabShaderControls {
           type: 'range',
           min,
           max,
-          step: key === 'ribbons' ? 1 : 0.01
+          step: 0.01
         })),
         { key: 'color', label: labels.color, section: 'Windfury', type: 'color' }
       ],
@@ -286,6 +288,12 @@ export class OutlineLabShaderControls {
     button.textContent = 'Reset Windfury'
     button.onclick = reset
     this.content.append(button)
+    if (burst) {
+      const replay = document.createElement('button')
+      replay.textContent = 'Replay Windfury burst'
+      replay.onclick = burst
+      this.content.append(replay)
+    }
   }
 
   showShatter(

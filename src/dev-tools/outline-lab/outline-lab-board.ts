@@ -68,6 +68,7 @@ export class OutlineLabBoard extends Container {
         immune: false
       },
       {
+        windfury: assets,
         frame: assets.minionFrame,
         premiumFrame: assets.premiumMinionFrame,
         legendaryFrame: assets.minionFrameLegendary,
@@ -117,6 +118,7 @@ export class OutlineLabBoard extends Container {
         immune: false
       },
       {
+        windfury: assets,
         frame: heroes['hero-jaina'],
         attack: assets.minionAttack,
         health: assets.minionHealth,
@@ -200,6 +202,8 @@ export class OutlineLabBoard extends Container {
         frame: assets.weapon,
         poisonous: assets.boardPoisonous,
         premiumFrame: assets.premiumWeapon,
+        cover: assets.weaponCover,
+        premiumCover: assets.premiumWeaponCover,
         trigger: assets.boardTrigger,
         deathrattle: assets.boardDeathrattle,
         lifesteal: assets.minionLifesteal,
@@ -215,6 +219,11 @@ export class OutlineLabBoard extends Container {
     this.weapon = weapon
     applyPlacement(weapon, LAYOUT.auraWeapon)
     this.addChild(weapon)
+  }
+
+  playWindfuryBurst(): void {
+    this.minion?.playWindfuryBurst()
+    this.hero?.playWindfuryBurst()
   }
 
   setWindfuryPreview(enabled: boolean, tuning: WindfuryTuning): void {

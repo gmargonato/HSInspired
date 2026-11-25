@@ -15,12 +15,12 @@ export const HERO_POWER_PRESENTATION_LAYOUT = {
   },
   icon: {
     artwork: placement(
-      { x: 75, y: 77 },
+      { x: 75, y: 75 },
       { width: 510, height: 510 },
       {
         anchor: CENTER,
-        scale: 0.18,
-        note: 'Raw artwork scaled beneath the compact circular opening.'
+        scale: 0.19,
+        note: '2D artwork centered with overlap beneath the frame opening.'
       }
     ),
     artworkRadius: 60,

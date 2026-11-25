@@ -19,6 +19,7 @@ import {
 import { PremiumArtworkBreath } from '../../../visual-components/effects/premium-artwork-breath'
 
 export interface WeaponViewModel {
+  readonly active?: boolean
   readonly premiumSide?: 'local' | 'remote'
   readonly premium?: boolean
   readonly label: string
@@ -32,6 +33,8 @@ export interface WeaponViewModel {
 }
 
 export interface WeaponViewTextures {
+  readonly cover: Texture
+  readonly premiumCover: Texture
   readonly frame: Texture
   readonly premiumFrame: Texture
   readonly trigger: Texture
@@ -122,6 +125,7 @@ export class WeaponView extends Container {
   private readonly trigger: Sprite
   private readonly poisonous: Sprite
   private readonly lifesteal: Sprite
+  private readonly cover: Sprite
   private readonly hoverOutlines = new Map<Texture, AnimatedOutline>()
   private hoverOutline: AnimatedOutline
   private readonly animationScope = new AnimationScope()
@@ -176,6 +180,16 @@ export class WeaponView extends Container {
     artworkLayer.addChild(mask)
     this.addChild(artworkLayer)
 
+    this.cover = new Sprite(
+      model.premium || isPremiumEnabled(model.premiumSide)
+        ? textures.premiumCover
+        : textures.cover
+    )
+    applyAnchoredPlacement(this.cover, WEAPON_LAYOUT.cover)
+    this.cover.label = 'weapon.cover'
+    this.setActive(model.active ?? true)
+    this.addChild(this.cover)
+
     const frame = new Sprite(
       model.premium || isPremiumEnabled(model.premiumSide)
         ? textures.premiumFrame
@@ -201,6 +215,7 @@ export class WeaponView extends Container {
     this.unsubscribePremium = subscribeToPremiumAppearance(() => {
       const enabled = model.premium === true || isPremiumEnabled(model.premiumSide)
       frame.texture = enabled ? textures.premiumFrame : textures.frame
+      this.cover.texture = enabled ? textures.premiumCover : textures.cover
       const hovered = this.hoverOutline.isEnabled()
       this.hoverOutline.setEnabled(false)
       this.hoverOutline = this.hoverOutlines.get(frame.texture)!
@@ -269,6 +284,10 @@ export class WeaponView extends Container {
   setStats(attack: number, durability: number): void {
     this.attackLabel.text = String(attack)
     this.setDurabilityLabel(durability)
+  }
+
+  setActive(active: boolean): void {
+    this.cover.visible = !active
   }
 
   setAttack(attack: number): void {

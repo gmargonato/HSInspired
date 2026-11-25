@@ -2,7 +2,14 @@ import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import rawConfig from '../../../../config/outline-tunings.json'
+import { readFileSync } from 'node:fs'
+
+const rawConfig = JSON.parse(
+  readFileSync(
+    new URL('../../../visual-components/effects/outline-tunings.json', import.meta.url),
+    'utf8'
+  )
+)
 import { parseOutlineTuningConfig } from '../../contracts/ipc/outline-tuning'
 import { OutlineTuningRepository } from './outline-tuning-repository'
 
@@ -18,7 +25,13 @@ describe('OutlineTuningRepository', () => {
   it('atomically persists the latest queued production configuration', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'hs-outline-tuning-'))
     directories.push(directory)
-    const filePath = join(directory, 'config', 'outline-tunings.json')
+    const filePath = join(
+      directory,
+      'src',
+      'visual-components',
+      'effects',
+      'outline-tunings.json'
+    )
     const repository = new OutlineTuningRepository(filePath)
     const first = parseOutlineTuningConfig(rawConfig)
     const draft = structuredClone(rawConfig)
@@ -34,12 +47,14 @@ describe('OutlineTuningRepository', () => {
     draft.godRays.color = [0.9, 0.7, 0.5, 0.6]
     const second = {
       ...parseOutlineTuningConfig(draft),
-      windfury: { ...first.windfury, speed: 1.7, thickness: 2.2 }
+      windfury: { ...first.windfury, speed: 1.7, intensity: 2.2 }
     }
 
     await Promise.all([repository.save(first), repository.save(second)])
 
     expect(JSON.parse(await readFile(filePath, 'utf8'))).toEqual(second)
-    expect(await readdir(join(directory, 'config'))).toEqual(['outline-tunings.json'])
+    expect(
+      await readdir(join(directory, 'src', 'visual-components', 'effects'))
+    ).toEqual(['outline-tunings.json'])
   })
 })

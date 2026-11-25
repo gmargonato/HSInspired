@@ -1,6 +1,13 @@
 import { WINDFURY_DEFAULTS } from './windfury-tuning'
 import { describe, expect, it } from 'vitest'
-import rawConfig from '../../../../config/outline-tunings.json'
+import { readFileSync } from 'node:fs'
+
+const rawConfig = JSON.parse(
+  readFileSync(
+    new URL('../../../visual-components/effects/outline-tunings.json', import.meta.url),
+    'utf8'
+  )
+)
 import { GOD_RAYS_DEFAULTS } from './god-rays-tuning'
 import { GOD_RAYS_DUST_DEFAULTS } from './god-rays-dust-tuning'
 import {
@@ -70,7 +77,7 @@ function legacyConfig(version: number) {
 describe('shader tuning IPC', () => {
   it('clones both shaders without sharing mutable nested values', () => {
     const parsed = parseOutlineTuningConfig(rawConfig)
-    expect(parsed).toEqual({ ...rawConfig, version: 14, windfury: WINDFURY_DEFAULTS })
+    expect(parsed).toEqual({ ...rawConfig, version: 15, windfury: WINDFURY_DEFAULTS })
     expect(Object.keys(parsed.aura.presets)).toEqual([...OUTLINE_PRESET_NAMES])
     expect(Object.keys(parsed.aura.palettes)).toEqual([...OUTLINE_PALETTE_NAMES])
     expect(parsed.aura.presets.card).not.toBe(rawConfig.aura.presets.card)
@@ -84,7 +91,7 @@ describe('shader tuning IPC', () => {
       ghost: { tuning: { ribbonWidth: 5 }, palette: { baseColor: 0 } }
     }
     const parsed = parseOutlineTuningConfig(legacy)
-    expect(parsed.version).toBe(14)
+    expect(parsed.version).toBe(15)
     expect(parsed.aura).toEqual(expectedMigratedAura(legacy.aura))
     expect(parsed.ghost).toEqual(GHOST_MIST_DEFAULTS)
     expect(legacy.version).toBe(4)
@@ -93,7 +100,7 @@ describe('shader tuning IPC', () => {
     const legacy = legacyConfig(5)
     legacy.ghost.tuning.spotSize = 1.09
     const parsed = parseOutlineTuningConfig(legacy)
-    expect(parsed.version).toBe(14)
+    expect(parsed.version).toBe(15)
     expect(parsed.ghost.tuning.particleSize).toBeCloseTo(8.175)
     expect(legacy.ghost.tuning.spotSize).toBe(1.09)
     expect(parsed.aura).toEqual(expectedMigratedAura(legacy.aura))
@@ -106,7 +113,7 @@ describe('shader tuning IPC', () => {
   it('adds travel distance to version 6 while preserving saved settings', () => {
     const legacy = legacyConfig(6)
     const parsed = parseOutlineTuningConfig(legacy)
-    expect(parsed.version).toBe(14)
+    expect(parsed.version).toBe(15)
     expect(parsed.ghost.tuning).toMatchObject({
       particleTravelDistance: 60,
       windDirection: 2,
@@ -183,7 +190,7 @@ describe('shader tuning IPC', () => {
     config.ghost.palette.particleColor = 0xff0000
     expect(parseOutlineTuningConfig(config)).toEqual({
       ...config,
-      version: 14,
+      version: 15,
       windfury: WINDFURY_DEFAULTS
     })
   })
@@ -193,7 +200,7 @@ describe('shader tuning IPC', () => {
     expect(() => parseOutlineTuningConfig(config)).toThrow()
   })
   it('rejects incompatible shapes and versions', () => {
-    for (const version of [3, 14])
+    for (const version of [3, 16])
       expect(() => parseOutlineTuningConfig({ ...rawConfig, version })).toThrow()
     const missing = structuredClone(rawConfig) as unknown as {
       aura: { presets: Record<string, unknown> }
@@ -315,13 +322,14 @@ it('migrates version 10 into independent element settings without changing other
 
 it('adds god rays to version 11 without changing existing shader tuning', () => {
   const {
+    windfury: _windfury,
     godRays: _godRays,
     godRaysDust: _dust,
     ...previous
   } = structuredClone(rawConfig)
   const legacy = { ...previous, version: 11 }
   const migrated = parseOutlineTuningConfig(legacy)
-  expect(migrated.version).toBe(14)
+  expect(migrated.version).toBe(15)
   expect(migrated.godRays).toEqual(GOD_RAYS_DEFAULTS)
   expect(migrated.aura).toEqual(legacy.aura)
   expect(migrated.ghost).toEqual(legacy.ghost)
@@ -337,13 +345,17 @@ it('round-trips fractional god rays values and copies its color channels', () =>
   config.godRays.seed = 25.31
   config.godRays.color = [0.123, 0.456, 0.789, 0.321]
   const parsed = parseOutlineTuningConfig(config)
-  expect(parsed).toEqual({ ...config, version: 14, windfury: WINDFURY_DEFAULTS })
+  expect(parsed).toEqual({ ...config, version: 15, windfury: WINDFURY_DEFAULTS })
   expect(parsed.godRays.color).not.toBe(config.godRays.color)
   expect(parseOutlineTuningConfig(JSON.parse(JSON.stringify(parsed)))).toEqual(parsed)
 })
 
 it('adds dust to version 12 without changing saved ray or other shader values', () => {
-  const { godRaysDust: _dust, ...previous } = structuredClone(rawConfig)
+  const {
+    windfury: _windfury,
+    godRaysDust: _dust,
+    ...previous
+  } = structuredClone(rawConfig)
   const legacy = { ...previous, version: 12 }
   legacy.godRays.angle = -1.21
   const migrated = parseOutlineTuningConfig(legacy)
@@ -401,8 +413,8 @@ it('migrates Windfury defaults and round-trips saved adjustments without changin
     windfury: {
       ...initial.windfury,
       speed: 0,
-      thickness: 2.5,
-      ribbons: 5,
+      intensity: 2.5,
+      fresnelWidth: 5,
       color: 0xabcdef
     }
   }
@@ -414,8 +426,8 @@ it('migrates Windfury defaults and round-trips saved adjustments without changin
 
 it.each([
   { speed: -1 },
-  { thickness: NaN },
-  { ribbons: 1.5 },
+  { intensity: NaN },
+  { fresnelAlpha: 3 },
   { color: 0x1000000 },
   { speed: '2' },
   { unknown: 1 }
@@ -427,4 +439,27 @@ it.each([
       windfury: { ...config.windfury, ...invalid }
     })
   ).toThrow()
+})
+
+it('migrates version 14 ribbon settings to native defaults and preserves the other shaders', () => {
+  const current = parseOutlineTuningConfig(rawConfig)
+  const legacy = {
+    ...current,
+    version: 14,
+    windfury: {
+      speed: 1,
+      thickness: 1,
+      ribbons: 3,
+      trailLength: 1,
+      width: 1,
+      orbitDepth: 0.15,
+      spacing: 0.22,
+      opacity: 1,
+      softness: 1,
+      color: 15333375
+    }
+  }
+  const migrated = parseOutlineTuningConfig(legacy)
+  expect(migrated).toEqual({ ...current, windfury: WINDFURY_DEFAULTS })
+  expect(legacy.version).toBe(14)
 })

@@ -128,6 +128,12 @@ applies to all opponent modes and never delays the attack. With the current
 
 ## Card appearance tuning
 
+Authored visual JSON belongs beside its owner: `cards/card-class-colors.json` and
+`effects/outline-tunings.json` / `effects/vfx-templates.json` under
+`visual-components`. Development editors save to these same source files. Keep
+visual data colocated rather than introducing a root configuration folder.
+
+
 Outlined runtime text uses `visual-components/text-style.ts`. Board and UI numeric
 outlines use 10% of font size; compact list counters have a minimum width of one
 local design pixel. Complete-card numbers use the `card-number` preset at 8%,
@@ -220,6 +226,9 @@ Use one organizational level below each scene or subsystem as the default:
 `visual-components/effects/*.ts`. Files with a common prefix stay together;
 board heroes, minions, weapons, powers, and shadows are all directly in `board`.
 The [board shadow guide](scenes/match/board/board-shadows.md) explains shadow tuning.
+The [deck card motion guide](../docs/card-motion.md) inventories local/remote paths,
+source evidence, rigid projection rules and the isolated screenshot/playback tool
+(`npm run test:card-motion`).
 
 A folder earns its place by helping you find a group of related files. Usually
 keep single-file helpers directly with their owner or in an existing related
@@ -271,8 +280,8 @@ AI difficulty is a local resource preset, persisted as `aiDifficulty: easy | exp
 The game creates its decision engine in `scenes/match`, without an Electron AI bridge.
 The desktop bridge still owns preferences, saved decks, match logs and other native
 services. Legacy preferences migrate `hardware` to Easy and `hardware-v2`/`api` to
-Expert. Provider configuration and credential loading are retired; existing user key
-files are not deleted. The shared decision types and historical match-log readers
+Expert. Provider configuration and credential loading are retired; obsolete repository key
+files have been removed. Preference migration does not delete external user files. The shared decision types and historical match-log readers
 remain available to local AI and diagnostics.
 
 New match recordings contain exactly two files: `match.txt` is the concise gameplay

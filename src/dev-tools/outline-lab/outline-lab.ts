@@ -755,7 +755,8 @@ export class OutlineLab extends Container {
           this.board?.setWindfuryPreview(true, this.windfuryTuning)
           this.markDirty()
           this.refreshColorControls()
-        }
+        },
+        () => this.board?.playWindfuryBurst()
       )
       return
     }
@@ -1087,7 +1088,7 @@ export class OutlineLab extends Container {
 
     const savedRevision = this.revision
     const snapshot: OutlineTuningConfig = {
-      version: 14,
+      version: 15,
       windfury: { ...this.windfuryTuning },
       godRaysDust: { ...this.godRaysDustTuning },
       godRays: structuredClone(this.godRaysTuning),

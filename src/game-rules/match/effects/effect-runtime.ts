@@ -921,7 +921,8 @@ export class EffectRuntime {
     actionPath: string,
     data?: Readonly<Record<string, unknown>>,
     cardMovement?: MinionCardMovement,
-    cardReveal?: CardReveal
+    cardReveal?: CardReveal,
+    deckToSecret?: EffectDomainEvent['deckToSecret']
   ): void {
     if (this.deriving) return
     this.events.push({
@@ -944,7 +945,8 @@ export class EffectRuntime {
         ? { vfxGroupId: this.activeVfxGroup.id }
         : {}),
       ...(cardMovement ? { cardMovement: clonePlain(cardMovement) } : {}),
-      ...(cardReveal ? { cardReveal: clonePlain(cardReveal) } : {})
+      ...(cardReveal ? { cardReveal: clonePlain(cardReveal) } : {}),
+      ...(deckToSecret ? { deckToSecret: clonePlain(deckToSecret) } : {})
     })
     const history = actionPath.endsWith('.fatigue')
       ? null
@@ -5231,7 +5233,12 @@ export class EffectRuntime {
     if (!deferSummonTriggers) {
       this.events.push({
         type: 'minion-summoned',
-        ...(sourceZone ? { sourceZone } : {}),
+        ...(sourceZone
+          ? {
+              sourceZone,
+              sourceParticipantId: cardState?.controllerId ?? participantId
+            }
+          : {}),
         ...(frame.summonGroupId ? { summonGroupId: frame.summonGroupId } : {}),
         participantId,
         minion: clonePlain(minion) as BoardMinion,
@@ -5505,6 +5512,8 @@ export class EffectRuntime {
       card.knownTo = this.players().map((entry) => entry.participantId)
     }
     if (card.cardId === 'journey_to_ungoro_tortollan_ninja') {
+      // Its draw is presented before the automatic summon; it has already left the deck.
+      card.zone = 'revealed'
       const drawnRef: EntityRef = {
         instanceId: card.instanceId,
         cardId: card.cardId,
@@ -6447,7 +6456,10 @@ export class EffectRuntime {
         cards: [returned],
         replacedDeckCard: {
           participantId: deckPlayer.participantId,
-          instanceId: card.instanceId
+          instanceId: card.instanceId,
+          boardParticipantId: boardPlayer.participantId,
+          minion: clonePlain(incoming) as BoardMinion,
+          position: boardIndex
         }
       }
     )
@@ -7432,6 +7444,8 @@ export class EffectRuntime {
           burned
             ? {
                 type: 'card-burned',
+                origin: 'deck',
+                sourceParticipantId: opponentId,
                 participantId: frame.controllerId,
                 card: clonePlain(moved) as OpeningCard
               }
@@ -9769,9 +9783,10 @@ export class EffectRuntime {
             if (
               definition.type === 'Spell' &&
               definition.keywords.includes('secret') &&
-              (targetPlayer.secrets ?? []).some(
-                (secret) => secret.cardId === definition.id
-              )
+              ((targetPlayer.secrets?.length ?? 0) >= 5 ||
+                (targetPlayer.secrets ?? []).some(
+                  (secret) => secret.cardId === definition.id
+                ))
             )
               continue
             const card = this.removeCard(source)
@@ -9801,6 +9816,21 @@ export class EffectRuntime {
                 revealed: false
               }
               this.appendSecret(targetPlayer, secret)
+              if (source.zone === 'deck')
+                this.emit(
+                  frame,
+                  'put-into-play',
+                  path,
+                  undefined,
+                  undefined,
+                  undefined,
+                  {
+                    sourceParticipantId: source.participantId,
+                    participantId,
+                    card: clonePlain(card) as OpeningCard,
+                    countAfter: targetPlayer.secrets?.length ?? 0
+                  }
+                )
               const secretRef: EntityRef = {
                 instanceId: secret.instanceId,
                 kind: 'secret',

@@ -1,3 +1,17 @@
+vi.mock('pixi.js', async (original) => {
+  const actual = await original<typeof import('pixi.js')>()
+  return {
+    ...actual,
+    Shader: {
+      from: (options: { resources: Record<string, unknown> }) =>
+        new actual.Shader({
+          resources: options.resources,
+          glProgram: undefined as unknown as InstanceType<typeof actual.GlProgram>
+        })
+    }
+  }
+})
+import { gsap } from '../../../visual-components/animation/animations'
 import { prewarmMinionStatus } from '../loading/minion-status-warmup'
 import {
   matchVisualTextures,
@@ -429,12 +443,21 @@ describe('MinionView dormant overlay', () => {
       const assets = {
         boardBase: Texture.EMPTY,
         board1: Texture.WHITE,
-        minionDormant: dormantTexture
+        minionDormant: dormantTexture,
+        weaponCover: Texture.EMPTY,
+        premiumWeaponCover: Texture.WHITE
       }
       const warmed = matchVisualTextures(assets, Texture.WHITE)
-      expect(warmed).toEqual([Texture.WHITE, dormantTexture])
+      expect(warmed).toEqual([
+        Texture.WHITE,
+        dormantTexture,
+        Texture.EMPTY,
+        Texture.WHITE
+      ])
       await resources.prepare(renderer, [], warmed, async () => undefined)
       expect(initSource).toHaveBeenCalledWith(dormantTexture.source)
+      expect(initSource).toHaveBeenCalledWith(Texture.EMPTY.source)
+      expect(initSource).toHaveBeenCalledWith(Texture.WHITE.source)
       expect(dormantTexture.source.autoGarbageCollect).toBe(false)
       resources.dispose()
       expect(dormantTexture.source.autoGarbageCollect).toBe(automatic)
@@ -555,6 +578,8 @@ describe('MinionView outline layering', () => {
     const weaponTextures: WeaponViewTextures = {
       frame: Texture.EMPTY,
       premiumFrame: Texture.WHITE,
+      cover: Texture.EMPTY,
+      premiumCover: Texture.WHITE,
       trigger: Texture.EMPTY,
       deathrattle: Texture.EMPTY,
       poisonous: Texture.EMPTY,
@@ -578,13 +603,45 @@ describe('MinionView outline layering', () => {
     ])
     const frames = () =>
       views.map((view) => (view.getChildByLabel('weapon.frame') as Sprite).texture)
+    const covers = views.map((view) => view.getChildByLabel('weapon.cover') as Sprite)
     try {
+      for (const [index, view] of views.entries()) {
+        const cover = covers[index]
+        expect(cover.visible).toBe(false)
+        expect(cover.scale.x).toBe(1)
+        expect(cover.scale.y).toBe(1)
+        expect(cover.position).toMatchObject({ x: 120, y: 88 })
+        expect(view.getChildIndex(cover)).toBeGreaterThan(
+          view.getChildIndex(view.getChildByLabel('weapon.artwork')!)
+        )
+        expect(view.getChildIndex(cover)).toBeLessThan(
+          view.getChildIndex(view.getChildByLabel('weapon.frame')!)
+        )
+        view.setActive(false)
+        expect(cover.visible).toBe(true)
+      }
       setPremiumMode('remote')
       expect(frames()).toEqual([Texture.EMPTY, Texture.WHITE])
+      expect(covers.map((cover) => cover.texture)).toEqual([
+        Texture.EMPTY,
+        Texture.WHITE
+      ])
       setPremiumMode('local')
       expect(frames()).toEqual([Texture.WHITE, Texture.EMPTY])
+      expect(covers.map((cover) => cover.texture)).toEqual([
+        Texture.WHITE,
+        Texture.EMPTY
+      ])
       setPremiumMode('unlocked')
       expect(frames()).toEqual([Texture.EMPTY, Texture.EMPTY])
+      expect(covers.map((cover) => cover.texture)).toEqual([
+        Texture.EMPTY,
+        Texture.EMPTY
+      ])
+      for (const [index, view] of views.entries()) {
+        view.setActive(true)
+        expect(covers[index].visible).toBe(false)
+      }
     } finally {
       views.forEach((view) => view.destroy({ children: true }))
       setPremiumMode('unlocked')
@@ -638,6 +695,8 @@ describe('MinionView outline layering', () => {
     const weaponTextures: WeaponViewTextures = {
       frame: Texture.EMPTY,
       premiumFrame: Texture.WHITE,
+      cover: Texture.EMPTY,
+      premiumCover: Texture.WHITE,
       trigger: Texture.EMPTY,
       deathrattle: Texture.EMPTY,
       poisonous: Texture.EMPTY,
@@ -805,6 +864,7 @@ describe('MinionView outline layering', () => {
       immune: false,
       poisonous: false
     })
+    gsap.globalTimeline.time(gsap.globalTimeline.time() + 1.1)
     expect(sprites.every((sprite) => !sprite.visible)).toBe(true)
     view.destroy({ children: true })
   })
@@ -962,7 +1022,7 @@ describe('Windfury wind lifecycle', () => {
       const loop = animate.mock.results[loopIndex].value
       loop.progress(0.35)
       const phase = loop.progress()
-      view.setWindfuryTuning({ ...WINDFURY_DEFAULTS, speed: 0, thickness: 2 })
+      view.setWindfuryTuning({ ...WINDFURY_DEFAULTS, speed: 0, intensity: 2 })
       expect(loop.timeScale()).toBe(0)
       expect(loop.progress()).toBe(phase)
       view.setWindfuryTuning({ ...WINDFURY_DEFAULTS, speed: 2 })
@@ -973,6 +1033,7 @@ describe('Windfury wind lifecycle', () => {
       view.setCanAttack(false)
       expect(rear.visible && front.visible).toBe(true)
       view.setAbilityEffects({ ...tauntMinion, windfury: false })
+      gsap.globalTimeline.time(gsap.globalTimeline.time() + 1.1)
       expect(rear.visible || front.visible).toBe(false)
       expect(loop.parent).toBeNull()
       view.setAbilityEffects({ ...tauntMinion, windfury: true })

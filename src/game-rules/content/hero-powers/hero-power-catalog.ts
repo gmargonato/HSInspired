@@ -140,7 +140,7 @@ const HERO_POWER_DATA = [
     'Dinomancy',
     2,
     'Give a Beast +3/+3.',
-    'hero-power-hunter',
+    'hero-power-dinomancy',
     'friendly-beast',
     { kind: 'buff-friendly-beast', attack: 3, health: 3 }
   ],
@@ -582,7 +582,7 @@ const HERO_POWER_DATA = [
     'Way of the Shell',
     1,
     "Draw 2 cards that didn't start in your deck.",
-    'hero-power-placeholder',
+    'hero-power-way-of-the-shell',
     'none',
     { kind: 'draw-generated-cards', count: 2 }
   ]

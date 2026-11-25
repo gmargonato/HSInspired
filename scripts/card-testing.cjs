@@ -367,7 +367,6 @@ function listFiles(directory) {
 function inputFilePaths() {
   const files = [
     ...listFiles(path.join(ROOT, 'src')),
-    ...listFiles(path.join(ROOT, 'config')),
     path.join(ROOT, 'package.json'),
     path.join(ROOT, 'package-lock.json'),
     path.join(ROOT, 'scripts', 'card-testing.cjs')

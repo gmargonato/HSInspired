@@ -72,6 +72,7 @@ interface DeathGhostTemplate {
 }
 
 interface CombatPresentationContext {
+  isCurrentPlayer?(ownerId: string): boolean
   shouldWarnAttack?(attackerId: PlayerId): boolean
   findCharacter(
     ownerId: PlayerId,
@@ -1052,6 +1053,12 @@ export class GameCombatPresentation {
       })
       await completeTimeline(timeline, () => this.notifyHeroAttackReturned(active))
     }
+    attacker.scheduleWindfuryReminder(
+      () =>
+        !!attacker.parent &&
+        !!attacker.ownerId &&
+        this.context.isCurrentPlayer?.(attacker.ownerId) === true
+    )
     active.attackerReturned = true
     if (!attacker.destroyed)
       this.restoreCombatViewAfterCombat(attacker, active.attackerPlacement)

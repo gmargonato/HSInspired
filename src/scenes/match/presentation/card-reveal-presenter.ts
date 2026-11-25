@@ -1,9 +1,20 @@
-import type { Container, Renderer, Sprite, Texture } from 'pixi.js'
+import {
+  Rectangle,
+  type Container,
+  type Renderer,
+  type Sprite,
+  type Texture
+} from 'pixi.js'
 import type { CardReveal, OpeningCard, PlayerId } from '../../../game-rules/match'
 import type { GameCardSlot } from '../hand/game-card-slot'
 import { applyPlacement } from '../../../visual-components/layout'
-import { CardDrawAnimation } from './card-draw-animation'
-import { CARD_DRAW_LAYOUT } from './card-draw-layout'
+import {
+  CardMotionVisual,
+  bodyMotionCorners,
+  deckMotionCorners,
+  deckMotionSlot
+} from './card-motion-visual'
+import { CARD_MOTION_LAYOUT } from './card-motion-layout'
 import { CARD_REVEAL_LAYOUT } from './card-reveal-layout'
 import { completeTimeline } from './game-presentation-animation'
 
@@ -13,7 +24,7 @@ interface RevealHost {
   readonly back: Texture
   readonly localId: PlayerId
   readonly slots: Set<GameCardSlot>
-  readonly animations: Set<CardDrawAnimation>
+  readonly animations: Set<CardMotionVisual>
   destroyed(): boolean
   createSlot(card: OpeningCard): Promise<GameCardSlot>
   deck(participantId: PlayerId): Sprite | undefined
@@ -28,7 +39,8 @@ export async function presentCardReveal(
 ): Promise<void> {
   if (!reveal.cards.length || host.destroyed()) return
   const slots: GameCardSlot[] = []
-  const flights: CardDrawAnimation[] = []
+  const flights: CardMotionVisual[] = []
+  const returns: Array<() => Promise<void>> = []
   let stopped = false
   let timeline: gsap.core.Timeline | undefined
   let cancel!: () => void
@@ -55,10 +67,9 @@ export async function presentCardReveal(
     const prepared = await Promise.race([preparing, cancelled])
     if (!prepared || host.destroyed()) return
     for (const result of prepared) if (result.status === 'rejected') throw result.reason
-    const peak =
-      CARD_DRAW_LAYOUT.localReveal.reveal.at(-1)!.at /
-      CARD_DRAW_LAYOUT.localReveal.duration
-    const clock = { progress: 0, pulse: 1 }
+    const showDuration =
+      CARD_MOTION_LAYOUT.revealOnly.show + CARD_MOTION_LAYOUT.revealOnly.flip
+    const clock = { seconds: 0, pulse: 1 }
     const updates: Array<() => void> = []
     timeline = host.timeline()
     for (const [index, entry] of reveal.cards.entries()) {
@@ -76,24 +87,55 @@ export async function presentCardReveal(
       host.layer.addChild(slot)
       const deck = host.deck(entry.participantId)
       if (entry.origin === 'deck' && deck) {
-        const flight = new CardDrawAnimation(
+        const bounds = slot.card.getLocalBounds(),
+          frame = new Rectangle(bounds.x, bounds.y, bounds.width, bounds.height)
+        const flight = new CardMotionVisual(
           host.renderer,
           host.layer,
-          deck,
           slot,
           host.back,
-          slot,
-          local ? 'local-reveal' : 'remote-reveal',
-          { ...layout.position, scale: layout.scale!.x }
+          'reveal-only',
+          bodyMotionCorners(host.layer, slot.card, frame),
+          {
+            start: deckMotionCorners(host.layer, deck),
+            slot: deckMotionSlot(host.layer, deck),
+            remote: !local
+          }
         )
         flights.push(flight)
         host.animations.add(flight)
         updates.push(() =>
           flight.update(
-            clock.progress,
+            clock.seconds,
             reveal.comparison?.winnerId === entry.participantId ? clock.pulse : 1
           )
         )
+        returns.push(async () => {
+          if (host.destroyed()) return
+          flight.dispose()
+          host.animations.delete(flight)
+          const returning = new CardMotionVisual(
+            host.renderer,
+            host.layer,
+            slot,
+            host.back,
+            'reveal-return',
+            deckMotionCorners(host.layer, deck),
+            { remote: !local, slot: deckMotionSlot(host.layer, deck) }
+          )
+          flights.push(returning)
+          host.animations.add(returning)
+          const clock = { seconds: 0 }
+          await completeTimeline(
+            host.timeline().to(clock, {
+              seconds: returning.playback.duration,
+              duration: returning.playback.duration,
+              ease: 'none',
+              onUpdate: () => returning.update(clock.seconds)
+            })
+          )
+          slot.alpha = 0
+        })
       } else {
         const origin = host.handOrigin(entry.participantId, entry.card.instanceId)
         slot.position.set(origin.x, origin.y)
@@ -102,10 +144,20 @@ export async function presentCardReveal(
           {
             x: layout.position.x,
             y: layout.position.y + (layout.size.height * layout.scale!.y) / 2,
-            duration: CARD_DRAW_LAYOUT.localReveal.normalAscentDuration,
+            duration: showDuration,
             ease: 'power2.out'
           },
           0
+        )
+        returns.push(() =>
+          completeTimeline(
+            host.timeline().to(slot, {
+              x: origin.x,
+              y: origin.y,
+              duration: CARD_MOTION_LAYOUT.revealOnly.hide,
+              ease: 'power2.inOut'
+            })
+          )
         )
       }
     }
@@ -113,8 +165,8 @@ export async function presentCardReveal(
     timeline.to(
       clock,
       {
-        progress: peak,
-        duration: CARD_DRAW_LAYOUT.localReveal.normalAscentDuration,
+        seconds: showDuration,
+        duration: showDuration,
         ease: 'none',
         onUpdate: update
       },
@@ -134,8 +186,10 @@ export async function presentCardReveal(
         onUpdate: update
       })
     }
-    timeline.to({}, { duration: CARD_REVEAL_LAYOUT.hold })
-    await completeTimeline(timeline)
+    timeline.to({}, { duration: CARD_MOTION_LAYOUT.revealOnly.hold })
+    await Promise.race([completeTimeline(timeline), cancelled])
+    if (!host.destroyed())
+      await Promise.race([Promise.all(returns.map((fly) => fly())), cancelled])
   } finally {
     stopped = true
     host.layer.off('destroyed', cancel)

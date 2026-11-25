@@ -108,6 +108,10 @@ export class GameHandDrag {
     return this.dragPerspective?.captureCorners()
   }
 
+  captureFlightPose(layer: Container) {
+    return this.dragPerspective?.captureFlightPose(layer)
+  }
+
   isAwaitingPresentation(slot: GameCardSlot): boolean {
     return this.queuedPerspectives.has(slot)
   }
@@ -564,6 +568,7 @@ export class GameHandDrag {
   }
 
   releaseForTargeting(entry: HandEntry): void {
+    this.stopHandMotion(entry.slot)
     this.releasePerspective()
     this.draggingIndex = null
     this.dragPointer = null
@@ -596,7 +601,18 @@ export class GameHandDrag {
     this.context.clearBoardPreview()
   }
 
+  private stopHandMotion(slot: GameCardSlot): void {
+    // A release may arrive before the pickup tween's first render. Hand-owned
+    // transforms must stop before the entrance animation takes ownership.
+    this.animations.kill(slot)
+    this.animations.kill(slot.scale)
+    this.animations.kill(slot.skew)
+  }
+
   acceptCard(onDetach?: () => void): void {
+    const entry =
+      this.draggingIndex === null ? undefined : this.context.entryAt(this.draggingIndex)
+    if (entry) this.stopHandMotion(entry.slot)
     this.dragReturning = true
     this.context.beginReflow()
     this.dragPointer = null

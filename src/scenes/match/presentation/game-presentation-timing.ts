@@ -8,7 +8,6 @@ export const OPENING_TIMING = {
   mulliganFade: 0.3,
   cardDeal: 0.75,
   cardStagger: 0.18,
-  localRevealStagger: 0.5,
   playerTwoAnnouncementHold: 0.9,
   playerTwoAnnouncementFade: 0.25,
   playerTwoFourthCard: 0.65,
@@ -43,8 +42,6 @@ export const SECRET_REVEAL_TIMING = {
 
 /** Resolution pacing shared by every trigger/death/outcome presentation. */
 export const RESOLUTION_TIMING = {
-  /** Match the remote deck draw's travel time, without a reveal hold. */
-  cardDraw: OPENING_TIMING.cardDeal,
   /** Full marker pulse for each concrete trigger frame. */
   triggerPulse: 0.6,
   /** Small handoff while a captured death leaves the board. */

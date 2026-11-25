@@ -133,6 +133,7 @@ export class HeroPowerAnimFixtures extends Container {
     return HeroView.create(
       { label: 'hero-power-anim.hero', ...LAYOUT.hero, frozen: false, immune: false },
       {
+        windfury: this.assets,
         frame: this.heroes[HERO_CATALOG.require(id).presentationAssetKey],
         attack: this.assets.minionAttack,
         health: this.assets.minionHealth,

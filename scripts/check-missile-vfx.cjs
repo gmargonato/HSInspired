@@ -64,7 +64,10 @@ async function main() {
   )
   const { parseVfxTemplateLibrary: parse } = contract
   const raw = JSON.parse(
-    fs.readFileSync(path.join(root, 'config/vfx-templates.json'), 'utf8')
+    fs.readFileSync(
+      path.join(root, 'src/visual-components/effects/vfx-templates.json'),
+      'utf8'
+    )
   )
   let checks = 0
   for (const template of parse(raw).templates) {

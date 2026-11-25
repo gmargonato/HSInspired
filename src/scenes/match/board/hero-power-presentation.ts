@@ -26,6 +26,9 @@ function createCircularArtwork(
 
   const image = new Sprite(texture)
   applyAnchoredPlacement(image, artworkPlacement)
+  // Fit native 256px and 512px portraits to the same authored display footprint.
+  image.width = artworkPlacement.size.width * (artworkPlacement.scale?.x ?? 1)
+  image.height = artworkPlacement.size.height * (artworkPlacement.scale?.y ?? 1)
   image.label = `${label}.image`
 
   const mask = new Graphics()

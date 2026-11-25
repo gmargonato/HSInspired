@@ -47,6 +47,7 @@ import {
   EXPERT_ORDERING_MAX_DISPATCHES
 } from './expert-action-ordering'
 import { reviewCommittedActionOrder } from './expert-committed-order'
+import { reviewAttackOpportunity } from './expert-attack-opportunity'
 import { reviewEquivalentTrade } from './expert-equivalent-trade'
 import { reviewCompletedAttackOrder } from './expert-completed-attack-order'
 import { reviewRedundantHealingPrefix } from './expert-redundant-healing'
@@ -1290,6 +1291,8 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
     response: AiDecisionResponse,
     resourceReviewCheckpoint?: OpeningMatchCheckpoint
   ): AiDecisionResponse {
+    const opportunity = this.guardAttackOpportunity(request, response)
+    if (opportunity !== response) return opportunity
     response = this.guardEquivalentTrade(request, response)
     response = this.guardRedundantResourcePrefix(
       request,
@@ -1422,6 +1425,116 @@ export class ExpertAiDecisionApi implements AiDecisionApi {
           fromActionId: selected.id,
           toActionId: next.id
         }
+      }
+    }
+  }
+
+  private guardAttackOpportunity(
+    request: AiDecisionRequest,
+    response: AiDecisionResponse
+  ): AiDecisionResponse {
+    if (
+      request.phase === 'mulligan' ||
+      ['verified-win', 'tactical-safety'].includes(
+        String(response.usage?.decisionPriority)
+      ) ||
+      this.session.getState().revision !== request.expectedRevision
+    )
+      return response
+    const remaining = this.remainingBudget(request)
+    if (!Number.isFinite(remaining) || remaining <= 0) return response
+    const selectedId =
+      'plan' in response.choice
+        ? response.choice.plan.firstActionId
+        : 'actionId' in response.choice
+          ? response.choice.actionId
+          : null
+    const legal = this.currentLegalActions().filter((action) =>
+      request.actionIds.includes(action.id)
+    )
+    const selected = legal.find((action) => action.id === selectedId)
+    if (!selected) return response
+    const started = this.now()
+    const review = reviewAttackOpportunity(
+      this.session.match.getCheckpoint(),
+      this.perspectiveParticipantId,
+      selected.command,
+      () => this.now() >= started + remaining,
+      this.now
+    )
+    const elapsed = Math.max(0, this.now() - started)
+    this.searchUsedMs += elapsed
+    if (!review.commands?.length) return response
+    const replacement = legal.find(
+      (action) =>
+        canonicalCommandKey(action.command) ===
+        canonicalCommandKey(review.commands![0]!)
+    )
+    if (!replacement) return response
+    const intents = review.commands.map((command) =>
+      aiActionIntent(command, this.opponentParticipantId())
+    )
+    const previous = response.usage?.plannedActionIntents
+    if (
+      (review.reason === 'attack-before-friendly-return' ||
+        review.reason === 'attack-before-dagger-refresh') &&
+      Array.isArray(previous) &&
+      previous.length > 0 &&
+      previous.every(isAiActionIntent) &&
+      sameAiIntent(
+        previous[0]!,
+        aiActionIntent(selected.command, this.opponentParticipantId())
+      )
+    ) {
+      intents.push(...previous.slice(1))
+    }
+    const reason =
+      review.reason === 'complete-plain-taunt-clear'
+        ? 'Complete the checked Taunt clear and use the attacks it unlocks.'
+        : review.reason === 'attack-before-friendly-return'
+          ? 'Use ready attacks before returning their minions to hand.'
+          : review.reason === 'attack-before-dagger-refresh'
+            ? 'Use the existing dagger before refreshing it.'
+            : 'Use an otherwise unused safe attack before passing.'
+    this.continuation = null
+    this.planCommit = null
+    const plan = 'plan' in response.choice ? response.choice.plan : null
+    return {
+      ...response,
+      reason,
+      durationMs: response.durationMs + elapsed,
+      choice: plan
+        ? {
+            plan: {
+              ...plan,
+              objective: reason,
+              firstActionId: replacement.id,
+              candidates: plan.candidates.map((candidate, index) =>
+                index === plan.preferred
+                  ? {
+                      ...candidate,
+                      sequence: intents.map((intent) => JSON.stringify(intent))
+                    }
+                  : candidate
+              )
+            }
+          }
+        : {
+            actionId: replacement.id,
+            intent: intents[0]!,
+            expectedResult: reason,
+            planUpdate: null
+          },
+      usage: {
+        ...response.usage,
+        decisionPriority: 'tactical-preference',
+        tacticalOverride: true,
+        actionOutcomeReason: review.reason,
+        attackOpportunityReview: { ...review.stats },
+        plannedActionIntents: intents.map((intent) => ({
+          ...intent,
+          targets: [...intent.targets]
+        }))
       }
     }
   }

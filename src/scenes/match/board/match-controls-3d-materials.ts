@@ -17,6 +17,8 @@ export function configureGoldReflection(
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, {
       goldEnabled: enabled,
+      goldFrameSaturation: { value: layout.lighting.heroPower.goldFrameSaturation },
+      goldFrameBrightness: { value: layout.lighting.heroPower.goldFrameBrightness },
       goldTime: time,
       goldReflection: { value: reflection },
       goldMask: { value: mask },
@@ -30,13 +32,26 @@ export function configureGoldReflection(
     })
     shader.fragmentShader =
       `
-      uniform float goldEnabled, goldTime, goldIntensity, goldRotation;
+      uniform float goldEnabled, goldTime, goldIntensity, goldRotation, goldFrameSaturation;
+      uniform float goldFrameBrightness;
       uniform sampler2D goldReflection, goldMask;
       uniform vec3 goldColor;
     ` +
-      shader.fragmentShader.replace(
-        '#include <opaque_fragment>',
-        `
+      shader.fragmentShader
+        .replace(
+          '#include <map_fragment>',
+          `
+      #include <map_fragment>
+      // Enrich only the premium plate texture, before lighting and reflection.
+      float frameGray = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+      diffuseColor.rgb = mix(vec3(frameGray), diffuseColor.rgb,
+        mix(1.0, goldFrameSaturation, goldEnabled));
+      diffuseColor.rgb *= mix(1.0, goldFrameBrightness, goldEnabled);
+    `
+        )
+        .replace(
+          '#include <opaque_fragment>',
+          `
       // View-space reflection follows the original mesh normals during its flip.
       vec3 reflected = reflect(-normalize(vViewPosition), normal);
       vec2 reflectionUV = reflected.xy * 0.5;
@@ -46,9 +61,9 @@ export function configureGoldReflection(
         * texture2D(goldReflection, reflectionUV).rgb * texture2D(goldMask, vMapUv).rgb;
       #include <opaque_fragment>
     `
-      )
+        )
   }
-  material.customProgramCacheKey = () => 'match-gold-reflection-v1'
+  material.customProgramCacheKey = () => 'match-gold-reflection-v3'
 }
 
 /** The original mana texture's alpha masks its scrolling inner light. */

@@ -183,6 +183,8 @@ async function run() {
     {
       frame: weaponFrame,
       premiumFrame: weaponFrame,
+      cover: Texture.EMPTY,
+      premiumCover: Texture.EMPTY,
       trigger: Texture.EMPTY,
       deathrattle: Texture.EMPTY,
       poisonous: Texture.EMPTY,

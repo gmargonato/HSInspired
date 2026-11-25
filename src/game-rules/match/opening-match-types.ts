@@ -256,6 +256,10 @@ export interface MinionCardMovement {
   readonly replacedDeckCard?: {
     readonly participantId: PlayerId
     readonly instanceId: string
+    /** Action-time destination; later effects may remove or transform this minion. */
+    readonly boardParticipantId: PlayerId
+    readonly minion: BoardMinion
+    readonly position: number
   }
   readonly handIndex?: number
 }
@@ -300,6 +304,13 @@ export interface EffectDomainEvent {
   readonly actionPath: string
   readonly cardMovement?: MinionCardMovement
   readonly deckAddition?: DeckAddition
+  /** A private Secret leaves a deck and becomes active before its triggers run. */
+  readonly deckToSecret?: {
+    readonly sourceParticipantId: PlayerId
+    readonly participantId: PlayerId
+    readonly card: OpeningCard
+    readonly countAfter: number
+  }
   readonly cardReveal?: CardReveal
   readonly eventType?: CardEventType
   readonly data?: Readonly<Record<string, unknown>>
@@ -379,6 +390,8 @@ export interface MinionSummonedEvent {
   readonly type: 'minion-summoned'
   /** Original card zone for an existing card moved into play. */
   readonly sourceZone?: RuntimeZone
+  /** Source controller can differ from the destination when an effect recruits across sides. */
+  readonly sourceParticipantId?: PlayerId
   readonly participantId: PlayerId
   readonly minion: BoardMinion
   readonly position: number
@@ -1080,6 +1093,8 @@ export interface CardBurnedEvent {
   readonly type: 'card-burned'
   /** Distinguishes overdraw from cards explicitly destroyed in the deck. */
   readonly origin?: 'deck' | 'deck-destruction'
+  /** A transferred card can burn after leaving another player's deck. */
+  readonly sourceParticipantId?: PlayerId
   readonly participantId: PlayerId
   readonly card: OpeningCard
 }
@@ -1613,7 +1628,10 @@ export type PublicizeOpeningMatchEvent<E> = E extends
   RandomSpellPresentationEvent | SecretPresentationEvent
   ? never
   : E extends EffectDomainEvent
-    ? Omit<E, 'sourceCardId' | 'data' | 'cardMovement' | 'deckAddition'> & {
+    ? Omit<
+        E,
+        'sourceCardId' | 'data' | 'cardMovement' | 'deckAddition' | 'deckToSecret'
+      > & {
         readonly sourceCardId: CardId | null
         readonly data?: Readonly<Record<string, unknown>>
         readonly cardMovement?: Omit<MinionCardMovement, 'cards'> & {
@@ -1621,6 +1639,12 @@ export type PublicizeOpeningMatchEvent<E> = E extends
         }
         readonly deckAddition?: Omit<DeckAddition, 'cards'> & {
           readonly cards: readonly { readonly card: OpeningPublicCard }[]
+        }
+        readonly deckToSecret?: Omit<
+          NonNullable<EffectDomainEvent['deckToSecret']>,
+          'card'
+        > & {
+          readonly card: OpeningPublicCard
         }
       }
     : E extends MulliganResolvedEvent

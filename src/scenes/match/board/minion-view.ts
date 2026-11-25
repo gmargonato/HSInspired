@@ -1,3 +1,4 @@
+import type { WindfuryTextures } from '../../../visual-components/effects/windfury-material'
 import { MinionStatusCurtainEffect } from './minion-status-curtain-effect'
 import { MinionAuraEffect } from './minion-aura-effect'
 import { QUEST_BADGE_TIMING } from '../presentation/game-presentation-timing'
@@ -63,6 +64,7 @@ export interface MinionViewModel {
 }
 
 export interface MinionViewTextures {
+  readonly windfury?: WindfuryTextures
   readonly dormant?: Texture
   readonly curtainSpark: Texture
   readonly curtainMote: Texture
@@ -248,7 +250,11 @@ export class MinionView extends Container {
     this.updateAura()
     this.addChild(this.aura.layer)
 
-    this.windfury = new WindfuryEffect(MINION_LAYOUT.windfury, 'minion.windfury')
+    this.windfury = new WindfuryEffect(
+      MINION_LAYOUT.windfury,
+      'minion.windfury',
+      textures.windfury
+    )
     this.windfury.setEnabled(model.windfury)
     this.addChild(this.windfury.rear)
 
@@ -804,6 +810,16 @@ export class MinionView extends Container {
 
   setWindfury(enabled: boolean): void {
     this.windfury.setEnabled(enabled)
+  }
+
+  playWindfuryBurst(): void {
+    this.windfury.playBurst()
+  }
+
+  scheduleWindfuryReminder(eligible: () => boolean): void {
+    this.windfury.scheduleReminder(
+      () => !this.destroyed && this.canAttackEnabled && eligible()
+    )
   }
 
   setWindfuryTuning(tuning: WindfuryTuning): void {

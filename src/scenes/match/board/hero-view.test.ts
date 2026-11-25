@@ -1,4 +1,18 @@
-import { Text, Texture } from 'pixi.js'
+vi.mock('pixi.js', async (original) => {
+  const actual = await original<typeof import('pixi.js')>()
+  return {
+    ...actual,
+    Shader: {
+      from: (options: { resources: Record<string, unknown> }) =>
+        new actual.Shader({
+          resources: options.resources,
+          glProgram: undefined as unknown as InstanceType<typeof actual.GlProgram>
+        })
+    }
+  }
+})
+import { gsap } from '../../../visual-components/animation/animations'
+import { Sprite, Text, Texture } from 'pixi.js'
 import {
   outlinedTextStyle,
   type TextOutline
@@ -6,11 +20,13 @@ import {
 import { HeroPortrait } from '../../../visual-components/hero-portrait'
 import { hasPremiumHeroPortrait } from '../../../visual-components/hero-portrait-appearance'
 import { describe, expect, it, vi } from 'vitest'
-import { gsap } from '../../../visual-components/animation/animations'
 
 vi.mock('../../../visual-components/effects/animated-outline', () => ({
   AnimatedOutline: class {
-    setEnabled(): void {}
+    constructor(private readonly target: import('pixi.js').Container) {}
+    setEnabled(enabled: boolean): void {
+      this.target.visible = enabled
+    }
     dispose(): void {}
   }
 }))
@@ -18,6 +34,64 @@ vi.mock('../../../visual-components/effects/animated-outline', () => ({
 import { HERO_HEALTH_COLORS, HeroView } from './hero-view'
 
 describe('hero identity presentation', () => {
+  it.each(['local', 'remote'])(
+    'keeps %s hero hover independent of targeting and other white cues',
+    (side) => {
+      const view = HeroView.create(
+        {
+          label: `game.hero.${side}`,
+          attack: 0,
+          health: 30,
+          maxHealth: 30,
+          armor: 0,
+          frozen: false,
+          immune: false
+        },
+        {
+          frame: Texture.EMPTY,
+          attack: Texture.EMPTY,
+          health: Texture.EMPTY,
+          armor: Texture.EMPTY,
+          frozen: Texture.EMPTY,
+          immune: Texture.EMPTY
+        }
+      )
+      try {
+        const white = view.getChildByLabel('hero.attention-outline-proxy') as Sprite
+        view.setHoverable(true)
+        view.setTargetable(false)
+        expect(view.eventMode).toBe('static')
+        expect(view.cursor).toBe('default')
+        expect(view.isTargetable()).toBe(false)
+        expect(view.isCanAttack()).toBe(false)
+        expect(white.visible).toBe(false)
+        view.setHoverAura(true)
+        expect(white.visible).toBe(true)
+        view.setAiAttention(true)
+        view.setHoverAura(false)
+        expect(white.visible).toBe(true)
+        view.setAttackWarning(true)
+        view.setAiAttention(false)
+        expect(white.visible).toBe(true)
+        view.setHoverAura(true)
+        view.setAttackWarning(false)
+        expect(white.visible).toBe(true)
+        view.setFrame(Texture.WHITE)
+        expect(white.texture).toBe(Texture.WHITE)
+        expect(white.visible).toBe(true)
+        view.setHoverAura(false)
+        expect(white.visible).toBe(false)
+        view.setTargetable(true)
+        view.setHoverable(false)
+        expect(view.eventMode).toBe('static')
+        expect(view.cursor).toBe('pointer')
+        view.setTargetable(false)
+        expect(view.eventMode).toBe('none')
+      } finally {
+        view.destroy({ children: true })
+      }
+    }
+  )
   it('keeps armor and health outlines proportional through updates and repeated pulses', () => {
     const view = HeroView.create(
       {
@@ -214,6 +288,7 @@ describe('hero Windfury wind', () => {
       expect(front.parent).toBe(view)
       expect(rear.parent).toBe(view)
       view.setWindfury(false)
+      gsap.globalTimeline.time(gsap.globalTimeline.time() + 1.1)
       expect(front.visible || rear.visible).toBe(false)
       view.setWindfury(true)
       expect(front.visible && rear.visible).toBe(true)

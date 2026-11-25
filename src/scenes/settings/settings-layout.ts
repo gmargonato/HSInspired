@@ -10,27 +10,27 @@ export const SETTINGS_LAYOUT = {
   name: 'Settings overlay',
   boardCorners: {
     title: placement(
-      { x: 781.5, y: 660 },
+      { x: 1040, y: 730 },
       { width: 344, height: 54 },
       { anchor: TOP_LEFT }
     ),
     field: placement(
-      { x: 970, y: 745 },
+      { x: 1212, y: 815 },
       { width: 377, height: 80 },
-      { anchor: CENTER }
+      { anchor: CENTER, scale: 344 / 377 }
     ),
     value: placement(
-      { x: 928, y: 745 },
+      { x: 1170, y: 815 },
       { width: 208, height: 42 },
       { anchor: CENTER }
     ),
     button: placement(
-      { x: 1068, y: 745 },
+      { x: 1301, y: 815 },
       { width: 69, height: 51 },
-      { anchor: CENTER }
+      { anchor: CENTER, scale: 62 / 69 }
     ),
     options: placement(
-      { x: 850, y: 785 },
+      { x: 1092, y: 851 },
       { width: 240, height: 0 },
       {
         anchor: TOP_LEFT,
@@ -153,6 +153,39 @@ export const SETTINGS_LAYOUT = {
     { anchor: CENTER, scale: 344 / 379, note: 'Handle centered on the recessed track.' }
   ),
   cursorSliderTravel: { minX: 858, maxX: 1062 },
+  matchCursor: {
+    cursorSizeTitle: placement(
+      { x: 530, y: 730 },
+      { width: 344, height: 54 },
+      { anchor: TOP_LEFT }
+    ),
+    cursorSlider: placement(
+      { x: 702, y: 815 },
+      { width: 379, height: 83 },
+      { anchor: CENTER, scale: 344 / 379 }
+    ),
+    cursorSliderHandle: placement(
+      { x: 702, y: 815 },
+      { width: 35, height: 77 },
+      { anchor: CENTER, scale: 344 / 379 }
+    ),
+    cursorSliderTravel: { minX: 600, maxX: 804 }
+  },
+  matchAiDifficulty: placement(
+    { x: 1040, y: 335 },
+    { width: 344, height: 44 },
+    { anchor: TOP_LEFT }
+  ),
+  matchAiCheats: placement(
+    { x: 1040, y: 511 },
+    { width: 344, height: 44 },
+    { anchor: TOP_LEFT }
+  ),
+  match3dElements: placement(
+    { x: 530, y: 483 },
+    { width: 344, height: 44 },
+    { anchor: TOP_LEFT }
+  ),
   enable3dElements: {
     checkbox: placement(
       { x: 530, y: 487 },
@@ -190,18 +223,9 @@ export const SETTINGS_LAYOUT = {
     )
   },
   /** Match-only action frames and buttons, centered inside the game settings panel. */
-  gameDivider: placement(
-    { x: 781.5, y: 625 },
-    { width: 377, height: 1 },
-    {
-      anchor: TOP_LEFT,
-      note: 'Brown separator between match actions and Board settings.'
-    }
-  ),
-  gameDividerColor: 0x28170d,
   gameActions: {
     concedeFrame: placement(
-      { x: 970, y: 395 },
+      { x: 970, y: 365 },
       { width: 398, height: 109 },
       {
         anchor: CENTER,
@@ -209,15 +233,35 @@ export const SETTINGS_LAYOUT = {
       }
     ),
     concedeButton: placement(
-      { x: 970, y: 395 },
+      { x: 970, y: 365 },
       { width: 294, height: 97 },
       {
         anchor: CENTER,
         note: 'Match settings Concede button centered over its base frame.'
       }
     ),
+    optionsFrame: placement(
+      { x: 970, y: 490 },
+      { width: 398, height: 109 },
+      { anchor: CENTER }
+    ),
+    optionsButton: placement(
+      { x: 970, y: 490 },
+      { width: 294, height: 97 },
+      { anchor: CENTER }
+    ),
+    restartFrame: placement(
+      { x: 970, y: 615 },
+      { width: 398, height: 109 },
+      { anchor: CENTER }
+    ),
+    restartButton: placement(
+      { x: 970, y: 615 },
+      { width: 294, height: 97 },
+      { anchor: CENTER }
+    ),
     quitFrame: placement(
-      { x: 970, y: 535 },
+      { x: 970, y: 740 },
       { width: 398, height: 109 },
       {
         anchor: CENTER,
@@ -225,7 +269,7 @@ export const SETTINGS_LAYOUT = {
       }
     ),
     quitButton: placement(
-      { x: 970, y: 535 },
+      { x: 970, y: 740 },
       { width: 294, height: 97 },
       {
         anchor: CENTER,

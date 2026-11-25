@@ -49,7 +49,12 @@ const {
 } = compiled.exports
 
 const library = parse(
-  JSON.parse(fs.readFileSync(path.join(root, 'config/vfx-templates.json'), 'utf8'))
+  JSON.parse(
+    fs.readFileSync(
+      path.join(root, 'src/visual-components/effects/vfx-templates.json'),
+      'utf8'
+    )
+  )
 )
 const baseline = library.templates.find((template) => template.id === 'fire-missile')
 assert.equal(baseline?.family, 'missile')

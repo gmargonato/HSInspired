@@ -66,6 +66,14 @@ export const HERO_LAYOUT = {
       note: 'Effective hero Attack; hidden while zero.'
     }
   ),
+  attackBadgeArtwork: placement(
+    { x: -3, y: -3 },
+    { width: 44, height: 51 },
+    {
+      anchor: CENTER,
+      note: 'Local to the attack group: center the gold circle behind the value while keeping Attack and Health aligned.'
+    }
+  ),
   healthBadge: placement(
     { x: 307, y: 360 },
     { width: 38, height: 54 },

@@ -18,6 +18,11 @@ import { GameBoardSession } from '../game-board-session'
 import { createExpertAttackOrderInspector } from './expert-action-ordering'
 import recorded from './expert-tactical-recorded-states.json'
 import { reviewCommittedActionOrder } from './expert-committed-order'
+import {
+  reviewAttackOpportunity,
+  EXPERT_ATTACK_OPPORTUNITY_MAX_DISPATCHES
+} from './expert-attack-opportunity'
+import { selectExpertTimeoutFallbackAction } from './expert-ai-timeout-fallback'
 import { reviewRedundantAttackPrefix } from './expert-redundant-attack'
 import { reviewRedundantHealingPrefix } from './expert-redundant-healing'
 import { reviewRedundantSpellPrefix } from './expert-redundant-spell'
@@ -79,6 +84,429 @@ function inspect(session: GameBoardSession, command: TurnMatchCommand) {
 }
 
 afterEach(() => vi.restoreAllMocks())
+
+describe('Rogue match attack opportunities', () => {
+  function rogue(options: Partial<AiFixtureOptions> = {}) {
+    return fixture({
+      aiHeroId: 'valeera',
+      opponentHeroId: 'garrosh',
+      aiMana: 0,
+      aiHand: [],
+      aiBoard: [],
+      opponentBoard: [],
+      aiDeck: ['basic_chillwind_yeti'],
+      opponentDeck: ['basic_chillwind_yeti'],
+      ...options
+    })
+  }
+  function legal(session: GameBoardSession) {
+    return enumerateLegalCommands(
+      {
+        getState: session.match.getState,
+        getPlayInput: session.match.getPlayInput!,
+        getLegality: session.match.getLegality!
+      },
+      session.remoteParticipantId
+    )
+  }
+  function review(
+    session: GameBoardSession,
+    selected: TurnMatchCommand = legal(session).find((c) => c.type === 'end-turn')!
+  ) {
+    const before = session.match.getCheckpoint()
+    const result = reviewAttackOpportunity(
+      before,
+      session.remoteParticipantId,
+      selected,
+      () => false,
+      () => 0
+    )
+    expect(session.match.getCheckpoint()).toEqual(before)
+    expect(result.stats.dispatches).toBeLessThanOrEqual(
+      EXPERT_ATTACK_OPPORTUNITY_MAX_DISPATCHES
+    )
+    return result
+  }
+  function play(session: GameBoardSession, cardId: string) {
+    const card = session
+      .getState()
+      .players.find((p) => p.participantId === session.remoteParticipantId)!
+      .hand.find((c) => c.cardId === cardId)!
+    return legal(session).find(
+      (c) => c.type === 'play-card' && c.cardInstanceId === card.instanceId
+    )!
+  }
+  function execute(session: GameBoardSession, commands: readonly TurnMatchCommand[]) {
+    for (const command of commands)
+      expect(session.dispatch(command).accepted).toBe(true)
+  }
+  it('T2 recovers Patches Charge attack from a pass', () => {
+    const session = rogue({
+      aiBoard: [
+        { cardId: 'classic_southsea_deckhand', ready: false },
+        { cardId: 'mean_streets_of_gadgetzan_patches_the_pirate', ready: false }
+      ]
+    })
+    const result = review(session)
+    expect(result.reason).toBe('unused-safe-face-attack')
+    execute(session, result.commands!)
+    expect(
+      session
+        .getState()
+        .players.find((p) => p.participantId === session.localParticipantId)!.hero
+        .health
+    ).toBe(29)
+  })
+  it('T8 recovers Scalehide damage and Lifesteal with a dagger equipped', () => {
+    const session = rogue({
+      aiHealth: 27,
+      opponentHealth: 28,
+      aiWeapon: { cardId: 'basic_wicked_knife', durability: 1 },
+      aiBoard: [{ cardId: 'the_witchwood_vicious_scalehide', ready: true }]
+    })
+    const result = review(session)
+    expect(result.reason).toBe('unused-safe-face-attack')
+    execute(session, result.commands!)
+    expect(
+      session
+        .getState()
+        .players.find((p) => p.participantId === session.remoteParticipantId)!.hero
+        .health
+    ).toBe(28)
+    expect(
+      session
+        .getState()
+        .players.find((p) => p.participantId === session.localParticipantId)!.hero
+        .health
+    ).toBe(27)
+  })
+  it('T10 uses an ordinary dagger against the empty board before passing', () => {
+    const session = rogue({
+      aiMana: 1,
+      aiHeroPowerAvailable: true,
+      opponentArmor: 3,
+      aiWeapon: { cardId: 'basic_wicked_knife', durability: 1 }
+    })
+    const result = review(session)
+    expect(result.commands?.[0]).toMatchObject({
+      type: 'attack-character',
+      attacker: { kind: 'hero' }
+    })
+    execute(session, result.commands!)
+    expect(
+      session
+        .getState()
+        .players.find((p) => p.participantId === session.localParticipantId)!.hero.armor
+    ).toBe(2)
+  })
+  it.each([
+    [
+      'T12',
+      'mean_streets_of_gadgetzan_gadgetzan_ferryman',
+      'one_night_in_karazhan_swashburglar'
+    ],
+    ['T14', 'classic_youthful_brewmaster', 'journey_to_ungoro_flame_elemental']
+  ])('%s attacks before a friendly return', (_turn, bounce, minion) => {
+    const session = rogue({
+      aiMana: 3,
+      aiHand: [bounce!],
+      aiBoard: [{ cardId: minion!, ready: true }]
+    })
+    if (bounce === 'mean_streets_of_gadgetzan_gadgetzan_ferryman') {
+      // Ferryman requires Combo. A prior card is public history.
+      const checkpoint = session.match.getCheckpoint()
+      const changed = structuredClone(checkpoint)
+      ;(changed.state.history!.cardsPlayedThisTurn as string[]).push('basic_the_coin')
+      const combo = new GameBoardSession({
+        setup: changed.setup,
+        decks: changed.decks,
+        checkpoint: changed
+      })
+      const result = review(combo, play(combo, bounce))
+      expect(result.reason).toBe('attack-before-friendly-return')
+      execute(combo, result.commands!)
+      expect(
+        combo
+          .getState()
+          .players.find((p) => p.participantId === combo.localParticipantId)!.hero
+          .health
+      ).toBe(29)
+    } else {
+      const result = review(session, play(session, bounce!))
+      expect(result.reason).toBe('attack-before-friendly-return')
+      execute(session, result.commands!)
+      expect(
+        session
+          .getState()
+          .players.find((p) => p.participantId === session.localParticipantId)!.hero
+          .health
+      ).toBe(29)
+    }
+  })
+  it('T16 recovers all five damage before Vanish, retaining its intended board', () => {
+    const session = rogue({
+      aiMana: 8,
+      aiHealth: 15,
+      opponentHealth: 27,
+      opponentArmor: 4,
+      aiHand: ['basic_vanish'],
+      aiBoard: [
+        { cardId: 'journey_to_ungoro_flame_elemental', ready: true },
+        { cardId: 'classic_youthful_brewmaster', ready: true },
+        { cardId: 'goblins_vs_gnomes_warbot', ready: true }
+      ],
+      opponentBoard: [{ cardId: 'classic_alexstrasza' }]
+    })
+    const result = review(session, play(session, 'basic_vanish'))
+    expect(result.reason).toBe('attack-before-friendly-return')
+    expect(result.commands).toHaveLength(4)
+    execute(session, result.commands!)
+    const enemy = session
+      .getState()
+      .players.find((p) => p.participantId === session.localParticipantId)!
+    expect(enemy.hero.health).toBe(26)
+    expect(enemy.hero.armor).toBe(0)
+    expect(enemy.board).toHaveLength(0)
+  })
+  it.each([1, 3])(
+    'T12 attacks a %i-health Acolyte before refreshing the dagger and retains both new charges',
+    (health) => {
+      const session = rogue({
+        aiMana: 2,
+        aiHeroPowerAvailable: true,
+        aiWeapon: { cardId: 'basic_wicked_knife', durability: 1 },
+        aiBoard: [{ cardId: 'journey_to_ungoro_glacial_shard', ready: true }],
+        opponentBoard: [{ cardId: 'classic_acolyte_of_pain', health, maxHealth: 3 }]
+      })
+      const result = review(
+        session,
+        legal(session).find((c) => c.type === 'use-hero-power')!
+      )
+      expect(result.reason).toBe('attack-before-dagger-refresh')
+      execute(session, result.commands!)
+      expect(
+        session
+          .getState()
+          .players.find((p) => p.participantId === session.remoteParticipantId)!.weapon
+          ?.durability
+      ).toBe(2)
+    }
+  )
+  it('T6 completes the Stonehill clear, preserves Boar, and uses the unlocked attacks', () => {
+    const session = rogue({
+      aiBoard: [
+        { cardId: 'classic_southsea_deckhand', ready: true },
+        { cardId: 'the_witchwood_vicious_scalehide', ready: true },
+        { cardId: 'mean_streets_of_gadgetzan_patches_the_pirate', ready: true },
+        { cardId: 'classic_southsea_deckhand', ready: true },
+        { cardId: 'basic_stonetusk_boar', ready: true },
+        { cardId: 'journey_to_ungoro_fire_fly', ready: false }
+      ],
+      opponentBoard: [{ cardId: 'journey_to_ungoro_stonehill_defender' }]
+    })
+    const result = review(session)
+    expect(result.reason).toBe('complete-plain-taunt-clear')
+    execute(session, result.commands!)
+    const enemy = session
+      .getState()
+      .players.find((p) => p.participantId === session.localParticipantId)!
+    expect(enemy.board).toHaveLength(0)
+    expect(enemy.hero.health).toBe(28)
+    expect(
+      session
+        .getState()
+        .players.find((p) => p.participantId === session.remoteParticipantId)!
+        .board.some((m) => m.cardId === 'basic_stonetusk_boar')
+    ).toBe(true)
+  })
+  it.each([
+    { opponentSecrets: [{ cardId: 'classic_explosive_trap' }] },
+    { opponentHealth: 16, aiBoard: [{ cardId: 'basic_chillwind_yeti', ready: true }] },
+    { aiBoard: [{ cardId: 'classic_worgen_infiltrator', ready: true }] },
+    { aiBoard: [{ cardId: 'basic_stonetusk_boar', frozen: true }] },
+    { opponentBoard: [{ cardId: 'basic_ironfur_grizzly' }] }
+  ])('keeps pass for unsupported or harmful attacks %j', (options) => {
+    const session = rogue({
+      aiBoard: [{ cardId: 'basic_stonetusk_boar', ready: true }],
+      ...options
+    })
+    // The Taunt fixture cannot profitably clear with one Boar.
+    expect(review(session).commands).toBeNull()
+  })
+  it('abstains before dispatch when the shared deadline expires', () => {
+    const session = rogue({
+      aiBoard: [{ cardId: 'basic_stonetusk_boar', ready: true }]
+    })
+    const result = reviewAttackOpportunity(
+      session.match.getCheckpoint(),
+      session.remoteParticipantId,
+      legal(session).find((c) => c.type === 'end-turn')!,
+      () => true,
+      () => 0
+    )
+    expect(result.commands).toBeNull()
+    expect(result.stats).toMatchObject({ dispatches: 0, abstained: true })
+  })
+  it('T22 retains Preparation in the timeout fallback', () => {
+    const session = rogue({
+      aiMana: 4,
+      aiHealth: 7,
+      aiHand: ['classic_preparation'],
+      aiBoard: [{ cardId: 'classic_youthful_brewmaster', ready: false }],
+      opponentBoard: [
+        { cardId: 'goblins_vs_gnomes_dr_boom' },
+        { cardId: 'naxxramas_sludge_belcher' }
+      ]
+    })
+    const prep = play(session, 'classic_preparation')
+    expect(
+      createExpertActionInspector(
+        session.match.getCheckpoint(),
+        session.remoteParticipantId
+      )(prep)
+    ).toMatchObject({ reason: 'no-payoff' })
+    expect(
+      selectExpertTimeoutFallbackAction(session, legal(session))?.command
+    ).not.toEqual(prep)
+  })
+  it.each([
+    { aiHand: ['classic_preparation', 'classic_sprint'] },
+    { aiBoard: [{ cardId: 'classic_gadgetzan_auctioneer' }] },
+    { aiBoard: [{ cardId: 'classic_loot_hoarder', ready: true }] },
+    { aiHeroId: 'guldan', aiHeroPowerAvailable: true },
+    { aiQuest: { cardId: 'journey_to_ungoro_the_caverns_below', progress: 0 } }
+  ])('preserves legitimate Preparation setup %j', (options) => {
+    const session = rogue({ aiMana: 4, aiHand: ['classic_preparation'], ...options })
+    const outcome = createExpertActionInspector(
+      session.match.getCheckpoint(),
+      session.remoteParticipantId
+    )(play(session, 'classic_preparation'))
+    expect(outcome.reason).not.toBe('no-payoff')
+  })
+  it.each(['action', 'plan'] as const)(
+    'repairs the production %s response and retains the checked bounce continuation',
+    async (phase) => {
+      const session = rogue({
+        aiMana: 2,
+        aiHand: ['classic_youthful_brewmaster'],
+        aiBoard: [{ cardId: 'journey_to_ungoro_flame_elemental', ready: true }]
+      })
+      const actions = aiActions(session, legal(session))
+      const chosen = actions.find((a) => a.command.type === 'play-card')!
+      let receive: ((event: MessageEvent<ExpertAiWorkerResponse>) => void) | undefined
+      let calls = 0
+      const worker = {
+        addEventListener(type: string, listener: unknown) {
+          if (type === 'message') receive = listener as typeof receive
+        },
+        postMessage(message: ExpertAiWorkerRequest) {
+          if (message.type !== 'decide') return
+          calls++
+          const response: AiDecisionResponse = {
+            ...message.request,
+            modelId: 'hardware-local-v2',
+            reason: 'Recorded premature bounce.',
+            durationMs: 0,
+            finishReason: 'fixture',
+            choice:
+              phase === 'plan'
+                ? {
+                    plan: {
+                      objective: 'Bounce',
+                      winCheck: 'No win',
+                      lossRisk: 'Unknown',
+                      candidates: [
+                        {
+                          sequence: [chosen.description],
+                          budget: 'Two mana',
+                          endPosition: 'Bounced',
+                          opponentReply: 'Unknown'
+                        }
+                      ],
+                      preferred: 0,
+                      firstActionId: chosen.id,
+                      checks: []
+                    }
+                  }
+                : {
+                    actionId: chosen.id,
+                    intent: aiActionIntent(chosen.command, session.localParticipantId),
+                    expectedResult: 'Bounce',
+                    planUpdate: null
+                  }
+          }
+          receive?.({
+            data: { type: 'decision', requestId: message.request.requestId, response }
+          } as MessageEvent<ExpertAiWorkerResponse>)
+        },
+        terminate() {}
+      } as unknown as Worker
+      const api = new ExpertAiDecisionApi(
+        session,
+        () => worker,
+        () => 0
+      )
+      const request = (
+        id: string,
+        requestPhase: 'action' | 'plan' = 'action'
+      ): AiDecisionRequest => ({
+        matchId: 'rogue-opportunity',
+        requestId: id,
+        expectedRevision: session.getState().revision,
+        phase: requestPhase,
+        allowInspection: false,
+        messages: [],
+        actionIds: aiActions(session, legal(session)).map((a) => a.id)
+      })
+      try {
+        let response = await api.decide(request('first', phase))
+        expect(response.usage?.actionOutcomeReason).toBe(
+          'attack-before-friendly-return'
+        )
+        if (phase === 'plan') response = await api.decide(request('planned-attack'))
+        const attack = aiActions(session, legal(session)).find(
+          (a) => 'actionId' in response.choice && a.id === response.choice.actionId
+        )!
+        expect(attack.command.type).toBe('attack-character')
+        execute(session, [attack.command])
+        response = await api.decide(request('continue-bounce'))
+        const bounce = aiActions(session, legal(session)).find(
+          (a) => 'actionId' in response.choice && a.id === response.choice.actionId
+        )!
+        expect(bounce.command).toEqual(chosen.command)
+        expect(calls).toBe(1)
+        execute(session, [bounce.command])
+      } finally {
+        api.dispose()
+      }
+    }
+  )
+  it('keeps decisions invariant to concealed opposing cards and own deck order', () => {
+    const session = rogue({
+      aiBoard: [{ cardId: 'basic_stonetusk_boar', ready: true }],
+      opponentHand: ['classic_sprint'],
+      aiDeck: ['classic_sprint', 'basic_backstab']
+    })
+    const cp = structuredClone(session.match.getCheckpoint())
+    const own = cp.state.players.find(
+      (p) => p.participantId === session.remoteParticipantId
+    )!
+    const hidden = cp.state.players.find(
+      (p) => p.participantId !== session.remoteParticipantId
+    )!
+    ;(own.deck as unknown[]).reverse()
+    Object.assign(hidden.hand[0]!, {
+      cardId: asCardId('classic_pyroblast'),
+      currentCost: 0
+    })
+    const changed = new GameBoardSession({
+      setup: cp.setup,
+      decks: cp.decks,
+      checkpoint: cp
+    })
+    expect(review(changed).commands).toEqual(review(session).commands)
+  })
+})
 
 // Recorded search choices depend on the hidden-card hypothesis pool.
 function pinRecordedCatalog(): void {

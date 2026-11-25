@@ -1,6 +1,7 @@
 import druidImage from '@assets/images/heroes/original-art-heropower/shapeshift.png'
 import druidUpgradedImage from '@assets/images/heroes/original-art-heropower/dire-shapeshift.png'
 import hunterImage from '@assets/images/heroes/original-art-heropower/steady-shot.png'
+import dinomancyImage from '@assets/images/heroes/original-art-heropower/dinomancy.png'
 import hunterUpgradedImage from '@assets/images/heroes/original-art-heropower/ballista-shot.png'
 import jaraxxusImage from '@assets/images/heroes/original-art-heropower/inferno.png'
 import ragnarosImage from '@assets/images/heroes/original-art-heropower/die-insect.png'
@@ -23,26 +24,46 @@ import warriorImage from '@assets/images/heroes/original-art-heropower/armor-up.
 import warriorUpgradedImage from '@assets/images/heroes/original-art-heropower/tank-up.png'
 import deathsShadowImage from '@assets/images/heroes/original-art-heropower/deaths-shadow.png'
 import plagueLordImage from '@assets/images/heroes/original-art-heropower/plague-lord.png'
-import buildABeastImage from '@assets/images/heroes/original-art-heropower/build-a-beast.jpg'
-import bladestormImage from '@assets/images/heroes/original-art-heropower/bladestorm.jpg'
+import buildABeastImage from '@assets/images/heroes/original-art-heropower/build-a-beast.png'
+import bladestormImage from '@assets/images/heroes/original-art-heropower/bladestorm.png'
 import icyTouchImage from '@assets/images/heroes/original-art-heropower/icy-touch.png'
 import fourHorsemenImage from '@assets/images/heroes/original-art-heropower/the-four-horsemen.png'
 import voidformImage from '@assets/images/heroes/original-art-heropower/voidform.png'
 import transmuteSpiritImage from '@assets/images/heroes/original-art-heropower/transmute-spirit.png'
 import siphonLifeImage from '@assets/images/heroes/original-art-heropower/siphon-life.png'
-import ossirianTearImage from '@assets/images/heroes/original-art-heropower/journey_to_ungoro_ossirian_tear.jpg'
-import pharaohsWarmaskImage from '@assets/images/heroes/original-art-heropower/journey_to_ungoro_pharaohs_warmask.jpg'
-import ascendantScrollImage from '@assets/images/heroes/original-art-heropower/journey_to_ungoro_ascendant_scroll.jpg'
-import emperorWrapsImage from '@assets/images/heroes/original-art-heropower/journey_to_ungoro_emperor_wraps.jpg'
-import obelisksEyeImage from '@assets/images/heroes/original-art-heropower/journey_to_ungoro_obelisks_eye.jpg'
-import ancientBladesImage from '@assets/images/heroes/original-art-heropower/journey_to_ungoro_ancient_blades.jpg'
-import heartOfVirnaalImage from '@assets/images/heroes/original-art-heropower/journey_to_ungoro_heart_of_virnaal.jpg'
-import tomeOfOriginationImage from '@assets/images/heroes/original-art-heropower/journey_to_ungoro_tome_of_origination.jpg'
-import anraphetsCoreImage from '@assets/images/heroes/original-art-heropower/journey_to_ungoro_anraphets_core.jpg'
+import ossirianTearImage from '@assets/images/heroes/original-art-heropower/journey_to_ungoro_ossirian_tear.png'
+import pharaohsWarmaskImage from '@assets/images/heroes/original-art-heropower/journey_to_ungoro_pharaohs_warmask.png'
+import ascendantScrollImage from '@assets/images/heroes/original-art-heropower/journey_to_ungoro_ascendant_scroll.png'
+import emperorWrapsImage from '@assets/images/heroes/original-art-heropower/journey_to_ungoro_emperor_wraps.png'
+import obelisksEyeImage from '@assets/images/heroes/original-art-heropower/journey_to_ungoro_obelisks_eye.png'
+import ancientBladesImage from '@assets/images/heroes/original-art-heropower/journey_to_ungoro_ancient_blades.png'
+import heartOfVirnaalImage from '@assets/images/heroes/original-art-heropower/journey_to_ungoro_heart_of_virnaal.png'
+import tomeOfOriginationImage from '@assets/images/heroes/original-art-heropower/journey_to_ungoro_tome_of_origination.png'
+import anraphetsCoreImage from '@assets/images/heroes/original-art-heropower/journey_to_ungoro_anraphets_core.png'
+import wayOfTheShellImage from '@assets/images/heroes/original-art-heropower/way-of-the-shell.png'
+import lightningJoltImage from '@assets/images/heroes/original-art-heropower/lightning-jolt.png'
 import type { HeroPowerAssetKey } from './hero-power-asset-keys'
-import lightningJoltImage from '@assets/images/card-artwork/classic_lightning_bolt.png'
 
 export { HERO_POWER_ASSET_KEYS, type HeroPowerAssetKey } from './hero-power-asset-keys'
+
+/** Native square dimensions of the extracted standard portraits. */
+export function heroPowerArtworkSize(key: HeroPowerAssetKey): number {
+  switch (key) {
+    case 'hero-power-placeholder':
+      return 500
+    case 'hero-power-deaths-shadow':
+    case 'hero-power-build-a-beast':
+    case 'hero-power-bladestorm':
+    case 'hero-power-icy-touch':
+    case 'hero-power-the-four-horsemen':
+    case 'hero-power-voidform':
+    case 'hero-power-transmute-spirit':
+    case 'hero-power-siphon-life':
+      return 256
+    default:
+      return 512
+  }
+}
 
 /**
  * Renderer-side texture keys for raw hero-power artwork. Each key matches
@@ -56,6 +77,7 @@ export const HERO_POWER_ASSET_SOURCES: Record<HeroPowerAssetKey, string> = {
   )}`,
   'hero-power-druid': druidImage,
   'hero-power-hunter': hunterImage,
+  'hero-power-dinomancy': dinomancyImage,
   'hero-power-mage': mageImage,
   'hero-power-paladin': paladinImage,
   'hero-power-paladin-tidal-hand': paladinTidalHandImage,
@@ -85,6 +107,7 @@ export const HERO_POWER_ASSET_SOURCES: Record<HeroPowerAssetKey, string> = {
   'hero-power-heart-of-virnaal': heartOfVirnaalImage,
   'hero-power-tome-of-origination': tomeOfOriginationImage,
   'hero-power-anraphets-core': anraphetsCoreImage,
+  'hero-power-way-of-the-shell': wayOfTheShellImage,
   'hero-power-druid-upgraded': druidUpgradedImage,
   'hero-power-hunter-upgraded': hunterUpgradedImage,
   'hero-power-mage-upgraded': mageUpgradedImage,

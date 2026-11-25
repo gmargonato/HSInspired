@@ -85,6 +85,20 @@ export class GameScene extends Scene {
   private recorder?: MatchRecorder
   private readonly rewardMatchId = crypto.randomUUID()
   private matchEnded = false
+  private controls3dEnabled = false
+
+  get are3dElementsEnabled(): boolean {
+    return this.controls3dEnabled
+  }
+  private activeAiSettings: Pick<
+    Preferences,
+    'aiDifficulty' | 'aiCheatsEnabled'
+  > | null = null
+
+  get matchAiSettings(): Pick<Preferences, 'aiDifficulty' | 'aiCheatsEnabled'> {
+    if (!this.activeAiSettings) throw new Error('Match settings are not ready.')
+    return this.activeAiSettings
+  }
 
   get hasMatchEnded(): boolean {
     return this.matchEnded
@@ -242,6 +256,10 @@ export class GameScene extends Scene {
     )
 
     const aiPreferences = await this.readMatchPreferences()
+    this.activeAiSettings = {
+      aiDifficulty: aiPreferences.aiDifficulty,
+      aiCheatsEnabled: aiPreferences.aiCheatsEnabled
+    }
     const aiDifficulty = aiPreferences.aiDifficulty
     const profileId = this.route.curatedOpponent?.expertStrategyProfileId
     const aiParticipantId = this.route.setup.participants.find(
@@ -323,6 +341,7 @@ export class GameScene extends Scene {
             ASSET_BUNDLE_IDS.gameControls
           )
         : undefined
+    this.controls3dEnabled = Boolean(controlAssets)
     this.logger?.info('[GameScene] game assets acquired')
     await this.reportLoading(0.2, 'Loading hero assets')
     const deckPresentationAssets =
@@ -381,7 +400,7 @@ export class GameScene extends Scene {
     }
 
     try {
-      prewarmWindfury(this.appInstance.renderer)
+      prewarmWindfury(this.appInstance.renderer, gameAssets)
     } catch (error) {
       this.logger?.warn('[GameScene] Windfury warm-up failed', error)
     }

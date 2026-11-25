@@ -7,6 +7,15 @@ export const WEAPON_CANVAS = { width: 240, height: 210 } as const
 /** Fixed geometry for the feature-agnostic equipped weapon render stack. */
 export const WEAPON_LAYOUT = {
   name: 'Equipped board weapon',
+  cover: placement(
+    { x: WEAPON_CANVAS.width / 2, y: 88 },
+    { width: 128, height: 128 },
+    {
+      anchor: CENTER,
+      scale: 1,
+      note: 'Native weapon cover between artwork and frame during the opponent turn.'
+    }
+  ),
   artwork: placement(
     { x: WEAPON_CANVAS.width / 2, y: 88 },
     { width: 122, height: 112 },

@@ -1,4 +1,5 @@
-import { Graphics, Rectangle, Sprite, type Texture } from 'pixi.js'
+import { Rectangle, Sprite, Text, type Texture } from 'pixi.js'
+import type { Preferences } from '../../desktop/contracts/ipc/preferences'
 import { SETTINGS_LAYOUT } from './settings-layout'
 import { GraphicsToggle } from './graphics-toggle'
 import { AiCheatsToggle } from './ai-cheats-toggle'
@@ -17,9 +18,16 @@ import { Button } from '../../visual-components/controls/button'
 import { Scene } from '../../visual-components/lifecycle/scene'
 
 export interface GameSettingsCallbacks {
-  readonly boardCorners?: BoardCornerSelection
   readonly onConcede: () => void | Promise<void>
+  readonly onOptions: () => void | Promise<void>
+  readonly onRestart: () => void | Promise<void>
   readonly onQuit: () => void | Promise<void>
+}
+
+export interface MatchSettingsContext {
+  readonly ai: Pick<Preferences, 'aiDifficulty' | 'aiCheatsEnabled'>
+  readonly enable3dElements: boolean
+  readonly boardCorners: BoardCornerSelection
 }
 
 /** Shared presentation plumbing for the menu and match settings overlays. */
@@ -72,12 +80,38 @@ abstract class SettingsScene extends Scene {
   }
 }
 
-/** Settings overlay used throughout the non-match menu flow. */
+/** Shared menu settings, with locked AI settings when opened during a match. */
 export class MenuSettingsScene extends SettingsScene {
   private readonly graphicsToggles: GraphicsToggle[] = []
   private aiCheatsToggle: AiCheatsToggle | null = null
   private cursorSizeSlider: CursorSizeSlider | null = null
   private aiDifficultySelector: AiDifficultySelector | null = null
+  private boardCornerSelector: BoardCornerSelector | null = null
+
+  constructor(private readonly match?: MatchSettingsContext) {
+    super()
+  }
+
+  private closeOptions(): void {
+    this.aiDifficultySelector?.closeOptions()
+    this.resolutionSelector?.closeOptions()
+    this.boardCornerSelector?.closeOptions()
+  }
+
+  private addReadOnlyLabel(
+    text: string,
+    label: string,
+    layout: Parameters<typeof applyAnchoredPlacement>[1]
+  ): void {
+    const value = new Text({
+      text,
+      style: { fontFamily: 'Franklin Gothic Condensed', fontSize: 36, fill: 0xf5e3b6 }
+    })
+    value.label = label
+    value.eventMode = 'none'
+    applyAnchoredPlacement(value, layout)
+    this.root.addChild(value)
+  }
 
   async init(): Promise<void> {
     const assets = await this.assetScope.acquire<MenuSettingsAssets>(
@@ -86,17 +120,36 @@ export class MenuSettingsScene extends SettingsScene {
     this.root.sortableChildren = true
     this.createBackground(assets.background, 'menu-settings-background')
     await this.waitForFonts()
-    const cheats = new AiCheatsToggle(assets, window.api.preferences, () => {
-      this.aiDifficultySelector?.closeOptions()
-      this.resolutionSelector?.closeOptions()
-    })
-    await cheats.init()
-    this.aiCheatsToggle = cheats
-    this.root.addChild(cheats)
+    if (this.match) {
+      this.addReadOnlyLabel(
+        `Difficulty: ${this.match.ai.aiDifficulty === 'easy' ? 'Easy' : 'Expert'}`,
+        'settings.ai-difficulty-value',
+        SETTINGS_LAYOUT.matchAiDifficulty
+      )
+      this.addReadOnlyLabel(
+        `AI Cheats: ${this.match.ai.aiCheatsEnabled ? 'On' : 'Off'}`,
+        'settings.ai-cheats-value',
+        SETTINGS_LAYOUT.matchAiCheats
+      )
+    } else {
+      const cheats = new AiCheatsToggle(assets, window.api.preferences, () =>
+        this.closeOptions()
+      )
+      await cheats.init()
+      this.aiCheatsToggle = cheats
+      this.root.addChild(cheats)
+    }
     for (const setting of ['enable3dElements', 'enableShadows'] as const) {
+      if (setting === 'enable3dElements' && this.match) {
+        this.addReadOnlyLabel(
+          `3D elements are ${this.match.enable3dElements ? 'enabled' : 'disabled'}`,
+          'settings.3d-elements-value',
+          SETTINGS_LAYOUT.match3dElements
+        )
+        continue
+      }
       const toggle = new GraphicsToggle(assets, window.api.preferences, setting, () => {
-        this.aiDifficultySelector?.closeOptions()
-        this.resolutionSelector?.closeOptions()
+        this.closeOptions()
       })
       await toggle.init()
       this.graphicsToggles.push(toggle)
@@ -115,25 +168,33 @@ export class MenuSettingsScene extends SettingsScene {
         cursor,
         window.api.preferences,
         () => {
-          this.aiDifficultySelector?.closeOptions()
-          this.resolutionSelector?.closeOptions()
+          this.closeOptions()
         },
-        (error) => console.error('Could not save cursor size.', error)
+        (error) => console.error('Could not save cursor size.', error),
+        this.match ? SETTINGS_LAYOUT.matchCursor : SETTINGS_LAYOUT
       )
       this.root.addChild(this.cursorSizeSlider)
     }
-    const aiDifficultySelector = new AiDifficultySelector(
-      assets,
-      window.api.preferences,
-      console.error,
-      () => this.resolutionSelector?.closeOptions()
-    )
-    await aiDifficultySelector.init()
-    this.aiDifficultySelector = aiDifficultySelector
-    this.root.addChild(aiDifficultySelector)
-    await this.createResolutionSelector(assets, () =>
-      this.aiDifficultySelector?.closeOptions()
-    )
+    if (!this.match) {
+      const aiDifficultySelector = new AiDifficultySelector(
+        assets,
+        window.api.preferences,
+        console.error,
+        () => this.closeOptions()
+      )
+      await aiDifficultySelector.init()
+      this.aiDifficultySelector = aiDifficultySelector
+      this.root.addChild(aiDifficultySelector)
+    }
+    if (this.match?.boardCorners.options.length) {
+      this.boardCornerSelector = new BoardCornerSelector(
+        assets,
+        this.match.boardCorners,
+        () => this.closeOptions()
+      )
+      this.root.addChild(this.boardCornerSelector)
+    }
+    await this.createResolutionSelector(assets, () => this.closeOptions())
   }
 
   update(_deltaMS: number): void {}
@@ -148,12 +209,13 @@ export class MenuSettingsScene extends SettingsScene {
     this.cursorSizeSlider = null
     this.aiDifficultySelector?.dispose()
     this.aiDifficultySelector = null
+    this.boardCornerSelector?.dispose()
+    this.boardCornerSelector = null
   }
 }
 
 /** Settings overlay used while a match is active. */
 export class GameSettingsScene extends SettingsScene {
-  private boardCornerSelector: BoardCornerSelector | null = null
   private readonly actionButtons: Button[] = []
   private actionPending = false
 
@@ -177,28 +239,28 @@ export class GameSettingsScene extends SettingsScene {
     )
     this.addAction(
       assets.baseFrameLarge,
+      assets.optionsButton,
+      SETTINGS_LAYOUT.gameActions.optionsFrame,
+      SETTINGS_LAYOUT.gameActions.optionsButton,
+      'game-settings.options',
+      this.callbacks.onOptions
+    )
+    this.addAction(
+      assets.baseFrameLarge,
+      assets.restartButton,
+      SETTINGS_LAYOUT.gameActions.restartFrame,
+      SETTINGS_LAYOUT.gameActions.restartButton,
+      'game-settings.restart',
+      this.callbacks.onRestart
+    )
+    this.addAction(
+      assets.baseFrameLarge,
       assets.quitButton,
       SETTINGS_LAYOUT.gameActions.quitFrame,
       SETTINGS_LAYOUT.gameActions.quitButton,
       'game-settings.quit',
       this.callbacks.onQuit
     )
-    if (this.callbacks.boardCorners?.options.length) {
-      const dividerLayout = SETTINGS_LAYOUT.gameDivider
-      const divider = new Graphics()
-        .rect(0, 0, dividerLayout.size.width, dividerLayout.size.height)
-        .fill(SETTINGS_LAYOUT.gameDividerColor)
-      divider.label = 'game-settings.divider'
-      divider.eventMode = 'none'
-      applyPlacement(divider, dividerLayout)
-      this.root.addChild(divider)
-      await this.waitForFonts()
-      this.boardCornerSelector = new BoardCornerSelector(
-        assets,
-        this.callbacks.boardCorners
-      )
-      this.root.addChild(this.boardCornerSelector)
-    }
   }
 
   update(_deltaMS: number): void {}
@@ -206,8 +268,6 @@ export class GameSettingsScene extends SettingsScene {
   protected override onExit(): void {
     super.onExit()
     for (const button of this.actionButtons) button.setEnabled(false)
-    this.boardCornerSelector?.dispose()
-    this.boardCornerSelector = null
     this.actionButtons.length = 0
   }
 
@@ -245,8 +305,12 @@ export class GameSettingsScene extends SettingsScene {
       .then(callback)
       .catch((error: unknown) => {
         console.error('Failed to execute a game settings action.', error)
+      })
+      .finally(() => {
         this.actionPending = false
-        for (const button of this.actionButtons) button.setEnabled(true)
+        if (this.isLoaded) {
+          for (const button of this.actionButtons) button.setEnabled(true)
+        }
       })
   }
 }

@@ -1,4 +1,5 @@
 import { outlinedTextStyle } from '../../../visual-components/text-style'
+import { prewarmHeroHover } from '../loading/hero-hover-warmup'
 import type { HealingAssets } from '../../../visual-components/assets/healing-assets'
 import { MatchControls3D } from './match-controls-3d'
 import type { MatchControlAssets } from '../../../visual-components/assets/match-control-assets'
@@ -146,6 +147,14 @@ import {
 import { presentCardReveal } from '../presentation/card-reveal-presenter'
 import { CARD_REVEAL_LAYOUT } from '../presentation/card-reveal-layout'
 import { CARD_DRAW_LAYOUT } from '../presentation/card-draw-layout'
+import { CARD_MOTION_LAYOUT } from '../presentation/card-motion-layout'
+import {
+  CardMotionVisual,
+  bodyMotionCorners,
+  deckMotionCorners,
+  deckMotionSlot
+} from '../presentation/card-motion-visual'
+import type { DeckMotionProfile, MotionLaunch } from '../presentation/card-motion'
 import { DeckStackView } from '../hud/deck-stack-view'
 import {
   acquireTradeableAura,
@@ -339,6 +348,11 @@ type BoardPointerSample = Pick<FederatedPointerEvent, 'globalX' | 'globalY' | 't
 
 type MatchHoverTarget =
   | {
+      readonly kind: 'hero'
+      readonly key: string
+      readonly view: HeroView
+    }
+  | {
       readonly kind: 'board-card'
       readonly key: string
       readonly view: MinionView | WeaponView
@@ -515,6 +529,10 @@ export class GameBoardView extends Actor {
   private readonly drawOrigins = new WeakMap<Container, Sprite>()
   private readonly drawProfiles = new WeakMap<Container, CardDrawProfile>()
   private readonly drawAnimations = new Set<CardDrawAnimation>()
+  private readonly deckMotionVisuals = new Set<CardMotionVisual>()
+  private readonly pendingDeckSecretCounts = new Map<PlayerId, number>()
+  private readonly deckMotionBodies = new Set<Container>()
+  private readonly releasedTradePoses = new WeakMap<Container, MotionLaunch>()
   private readonly turnLayer = this.hud.turnLayer
   private readonly remoteHandLayer = new Container()
   private readonly heroViews = new Map<PlayerId, HeroView>()
@@ -878,6 +896,7 @@ export class GameBoardView extends Actor {
       this
     )
     this.combat = new GameCombatPresentation(options.gameAssets, this.animationScope, {
+      isCurrentPlayer: (ownerId) => this.presentationState().activePlayerId === ownerId,
       shouldWarnAttack: (attackerId) => attackerId === this.remoteParticipantId,
       findCharacter: (ownerId, character) => this.findCombatView(ownerId, character),
       findMinion: (ownerId, instanceId) => this.findMinionView(ownerId, instanceId),
@@ -1008,15 +1027,10 @@ export class GameBoardView extends Actor {
       },
       {
         hasDrawOrigin: (slot) => this.drawOrigins.has(slot),
-        departDeck: (slot, duration, delay) => {
-          const profile = this.drawProfiles.get(slot) ?? 'direct'
+        departDeck: (slot) => {
+          const profile = this.drawProfiles.get(slot) ?? 'local-reveal'
           this.drawProfiles.delete(slot)
-          return this.animateDeckDeparture(
-            slot,
-            duration,
-            profile === 'direct' ? 0 : delay,
-            profile
-          )
+          return this.animateDeckDeparture(slot, 0, profile)
         }
       },
       options.cursor
@@ -1026,11 +1040,14 @@ export class GameBoardView extends Actor {
       this.animationScope,
       {
         travelLayer: this.travelLayer,
-        prepareAtDeck: (slot, index) =>
-          this.prepareSlotAtDeck(slot, GAME_BOARD_LAYOUT.decks.local, index),
+        prepareAtDeck: (slot) =>
+          this.prepareSlotAtDeck(slot, GAME_BOARD_LAYOUT.decks.local),
         hasDrawOrigin: (slot) => this.drawOrigins.has(slot),
-        departDeck: (slot, duration, delay) =>
-          this.animateDeckDeparture(slot, duration, delay, 'mulligan-reveal')
+        departDeck: (slot, delay) => {
+          const profile = this.drawProfiles.get(slot) ?? 'mulligan-reveal'
+          this.drawProfiles.delete(slot)
+          return this.animateDeckDeparture(slot, delay, profile)
+        }
       },
       () => void this.confirmMulligan(),
       this.mulliganExitLayer
@@ -1144,8 +1161,8 @@ export class GameBoardView extends Actor {
     this.gameplayLayer.addChild(this.questZoneView)
     this.gameplayLayer.addChild(this.turnLayer)
     this.gameplayLayer.addChild(this.mulligan.layer)
-    // Dealt cards must stay above the mulligan dimmer while they travel from
-    // the deck; they are reparented to their final layers after the animation.
+    // Local dealt cards travel above the dimmer. Remote mulligan flights stay
+    // in the remote hand layer so both the mesh and its card remain dimmed.
     this.gameplayLayer.addChild(this.travelLayer)
     this.gameplayLayer.addChild(this.remoteHandLayer)
     this.gameplayLayer.addChild(this.hand.layer)
@@ -1543,6 +1560,10 @@ export class GameBoardView extends Actor {
         this.hoverPreview.enter(this.boardCardHoverTarget(target))
         return
       }
+      if (target instanceof HeroView) {
+        this.hoverPreview.enter(this.heroHoverTarget(target))
+        return
+      }
       for (const [participantId, view] of this.heroPowerViews) {
         if (target === view) {
           this.hoverPreview.enter(this.heroPowerHoverTarget(participantId))
@@ -1720,12 +1741,7 @@ export class GameBoardView extends Actor {
     await this.wait(OPENING_TIMING.versusHold)
     await Promise.all([
       ...[...this.heroViews.entries()].map(([participantId, view]) =>
-        this.animateHeroToBoard(
-          view,
-          participantId === this.localParticipantId
-            ? GAME_BOARD_LAYOUT.heroes.local
-            : GAME_BOARD_LAYOUT.heroes.remote
-        )
+        this.animateHeroToBoard(view, this.heroBoardPlacement(participantId))
       ),
       this.fadeTo(this.openingLayer, 0, OPENING_TIMING.heroSettle)
     ])
@@ -1745,10 +1761,7 @@ export class GameBoardView extends Actor {
   private async prepareStartedMatch(): Promise<void> {
     this.openingLayer.visible = false
     for (const [participantId, view] of this.heroViews) {
-      const placement =
-        participantId === this.localParticipantId
-          ? GAME_BOARD_LAYOUT.heroes.local
-          : GAME_BOARD_LAYOUT.heroes.remote
+      const placement = this.heroBoardPlacement(participantId)
       applyPlacement(view, placement)
       view.setBaseScale(placement.scale?.x ?? 1)
     }
@@ -1948,6 +1961,7 @@ export class GameBoardView extends Actor {
           immune: player.hero.immune === true
         },
         {
+          windfury: this.options.gameAssets,
           frame: texture,
           attack: this.options.gameAssets.minionAttack,
           health: this.options.gameAssets.minionHealth,
@@ -1957,10 +1971,7 @@ export class GameBoardView extends Actor {
         }
       )
       applyPlacement(view, intro)
-      const resting =
-        player.participantId === this.localParticipantId
-          ? GAME_BOARD_LAYOUT.heroes.local
-          : GAME_BOARD_LAYOUT.heroes.remote
+      const resting = this.heroBoardPlacement(player.participantId)
       view.shadow.restingScale = resting.scale?.x ?? 1
       view.ownerId = player.participantId
       view.eventMode = 'none'
@@ -2179,10 +2190,11 @@ export class GameBoardView extends Actor {
   private updateWeaponView(
     view: WeaponView,
     weapon: BoardWeapon,
-    turnNumber: number
+    state: OpeningMatchState
   ): void {
+    view.setActive(view.ownerId === state.activePlayerId)
     view.setStats(weapon.attack, weapon.durability)
-    const markers = boardWeaponAbilityMarkers(weapon, turnNumber)
+    const markers = boardWeaponAbilityMarkers(weapon, state.turnNumber)
     view.setDeathrattle(markers.deathrattle)
     view.setTrigger(markers.trigger)
     view.setLifesteal(markers.lifesteal)
@@ -2195,7 +2207,7 @@ export class GameBoardView extends Actor {
       const view = this.weaponViews.get(player.participantId)
       if (player.weapon) {
         if (view?.instanceId === player.weapon.instanceId)
-          this.updateWeaponView(view, player.weapon, state.turnNumber)
+          this.updateWeaponView(view, player.weapon, state)
         continue
       }
       if (!view) continue
@@ -3084,10 +3096,7 @@ export class GameBoardView extends Actor {
   }
 
   private heroRestingPosition(view: HeroView): { x: number; y: number } {
-    const placement =
-      view.ownerId === this.localParticipantId
-        ? GAME_BOARD_LAYOUT.heroes.local
-        : GAME_BOARD_LAYOUT.heroes.remote
+    const placement = this.heroBoardPlacement(view.ownerId)
     return view.parent!.toLocal(this.heroLayer.toGlobal(placement.position))
   }
 
@@ -3874,7 +3883,7 @@ export class GameBoardView extends Actor {
               decision.command.attacker.kind === 'hero')
         })
         this.syncTurnControls(result.state)
-        this.syncSecrets(result.state)
+        this.syncSecrets(result.state, result.events)
         if (this.randomSpellRevision === result.state.revision) {
           await this.enqueuePresentation(result.state, presentAiResult)
         } else {
@@ -3998,6 +4007,13 @@ export class GameBoardView extends Actor {
         .filter((texture) => getHeroPortraitLayers(texture) !== undefined)
         .map((texture) => () => this.prebuildAuraTexture(texture)),
       () => this.secretZoneView.prebuildOutlines(this.options.renderer),
+      ...[
+        ...new Set(
+          state.players.map((player) =>
+            this.heroPortraitTexture(player.heroId, player.participantId)
+          )
+        )
+      ].map((texture) => () => prewarmHeroHover(this.options.renderer, texture)),
       () => this.questZoneView.prebuildOutlines(this.options.renderer),
       ...[this.options.gameAssets.weapon, this.options.gameAssets.premiumWeapon].map(
         (texture) => () => prebuildWeaponOutlineShape(this.options.renderer, texture)
@@ -4260,6 +4276,7 @@ export class GameBoardView extends Actor {
   private layoutRemoteHand(): void {
     this.remoteHandLayer.sortableChildren = true
     this.remoteBacks.forEach((back, index) => {
+      if (this.deckMotionBodies.has(back)) return
       const visible = index < this.remoteBackCount
       back.visible = visible
       if (!visible) return
@@ -4286,6 +4303,7 @@ export class GameBoardView extends Actor {
   }
 
   private async presentMulligan(): Promise<void> {
+    if (this.destroyed) return
     await this.mulligan.present()
     const localCommonCount =
       this.localPlayerNumber === 2 ? 3 : this.mulligan.initialCardCount
@@ -4313,7 +4331,7 @@ export class GameBoardView extends Actor {
         .slice(start, Math.min(end, this.remoteBackCount))
         .map((back, offset) => {
           const index = start + offset
-          this.prepareBackAtDeck(back, index)
+          this.prepareBackAtDeck(back)
           return this.animateBackToHand(
             back,
             index,
@@ -4376,6 +4394,10 @@ export class GameBoardView extends Actor {
       return
     }
 
+    const remoteMulliganEvent = aiMulligan.events.find(
+      (event): event is MulliganResolvedEvent => event.type === 'mulligan-resolved'
+    )
+    if (remoteMulliganEvent) await this.presentRemoteMulligan(remoteMulliganEvent)
     await this.wait(OPENING_TIMING.handoffPause)
     if (this.destroyed) return
     await this.completeLocalMulliganPresentation()
@@ -4464,6 +4486,13 @@ export class GameBoardView extends Actor {
   ): Promise<void> {
     this.premiumAppearance.observe(events)
     this.resolutionPresentationDepth += 1
+    const previousSecretCounts = new Map(this.pendingDeckSecretCounts)
+    for (const event of events) {
+      if (event.type !== 'effect-resolved' || !event.deckToSecret) continue
+      const cue = event.deckToSecret
+      if (!this.pendingDeckSecretCounts.has(cue.participantId))
+        this.pendingDeckSecretCounts.set(cue.participantId, cue.countAfter - 1)
+    }
     try {
       const state = this.activePresentationState ?? this.match.getState()
       const spellStates = randomSpellPresentationStates(events, state)
@@ -4550,6 +4579,14 @@ export class GameBoardView extends Actor {
         }
       }
     } finally {
+      this.pendingDeckSecretCounts.clear()
+      for (const [id, count] of previousSecretCounts)
+        this.pendingDeckSecretCounts.set(id, count)
+      if (
+        !this.destroyed &&
+        events.some((e) => e.type === 'effect-resolved' && e.deckToSecret)
+      )
+        this.syncSecrets(this.presentationState())
       this.resolutionPresentationDepth -= 1
       for (const event of events) {
         if (event.type === 'random-spell-started')
@@ -4659,7 +4696,7 @@ export class GameBoardView extends Actor {
       case 'mulligan-resolved':
         if (event.participantId === this.localParticipantId) {
           await this.presentLocalMulligan(event)
-        }
+        } else await this.presentRemoteMulligan(event)
         return
       case 'coin-granted':
         if (event.participantId === this.localParticipantId) {
@@ -4681,12 +4718,35 @@ export class GameBoardView extends Actor {
           this.activeDepartureSlots.add(entry.slot)
           try {
             await Promise.all([
-              this.animateBodyToDeck(entry.slot, GAME_BOARD_LAYOUT.decks.local, 0),
+              this.animateBodyToDeck(
+                entry.slot,
+                GAME_BOARD_LAYOUT.decks.local,
+                0,
+                'trade'
+              ),
               this.reflowHandAfterPlay()
             ])
           } finally {
             this.activeDepartureSlots.delete(entry.slot)
             if (!entry.slot.destroyed) entry.slot.destroy({ children: true })
+          }
+        }
+        if (event.participantId === this.remoteParticipantId) {
+          const index = this.remoteBackIndex(event.cardInstanceId)
+          const back = this.remoteBacks[index]
+          if (back) {
+            this.travelLayer.reparentChild(back)
+            try {
+              await this.animateBodyToDeck(
+                back,
+                GAME_BOARD_LAYOUT.decks.remote,
+                0,
+                'trade',
+                true
+              )
+            } finally {
+              this.removeRemoteBack(event.cardInstanceId)
+            }
           }
         }
         return
@@ -4701,9 +4761,7 @@ export class GameBoardView extends Actor {
             : undefined,
           event.type === 'card-drawn' && event.publicReveal
             ? 'public-reveal'
-            : event.type === 'opening-card-drawn' || event.reason === 'turn-start'
-              ? 'local-reveal'
-              : 'direct'
+            : 'local-reveal'
         )
         return
       case 'discover-started':
@@ -4801,7 +4859,15 @@ export class GameBoardView extends Actor {
       case 'fatigue':
         await this.fatigueView.present(
           event.amount,
-          event.participantId === this.localParticipantId ? 'local' : 'remote'
+          event.participantId === this.localParticipantId ? 'local' : 'remote',
+          this.deckViews.has(event.participantId)
+            ? {
+                renderer: this.options.renderer,
+                layer: this.travelLayer,
+                deck: this.deckViews.get(event.participantId)!.drawOrigin,
+                back: this.options.gameAssets.cardBack
+              }
+            : undefined
         )
         return
       case 'hero-power-minion-summoned':
@@ -4962,9 +5028,197 @@ export class GameBoardView extends Actor {
     await this.presentMinionPlayed(event, undefined, false)
   }
 
+  private async presentDeckRecruit(
+    event: Extract<OpeningMatchEvent, { type: 'minion-summoned' }>,
+    view: MinionView,
+    resting: { x: number; y: number; scale: number },
+    onLanding: () => Promise<void>
+  ): Promise<void> {
+    const sourceId = event.sourceParticipantId ?? event.participantId
+    const deck = this.deckViews.get(sourceId)?.drawOrigin,
+      parent = view.parent
+    if (!deck || !parent) {
+      if (this.destroyed || view.destroyed) return
+      view.alpha = 1
+      view.presentTauntPop()
+      await onLanding()
+      return
+    }
+    const slot = await this.createSlot({
+      instanceId: event.minion.instanceId,
+      cardId: event.minion.cardId,
+      ownerId: event.participantId
+    })
+    let flight: CardMotionVisual | undefined
+    let settleParticles: Container | undefined
+    try {
+      if (this.destroyed) return
+      this.activeDepartureSlots.add(slot)
+      slot.eventMode = 'none'
+      slot.setMulliganInteractionEnabled(false)
+      const scale = CARD_PLAY_LAYOUT.minion.cardScale
+      const destination = this.travelLayer.toLocal(parent.toGlobal(resting))
+      slot.scale.set(scale)
+      slot.position.set(destination.x, destination.y + (CARD_CANVAS.height * scale) / 2)
+      this.travelLayer.addChild(slot)
+      const bounds = slot.card.getLocalBounds()
+      flight = new CardMotionVisual(
+        this.options.renderer,
+        this.travelLayer,
+        slot,
+        this.options.gameAssets.cardBack,
+        'deck-to-play',
+        bodyMotionCorners(
+          this.travelLayer,
+          slot.card,
+          new Rectangle(bounds.x, bounds.y, bounds.width, bounds.height)
+        ),
+        {
+          start: deckMotionCorners(this.travelLayer, deck),
+          slot: deckMotionSlot(this.travelLayer, deck),
+          remote: sourceId === this.remoteParticipantId
+        }
+      )
+      this.deckMotionVisuals.add(flight)
+      const clock = { seconds: 0 },
+        visual = flight
+      await completeTimeline(
+        this.timeline().to(clock, {
+          seconds: flight.playback.duration,
+          duration: flight.playback.duration,
+          ease: 'none',
+          onUpdate: () => visual.update(clock.seconds)
+        })
+      )
+      if (this.destroyed || view.destroyed) return
+      flight.dispose()
+      this.cardPlayAnimation.alignMinionArtwork(slot.card, view, parent)
+      slot.visible = false
+      view.alpha = 1
+      const impact = this.timeline()
+      const duration = CARD_PLAY_LAYOUT.minion.settleDuration
+      view.presentTauntPop(duration)
+      impact.to(view, { x: resting.x, y: resting.y, duration, ease: 'power2.out' }, 0)
+      impact.to(
+        view.scale,
+        { x: resting.scale, y: resting.scale, duration, ease: 'power2.out' },
+        0
+      )
+      settleParticles = this.cardPlayAnimation.emitMinionParticles(
+        impact,
+        parent,
+        view,
+        'settle'
+      )
+      let landing = Promise.resolve()
+      impact.call(
+        () => {
+          if (!this.destroyed && !view.destroyed) landing = onLanding()
+        },
+        [],
+        duration
+      )
+      await completeTimeline(impact)
+      await landing
+      if (this.destroyed || view.destroyed) return
+      this.syncBoardAttackability(this.presentationState())
+    } finally {
+      settleParticles?.destroy({ children: true })
+      if (flight) {
+        flight.dispose()
+        this.deckMotionVisuals.delete(flight)
+      }
+      this.activeDepartureSlots.delete(slot)
+      if (!slot.destroyed) slot.destroy({ children: true })
+      if (!view.destroyed) view.alpha = 1
+    }
+  }
+
+  private async presentDeckSecret(
+    cue: NonNullable<
+      Extract<OpeningMatchEvent, { type: 'effect-resolved' }>['deckToSecret']
+    >
+  ): Promise<void> {
+    if (this.destroyed) return
+    const deck = this.deckViews.get(cue.sourceParticipantId)?.drawOrigin
+    if (!deck) return
+    const local = cue.participantId === this.localParticipantId
+    const side = local ? 'local' : 'remote'
+    const slot = local ? await this.createSlot(cue.card) : undefined
+    const body = slot ?? new Sprite(this.options.gameAssets.cardBack)
+    let flight: CardMotionVisual | undefined
+    try {
+      if (this.destroyed) return
+      this.deckAdditionBodies.add(body)
+      if (slot) this.activeDepartureSlots.add(slot)
+      body.label = `game.deck-secret.${cue.card.instanceId}`
+      body.eventMode = 'none'
+      const destination = this.secretZoneView.revealOrigin(side, this.travelLayer)
+      const scale = CARD_MOTION_LAYOUT.deckToSecret.scale
+      body.position.copyFrom(destination)
+      if (slot) {
+        slot.setMulliganInteractionEnabled(false)
+        slot.scale.set(scale)
+        slot.y += (CARD_CANVAS.height * scale) / 2
+      } else if (body instanceof Sprite) {
+        body.anchor.set(0.5)
+        body.width = CARD_CANVAS.width * scale
+        body.height = CARD_CANVAS.height * scale
+      }
+      this.travelLayer.addChild(body)
+      const face = slot?.card ?? body
+      const bounds = face.getLocalBounds()
+      flight = new CardMotionVisual(
+        this.options.renderer,
+        this.travelLayer,
+        body,
+        this.options.gameAssets.cardBack,
+        'deck-to-play',
+        bodyMotionCorners(
+          this.travelLayer,
+          face,
+          new Rectangle(bounds.x, bounds.y, bounds.width, bounds.height)
+        ),
+        {
+          start: deckMotionCorners(this.travelLayer, deck),
+          slot: deckMotionSlot(this.travelLayer, deck),
+          hidden: !local
+        }
+      )
+      this.deckMotionVisuals.add(flight)
+      const visual = flight,
+        clock = { seconds: 0 }
+      await completeTimeline(
+        this.timeline().to(clock, {
+          seconds: visual.playback.duration,
+          duration: visual.playback.duration,
+          ease: 'none',
+          onUpdate: () => visual.update(clock.seconds)
+        })
+      )
+      if (this.destroyed) return
+      if (this.pendingDeckSecretCounts.has(cue.participantId))
+        this.pendingDeckSecretCounts.set(cue.participantId, cue.countAfter)
+      this.secretZoneView.sync(side, cue.countAfter)
+    } finally {
+      if (flight) {
+        flight.dispose()
+        this.deckMotionVisuals.delete(flight)
+      }
+      this.deckAdditionBodies.delete(body)
+      if (slot) this.activeDepartureSlots.delete(slot)
+      if (!body.destroyed) body.destroy({ children: true })
+    }
+  }
+
   private async presentMinionSummonBatch(
     events: readonly Extract<OpeningMatchEvent, { type: 'minion-summoned' }>[]
   ): Promise<void> {
+    // Deck recruits own a full-card flight before becoming board bodies.
+    if (events.some((event) => event.sourceZone === 'deck')) {
+      for (const event of events) await this.presentMinionSummoned(event)
+      return
+    }
     const participantId = events[0]!.participantId
     if (
       participantId !== this.localParticipantId &&
@@ -5083,6 +5337,10 @@ export class GameBoardView extends Actor {
   private async presentEffectResolved(
     event: Extract<OpeningMatchEvent, { type: 'effect-resolved' }>
   ): Promise<void> {
+    if (event.deckToSecret) {
+      await this.presentDeckSecret(event.deckToSecret)
+      return
+    }
     if (event.action === 'revive-dormant') {
       const { current, total, turnNumber } = event.data ?? {}
       if (
@@ -5099,6 +5357,54 @@ export class GameBoardView extends Actor {
     }
     if (event.deckAddition) {
       const addition = event.deckAddition
+      // A real hand return keeps its identity and departs from its displayed pose.
+      // Generated/copy additions have new identities and keep the source-materialize path.
+      const materialized: (typeof addition.cards)[number][] = []
+      const returns: Promise<void>[] = []
+      for (const item of addition.cards) {
+        const entry = this.findEntry(item.card.instanceId)
+        const back = this.remoteBacks
+          .slice(0, this.remoteBackCount)
+          .find(
+            (candidate) => this.remoteBackIds.get(candidate) === item.card.instanceId
+          )
+        const body = entry?.slot ?? back
+        if (!body) {
+          materialized.push(item)
+          continue
+        }
+        if (entry) {
+          this.travelLayer.reparentChild(body)
+          this.removePresentedHandEntry(entry)
+          this.activeDepartureSlots.add(entry.slot)
+        }
+        const sequence = returns.length
+        returns.push(
+          (async () => {
+            try {
+              await this.animateBodyToDeck(
+                body,
+                addition.participantId === this.localParticipantId
+                  ? GAME_BOARD_LAYOUT.decks.local
+                  : GAME_BOARD_LAYOUT.decks.remote,
+                sequence,
+                'hand-return',
+                !!back
+              )
+            } finally {
+              if (entry) {
+                this.activeDepartureSlots.delete(entry.slot)
+                if (!entry.slot.destroyed) entry.slot.destroy({ children: true })
+              } else if (back && !back.destroyed)
+                this.removeRemoteBack(item.card.instanceId)
+            }
+          })()
+        )
+      }
+      const returned = await Promise.allSettled(returns)
+      const failed = returned.find((result) => result.status === 'rejected')
+      if (failed?.status === 'rejected') throw failed.reason
+      if (this.destroyed) return
       const source = this.findEffectTargetView(addition.sourceInstanceId)?.view
       const hero = this.heroViews.get(event.controllerId)
       const origin =
@@ -5109,27 +5415,30 @@ export class GameBoardView extends Actor {
               ? this.travelLayer.toLocal(hero.getGlobalPosition())
               : GAME_BOARD_LAYOUT.frame.center))
       try {
-        await presentDeckAddition(addition, {
-          layer: this.travelLayer,
-          back: this.options.gameAssets.cardBack,
-          viewerId: this.localParticipantId,
-          backAura: this.options.gameAssets.minionPlayAura,
-          bodies: this.deckAdditionBodies,
-          slots: this.activeDepartureSlots,
-          origin,
-          destroyed: () => this.destroyed,
-          createSlot: (card) => this.createSlot(card),
-          aura: (slot) => this.cardPlayAnimation.createMinionAura(slot.card, slot),
-          timeline: () => this.timeline(),
-          fly: (body, participantId, index) =>
-            this.animateBodyToDeck(
-              body,
-              participantId === this.localParticipantId
-                ? GAME_BOARD_LAYOUT.decks.local
-                : GAME_BOARD_LAYOUT.decks.remote,
-              index
-            )
-        })
+        await presentDeckAddition(
+          { ...addition, cards: materialized },
+          {
+            layer: this.travelLayer,
+            back: this.options.gameAssets.cardBack,
+            viewerId: this.localParticipantId,
+            backAura: this.options.gameAssets.minionPlayAura,
+            bodies: this.deckAdditionBodies,
+            slots: this.activeDepartureSlots,
+            origin,
+            destroyed: () => this.destroyed,
+            createSlot: (card) => this.createSlot(card),
+            aura: (slot) => this.cardPlayAnimation.createMinionAura(slot.card, slot),
+            timeline: () => this.timeline(),
+            fly: (body, participantId, index) =>
+              this.animateBodyToDeck(
+                body,
+                participantId === this.localParticipantId
+                  ? GAME_BOARD_LAYOUT.decks.local
+                  : GAME_BOARD_LAYOUT.decks.remote,
+                index
+              )
+          }
+        )
       } catch (error) {
         this.logger.warn('Failed to render deck addition.', error)
       }
@@ -5142,7 +5451,7 @@ export class GameBoardView extends Actor {
           back: this.options.gameAssets.cardBack,
           localId: this.localParticipantId,
           slots: this.activeDepartureSlots,
-          animations: this.drawAnimations,
+          animations: this.deckMotionVisuals,
           destroyed: () => this.destroyed,
           createSlot: (card) => this.createSlot(card),
           deck: (id) => this.deckViews.get(id)?.drawOrigin,
@@ -5168,6 +5477,17 @@ export class GameBoardView extends Actor {
         return
       }
       await this.presentMinionCardMovement(event.cardMovement)
+      const incoming = event.cardMovement.replacedDeckCard
+      if (incoming && !this.destroyed) {
+        await this.presentMinionSummoned({
+          type: 'minion-summoned',
+          sourceZone: 'deck',
+          sourceParticipantId: incoming.participantId,
+          participantId: incoming.boardParticipantId,
+          minion: incoming.minion,
+          position: incoming.position
+        })
+      }
       return
     }
     if (event.action === 'discard') {
@@ -5555,7 +5875,10 @@ export class GameBoardView extends Actor {
   }
 
   /** Keeps the facedown hero-zone markers derived from authoritative secret state. */
-  private syncSecrets(state: OpeningMatchState): void {
+  private syncSecrets(
+    state: OpeningMatchState,
+    upcomingEvents: readonly OpeningMatchEvent[] = []
+  ): void {
     state = this.randomSpellState ?? state
     for (const player of state.players) {
       const side = player.participantId === this.localParticipantId ? 'local' : 'remote'
@@ -5564,9 +5887,25 @@ export class GameBoardView extends Actor {
       )
         ? player.quest
         : null
-      this.secretZoneView.sync(side, player.secrets?.length ?? 0)
-      this.secretZoneView.setPaired(side, !!visibleQuest && !!player.secrets?.length)
-      this.questZoneView.sync(side, visibleQuest, !!player.secrets?.length)
+      // Command callers can refresh badges before their queued presentation starts.
+      // Hold recruited Secrets back until each full-card flight reaches the badge.
+      const firstRecruit = upcomingEvents.find(
+        (event) =>
+          event.type === 'effect-resolved' &&
+          event.deckToSecret?.participantId === player.participantId
+      )
+      const beforeRecruit =
+        !this.randomSpellState && firstRecruit?.type === 'effect-resolved'
+          ? firstRecruit.deckToSecret!.countAfter - 1
+          : undefined
+      const count =
+        this.pendingDeckSecretCounts.get(player.participantId) ??
+        beforeRecruit ??
+        player.secrets?.length ??
+        0
+      this.secretZoneView.sync(side, count)
+      this.secretZoneView.setPaired(side, !!visibleQuest && count > 0)
+      this.questZoneView.sync(side, visibleQuest, count > 0)
     }
     this.refreshSecretPreview(state)
     this.refreshQuestPreview(state)
@@ -5691,6 +6030,13 @@ export class GameBoardView extends Actor {
     const consumeBadge = (): void => {
       if (this.destroyed) return
       this.randomSpellState = consumedState
+      if (this.pendingDeckSecretCounts.has(event.participantId))
+        this.pendingDeckSecretCounts.set(
+          event.participantId,
+          consumedState.players.find(
+            (player) => player.participantId === event.participantId
+          )!.secrets?.length ?? 0
+        )
       this.syncSecrets(consumedState)
     }
     const identity = { instanceId: event.secretId, cardId: event.cardId }
@@ -5997,6 +6343,12 @@ export class GameBoardView extends Actor {
   }
 
   private async reconcileRandomSpellState(state: OpeningMatchState): Promise<void> {
+    for (const player of state.players)
+      if (this.pendingDeckSecretCounts.has(player.participantId))
+        this.pendingDeckSecretCounts.set(
+          player.participantId,
+          player.secrets?.length ?? 0
+        )
     await this.reconcileWeaponViews(state)
     if (this.destroyed) return
     await this.reconcileEffectMovement(state)
@@ -6178,6 +6530,14 @@ export class GameBoardView extends Actor {
     )
   }
 
+  private heroBoardPlacement(participantId: string | null): LayoutPlacement {
+    if (participantId !== this.localParticipantId)
+      return GAME_BOARD_LAYOUT.heroes.remote
+    return this.classHeroPremium(this.localParticipantId)
+      ? GAME_BOARD_LAYOUT.heroes.localPremium
+      : GAME_BOARD_LAYOUT.heroes.local
+  }
+
   private classHeroPremium(participantId: PlayerId): boolean {
     const participant = this.options.route.setup.participants.find(
       (candidate) => candidate.participantId === participantId
@@ -6205,9 +6565,13 @@ export class GameBoardView extends Actor {
       this.classHeroPremium(this.remoteParticipantId)
     )
     for (const player of this.presentationState().players) {
-      this.heroViews
-        .get(player.participantId)
-        ?.setFrame(this.heroPortraitTexture(player.heroId, player.participantId))
+      const view = this.heroViews.get(player.participantId)
+      if (view) {
+        view.setFrame(this.heroPortraitTexture(player.heroId, player.participantId))
+        if (player.participantId === this.localParticipantId) {
+          view.x = this.heroRestingPosition(view).x
+        }
+      }
       this.heroPowerViews
         .get(player.participantId)
         ?.setPremium(this.heroPowerPremiumFor(player))
@@ -6523,6 +6887,7 @@ export class GameBoardView extends Actor {
   private async presentGeneratedCard(
     event: Extract<OpeningMatchEvent, { type: 'card-generated' }>
   ): Promise<void> {
+    if (this.destroyed) return
     if (event.origin.kind === 'deck') {
       await this.presentDraw(
         event.participantId,
@@ -6559,15 +6924,20 @@ export class GameBoardView extends Actor {
         )
       }
     }
-    this.syncTurnHud(this.match.getState())
+    if (this.destroyed) return
+    this.syncTurnHud(this.presentationState())
   }
 
   private async spawnLocalCard(
     card: OpeningCard,
     origin: { x: number; y: number }
   ): Promise<void> {
-    if (this.findEntry(card.instanceId)) return
+    if (this.destroyed || this.findEntry(card.instanceId)) return
     const slot = await this.createSlot(card)
+    if (this.destroyed) {
+      slot.destroy({ children: true })
+      return
+    }
     this.prepareSlotAtGeneratedOrigin(slot, origin)
     this.travelLayer.addChild(slot)
     this.hand.append({
@@ -6583,6 +6953,7 @@ export class GameBoardView extends Actor {
       preserveHover: true
     })
     // Promote the completed card above the travel layer and enable hand interaction.
+    if (this.destroyed || slot.destroyed) return
     this.hand.layer.addChild(slot)
     this.hand.configureSlot(slot)
   }
@@ -6612,10 +6983,9 @@ export class GameBoardView extends Actor {
     this.travelLayer.addChild(slot)
     this.prepareSlotAtDeck(
       slot,
-      event.participantId === this.localParticipantId
+      (event.sourceParticipantId ?? event.participantId) === this.localParticipantId
         ? GAME_BOARD_LAYOUT.decks.local
-        : GAME_BOARD_LAYOUT.decks.remote,
-      0
+        : GAME_BOARD_LAYOUT.decks.remote
     )
     // This temporary card never belongs to the hand. Its destination transform
     // only supplies snapshot dimensions; the flight stops at the authored peak.
@@ -6623,11 +6993,18 @@ export class GameBoardView extends Actor {
     slot.rotation = 0
     slot.eventMode = 'none'
     try {
-      await this.animateDeckDeparture(slot, 0, 0, 'local-reveal', () => {
-        // Deck destruction already belongs to its triggering action's history.
-        if (event.origin !== 'deck-destruction') this.historyView?.recordBurn(event)
-        this.syncTurnHud(this.match.getState())
-      })
+      await this.animateDeckDeparture(
+        slot,
+        0,
+        (event.sourceParticipantId ?? event.participantId) === this.remoteParticipantId
+          ? 'remote-reveal'
+          : 'local-reveal',
+        () => {
+          // Deck destruction already belongs to its triggering action's history.
+          if (event.origin !== 'deck-destruction') this.historyView?.recordBurn(event)
+          this.syncTurnHud(this.presentationState())
+        }
+      )
     } finally {
       this.activeDepartureSlots.delete(slot)
       if (!slot.destroyed) slot.destroy({ children: true })
@@ -6638,8 +7015,9 @@ export class GameBoardView extends Actor {
     participantId: PlayerId,
     card: OpeningCard,
     sourceDeck?: PlayerId,
-    profile: CardDrawProfile = 'direct'
+    profile: CardDrawProfile = 'local-reveal'
   ): Promise<void> {
+    if (this.destroyed) return
     if (participantId === this.localParticipantId) {
       await this.addLocalCard(card, sourceDeck, profile)
     } else {
@@ -6649,7 +7027,7 @@ export class GameBoardView extends Actor {
       if (back) {
         this.remoteBackIds.set(back, card.instanceId)
         if (sourceDeck) {
-          this.prepareBackAtDeck(back, this.remoteBackCount - 1)
+          this.prepareBackAtDeck(back)
           const deck = this.deckViews.get(sourceDeck)
           if (deck) this.drawOrigins.set(back, deck.drawOrigin)
         } else this.prepareBackAtGeneratedOrigin(back, GAME_BOARD_LAYOUT.frame.center)
@@ -6665,13 +7043,9 @@ export class GameBoardView extends Actor {
           )
       }
     }
-    this.syncTurnHud(this.match.getState())
-    if (
-      participantId !== this.localParticipantId ||
-      !sourceDeck ||
-      profile !== 'direct'
-    )
-      await this.wait(OPENING_TIMING.replacementPause)
+    if (this.destroyed) return
+    this.syncTurnHud(this.presentationState())
+    await this.wait(OPENING_TIMING.replacementPause)
   }
 
   private async presentRemoteRevealedDraw(
@@ -6701,7 +7075,7 @@ export class GameBoardView extends Actor {
       slot.eventMode = 'none'
       const deck = this.deckViews.get(sourceDeck)
       if (deck) this.drawOrigins.set(slot, deck.drawOrigin)
-      await this.animateDeckDeparture(slot, 0, 0, 'public-reveal')
+      await this.animateDeckDeparture(slot, 0, 'remote-public-reveal')
     } catch (error) {
       this.logger.warn('Failed to render public draw.', error)
       if (!this.destroyed && !back.destroyed)
@@ -6732,7 +7106,7 @@ export class GameBoardView extends Actor {
     if (!isLocal && !isRemote) return
     const current = this.weaponViews.get(event.participantId)
     if (current?.instanceId === event.weapon.instanceId) {
-      this.updateWeaponView(current, event.weapon, this.presentationState().turnNumber)
+      this.updateWeaponView(current, event.weapon, this.presentationState())
       return
     }
 
@@ -6752,6 +7126,7 @@ export class GameBoardView extends Actor {
     const view = await WeaponView.create(
       {
         label: `game.weapon.${event.weapon.instanceId}`,
+        active: event.participantId === this.presentationState().activePlayerId,
         premium: this.premiumAppearance.resolve(event.weapon, event.participantId),
         premiumSide: this.premiumAppearance.sideFor(event.weapon, event.participantId),
         attack: event.weapon.attack,
@@ -6768,6 +7143,8 @@ export class GameBoardView extends Actor {
       {
         frame: this.options.gameAssets.weapon,
         premiumFrame: this.options.gameAssets.premiumWeapon,
+        cover: this.options.gameAssets.weaponCover,
+        premiumCover: this.options.gameAssets.premiumWeaponCover,
         poisonous: this.options.gameAssets.boardPoisonous,
         trigger: this.options.gameAssets.boardTrigger,
         deathrattle: this.options.gameAssets.boardDeathrattle,
@@ -6857,7 +7234,7 @@ export class GameBoardView extends Actor {
         continue
       }
       if (current?.instanceId === player.weapon.instanceId) {
-        this.updateWeaponView(current, player.weapon, state.turnNumber)
+        this.updateWeaponView(current, player.weapon, state)
         continue
       }
       await this.presentWeaponEquipped(
@@ -7228,6 +7605,7 @@ export class GameBoardView extends Actor {
       this.findPlayer(state, event.participantId).heroId
     )
     const textures: MinionViewTextures = {
+      windfury: this.options.gameAssets,
       premiumFrame: this.options.gameAssets.premiumMinionFrame,
       frame: this.options.gameAssets.minionFrame,
       legendaryFrame: this.options.gameAssets.minionFrameLegendary,
@@ -7377,7 +7755,10 @@ export class GameBoardView extends Actor {
     }
     const shakeOnLanding = (): Promise<void> => {
       if (
-        event.type !== 'minion-played' ||
+        !(
+          event.type === 'minion-played' ||
+          (event.type === 'minion-summoned' && event.sourceZone === 'deck')
+        ) ||
         definition.type !== 'Minion' ||
         definition.rarity !== 'Legendary' ||
         targetPreview?.cancelled ||
@@ -7411,6 +7792,20 @@ export class GameBoardView extends Actor {
         view.instanceId = event.minion.instanceId
         view.ownerId = event.participantId
         view.cardId = event.minion.cardId
+        if (event.type === 'minion-summoned' && event.sourceZone === 'deck') {
+          if (isLocal) this.insertLocalMinionView(event.position, view)
+          else this.insertRemoteMinionView(event.position, view)
+          view.position.set(resting.x, resting.y)
+          view.scale.set(resting.scale)
+          view.setBaseScale(resting.scale)
+          view.alpha = 0
+          this.wireMinionView(view)
+          await this.presentDeckRecruit(event, view, resting, () => {
+            effectsOnLanding(resting)
+            return shakeOnLanding()
+          })
+          return null
+        }
         if (hasSummonGlow(event)) {
           view.alpha = 0
           if (isLocal) this.insertLocalMinionView(event.position, view)
@@ -7776,9 +8171,14 @@ export class GameBoardView extends Actor {
     }
   }
 
+  private heroHoverTarget(view: HeroView): MatchHoverTarget {
+    return { kind: 'hero', key: `hero:${view.ownerId}`, view }
+  }
+
   private setHoverAura(target: MatchHoverTarget, enabled: boolean): void {
     switch (target.kind) {
       case 'board-card':
+      case 'hero':
         target.view.setHoverAura(enabled)
         return
       case 'hero-power':
@@ -7795,6 +8195,8 @@ export class GameBoardView extends Actor {
 
   private activateHoverPreview(target: MatchHoverTarget): void {
     switch (target.kind) {
+      case 'hero':
+        return
       case 'board-card':
         void this.showBoardCardPreview(target.view)
         return
@@ -7823,6 +8225,8 @@ export class GameBoardView extends Actor {
   private clearHoverTarget(target: MatchHoverTarget): void {
     this.setHoverAura(target, false)
     switch (target.kind) {
+      case 'hero':
+        return
       case 'board-card':
         this.hideBoardCardPreview(target.view, true)
         return
@@ -8449,6 +8853,10 @@ export class GameBoardView extends Actor {
   }
 
   private wireHeroView(view: HeroView): void {
+    view.setHoverable(true)
+    const hoverTarget = this.heroHoverTarget(view)
+    view.on('pointerover', () => this.hoverPreview.enter(hoverTarget))
+    view.on('pointerout', () => this.hoverPreview.leave(hoverTarget))
     view.on('pointerdown', (event: FederatedPointerEvent) => {
       if (view.ownerId !== this.localParticipantId) return
       this.beginCombatDrag(view, event)
@@ -8521,14 +8929,22 @@ export class GameBoardView extends Actor {
   }
 
   private async presentLocalMulligan(event: MulliganResolvedEvent): Promise<void> {
+    if (this.destroyed) return
+    if (!event.returnedCards.length && !event.replacementCards.length) return
     const returnedSlots = event.returnedCards
       .map((card) => this.findEntry(card.instanceId)?.slot)
       .filter((slot): slot is GameCardSlot => slot !== undefined)
     await Promise.all(
       returnedSlots.map((slot, index) =>
-        this.animateSlotToDeck(slot, GAME_BOARD_LAYOUT.decks.local, index)
+        this.animateBodyToDeck(
+          slot,
+          GAME_BOARD_LAYOUT.decks.local,
+          index,
+          'mulligan-return'
+        )
       )
     )
+    if (this.destroyed) return
     for (const slot of returnedSlots) {
       const entryIndex = this.hand.entries.findIndex((entry) => entry.slot === slot)
       const entry = entryIndex >= 0 ? this.hand.entries[entryIndex] : undefined
@@ -8537,10 +8953,15 @@ export class GameBoardView extends Actor {
       slot.destroy({ children: true })
     }
     await this.wait(OPENING_TIMING.replacementPause)
+    if (this.destroyed) return
 
     const replacementSlots: GameCardSlot[] = []
     for (const card of event.replacementCards) {
       const slot = await this.createSlot(card)
+      if (this.destroyed) {
+        slot.destroy({ children: true })
+        return
+      }
       this.hand.append({
         card: cloneCard(card),
         slot,
@@ -8550,16 +8971,70 @@ export class GameBoardView extends Actor {
       replacementSlots.push(slot)
     }
     const allSlots = this.hand.entries.map((entry) => entry.slot)
-    allSlots.forEach((slot, index) => {
+    allSlots.forEach((slot) => {
       slot.setSelected(false)
       slot.setMulliganInteractionEnabled(false)
       if (!replacementSlots.includes(slot)) return
-      this.prepareSlotAtDeck(slot, GAME_BOARD_LAYOUT.decks.local, index)
+      this.prepareSlotAtDeck(slot, GAME_BOARD_LAYOUT.decks.local)
+      this.drawProfiles.set(slot, 'mulligan-replacement')
       this.travelLayer.addChild(slot)
     })
     await Promise.all(
       allSlots.map((slot, index) =>
-        this.mulligan.animateSlot(slot, index, allSlots.length, OPENING_TIMING.cardDeal)
+        this.mulligan.animateSlot(
+          slot,
+          index,
+          allSlots.length,
+          OPENING_TIMING.cardDeal,
+          Math.max(0, replacementSlots.indexOf(slot))
+        )
+      )
+    )
+  }
+
+  private async presentRemoteMulligan(event: MulliganResolvedEvent): Promise<void> {
+    const returned = event.returnedCards
+      .map((card) => ({
+        card,
+        back: this.remoteBacks
+          .slice(0, this.remoteBackCount)
+          .find((back) => this.remoteBackIds.get(back) === card.instanceId)
+      }))
+      .filter((entry): entry is { card: OpeningCard; back: Sprite } => !!entry.back)
+    const results = await Promise.allSettled(
+      returned.map(async ({ back }, index) => {
+        await this.animateBodyToDeck(
+          back,
+          GAME_BOARD_LAYOUT.decks.remote,
+          index,
+          'mulligan-return',
+          true
+        )
+      })
+    )
+    if (this.destroyed) return
+    for (const { card } of returned) this.removeRemoteBack(card.instanceId)
+    const failure = results.find((result) => result.status === 'rejected')
+    if (failure?.status === 'rejected') throw failure.reason
+    const incoming: Sprite[] = []
+    for (const card of event.replacementCards) {
+      this.remoteBackCount++
+      this.ensureRemoteBacks(this.remoteBackCount)
+      const back = this.remoteBacks[this.remoteBackCount - 1]
+      this.remoteBackIds.set(back, card.instanceId)
+      this.prepareBackAtDeck(back)
+      this.drawProfiles.set(back, 'mulligan-replacement')
+      incoming.push(back)
+    }
+    await Promise.all(
+      incoming.map((back, index) =>
+        this.animateBackToHand(
+          back,
+          this.remoteBacks.indexOf(back),
+          this.remoteBackCount,
+          CARD_MOTION_LAYOUT.mulligan.return,
+          index
+        )
       )
     )
   }
@@ -8588,9 +9063,9 @@ export class GameBoardView extends Actor {
   private async addLocalCard(
     card: OpeningCard,
     sourceDeck?: PlayerId,
-    profile: CardDrawProfile = 'direct'
+    profile: CardDrawProfile = 'local-reveal'
   ): Promise<void> {
-    if (this.findEntry(card.instanceId)) return
+    if (this.destroyed || this.findEntry(card.instanceId)) return
     const selected = this.cardSelectionOverlay.takeSelected(card.instanceId)
     if (selected) {
       const localPosition = this.travelLayer.toLocal(selected.globalPosition)
@@ -8610,6 +9085,7 @@ export class GameBoardView extends Actor {
         delayedInstanceId: card.instanceId,
         preserveHover: true
       })
+      if (this.destroyed || selected.slot.destroyed) return
       this.hand.layer.addChild(selected.slot)
       this.hand.configureSlot(selected.slot)
       return
@@ -8620,12 +9096,15 @@ export class GameBoardView extends Actor {
       return
     }
     const slot = await this.createSlot(card)
+    if (this.destroyed) {
+      slot.destroy({ children: true })
+      return
+    }
     this.prepareSlotAtDeck(
       slot,
       sourceDeck === this.localParticipantId
         ? GAME_BOARD_LAYOUT.decks.local
-        : GAME_BOARD_LAYOUT.decks.remote,
-      this.hand.entries.length
+        : GAME_BOARD_LAYOUT.decks.remote
     )
     this.drawProfiles.set(slot, profile)
     this.travelLayer.addChild(slot)
@@ -8635,23 +9114,18 @@ export class GameBoardView extends Actor {
       restTransform: undefined,
       displaced: false
     })
-    const duration =
-      profile === 'direct' ? RESOLUTION_TIMING.cardDraw : OPENING_TIMING.cardDeal
     await this.hand.applyLayout({
-      positionDuration: duration,
-      scaleDuration: duration,
+      positionDuration: OPENING_TIMING.cardDeal,
+      scaleDuration: OPENING_TIMING.cardDeal,
       delayedInstanceId: card.instanceId,
       preserveHover: true
     })
+    if (this.destroyed || slot.destroyed) return
     this.hand.layer.addChild(slot)
     this.hand.configureSlot(slot)
   }
 
-  private prepareSlotAtDeck(
-    slot: GameCardSlot,
-    deck: LayoutPlacement,
-    sequence: number
-  ): void {
+  private prepareSlotAtDeck(slot: GameCardSlot, deck: LayoutPlacement): void {
     const deckView = this.deckViews.get(
       deck === GAME_BOARD_LAYOUT.decks.local
         ? this.localParticipantId
@@ -8660,12 +9134,11 @@ export class GameBoardView extends Actor {
     if (deckView) this.drawOrigins.set(slot, deckView.drawOrigin)
     slot.setMulliganInteractionEnabled(false)
     slot.position.set(deck.position.x, deck.position.y)
-    slot.scale.set(
-      GAME_BOARD_LAYOUT.cardTravel.slotScale.x,
-      GAME_BOARD_LAYOUT.cardTravel.slotScale.y
-    )
-    slot.skew.set(sequence % 2 === 0 ? 0.3 : -0.3, -0.06)
-    slot.rotation = sequence % 2 === 0 ? -0.08 : 0.08
+    // The destination layout supplies the body transform; the shared flight owns
+    // the complete seated card. Do not recreate the old flattened deck silhouette.
+    slot.scale.set(1)
+    slot.skew.set(0, 0)
+    slot.rotation = 0
     slot.alpha = 1
   }
 
@@ -8693,18 +9166,15 @@ export class GameBoardView extends Actor {
     back.visible = true
   }
 
-  private prepareBackAtDeck(back: Sprite, sequence: number): void {
+  private prepareBackAtDeck(back: Sprite): void {
     const deckView = this.deckViews.get(this.remoteParticipantId)
     if (deckView) this.drawOrigins.set(back, deckView.drawOrigin)
     back.position.set(
       GAME_BOARD_LAYOUT.decks.remote.position.x,
       GAME_BOARD_LAYOUT.decks.remote.position.y
     )
-    back.scale.set(
-      GAME_BOARD_LAYOUT.cardTravel.backScale.x,
-      GAME_BOARD_LAYOUT.cardTravel.backScale.y
-    )
-    back.rotation = sequence % 2 === 0 ? -0.08 : 0.08
+    back.scale.set(1)
+    back.rotation = 0
     back.alpha = 1
     back.visible = true
   }
@@ -8719,13 +9189,18 @@ export class GameBoardView extends Actor {
     if (back.destroyed) return Promise.resolve()
     const { x, y, rotation, scale } = this.remoteHandTransform(index, count)
     if (this.drawOrigins.has(back)) {
+      const profile = this.drawProfiles.get(back) ?? 'hidden-draw'
+      this.drawProfiles.delete(back)
       back.position.set(x, y)
       back.rotation = rotation
       back.scale.set(scale)
       return this.animateDeckDeparture(
         back,
-        duration,
-        staggerIndex * OPENING_TIMING.cardStagger
+        staggerIndex *
+          (profile === 'mulligan-replacement'
+            ? CARD_MOTION_LAYOUT.mulligan.stagger
+            : OPENING_TIMING.cardStagger),
+        profile
       )
     }
     const timeline = this.timeline()
@@ -8865,7 +9340,9 @@ export class GameBoardView extends Actor {
       return
     }
     this.tradeInProgress = true
-    this.hand.drag.acceptCard()
+    const displayed = this.hand.drag.captureFlightPose(this.travelLayer)
+    if (displayed) this.releasedTradePoses.set(entry.slot, displayed)
+    this.hand.drag.acceptSpellCard()
     this.clearLocalBoardPreview()
     this.syncTurnHud(result.state)
     this.syncTurnControls(result.state)
@@ -9219,7 +9696,7 @@ export class GameBoardView extends Actor {
             })
             if (this.destroyed) return
             this.hand.setReflowing(false)
-            this.syncSecrets(result.state)
+            this.syncSecrets(result.state, result.events)
             await this.presentResolutionEvents(result.events)
           })()
         ])
@@ -9232,7 +9709,7 @@ export class GameBoardView extends Actor {
         this.reflowHandAfterPlay()
       ])
       if (this.destroyed) return
-      this.syncSecrets(result.state)
+      this.syncSecrets(result.state, result.events)
       await this.presentResolutionEvents(result.events)
     } finally {
       this.deckAdditionOrigins.delete(entry.card.instanceId)
@@ -9477,6 +9954,7 @@ export class GameBoardView extends Actor {
     this.cardSelectionOverlay.pauseAnimations()
     this.remoteCardPlayPreview.pauseAnimations()
     this.remoteTargetPreview.pauseAnimations()
+    this.fatigueView.pauseAnimations()
   }
 
   updateShadows(deltaMS: number): void {
@@ -9539,6 +10017,7 @@ export class GameBoardView extends Actor {
     this.cardSelectionOverlay.resumeAnimations()
     this.remoteCardPlayPreview.resumeAnimations()
     this.remoteTargetPreview.resumeAnimations()
+    this.fatigueView.resumeAnimations()
   }
 
   override dispose(): void {
@@ -9559,6 +10038,9 @@ export class GameBoardView extends Actor {
     this.canvasResizeObserver = null
     this.pendingBoardPointer = null
     this.cardDepartureAnimation.dispose()
+    for (const visual of this.deckMotionVisuals) visual.dispose()
+    this.deckMotionVisuals.clear()
+    this.deckMotionBodies.clear()
     for (const slot of this.activeDepartureSlots)
       if (!slot.destroyed) slot.destroy({ children: true })
     this.activeDepartureSlots.clear()
@@ -9658,33 +10140,60 @@ export class GameBoardView extends Actor {
     return this.animateBodyToDeck(slot, deck, sequence)
   }
 
-  private animateBodyToDeck(
+  private async animateBodyToDeck(
     slot: Container,
     deck: LayoutPlacement,
-    sequence: number
+    sequence: number,
+    profile: DeckMotionProfile = 'insert',
+    hidden = false
   ): Promise<void> {
-    if (slot.parent !== this.travelLayer) this.travelLayer.reparentChild(slot)
-    const direction = slot.x < deck.position.x ? -1 : 1
-    const timeline = this.timeline()
-    timeline.to(slot, {
-      x: deck.position.x,
-      y: deck.position.y,
-      alpha: 0,
-      rotation: direction * (0.16 + sequence * 0.015),
-      duration: OPENING_TIMING.cardDeal,
-      ease: 'power2.in'
-    })
-    timeline.to(
-      slot.scale,
+    if (this.destroyed || slot.destroyed) return
+    const remote = deck === GAME_BOARD_LAYOUT.decks.remote
+    const layer =
+      remote && profile === 'mulligan-return' ? this.remoteHandLayer : this.travelLayer
+    if (slot.parent !== layer) layer.reparentChild(slot)
+    const origin = this.deckViews.get(
+      remote ? this.remoteParticipantId : this.localParticipantId
+    )?.drawOrigin
+    if (!origin || this.destroyed) return
+    const visual = new CardMotionVisual(
+      this.options.renderer,
+      layer,
+      slot,
+      this.options.gameAssets.cardBack,
+      profile,
+      deckMotionCorners(layer, origin),
       {
-        x: GAME_BOARD_LAYOUT.cardTravel.slotScale.x,
-        y: GAME_BOARD_LAYOUT.cardTravel.slotScale.y,
-        duration: OPENING_TIMING.cardDeal,
-        ease: 'power2.in'
-      },
-      0
+        hidden,
+        remote,
+        sequence,
+        launch: this.releasedTradePoses.get(slot),
+        slot: deckMotionSlot(layer, origin)
+      }
     )
-    return completeTimeline(timeline)
+    this.releasedTradePoses.delete(slot)
+    this.deckMotionVisuals.add(visual)
+    this.deckMotionBodies.add(slot)
+    const clock = { seconds: 0 }
+    try {
+      await completeTimeline(
+        this.timeline().to(clock, {
+          seconds: visual.playback.duration,
+          duration: visual.playback.duration,
+          delay:
+            profile === 'mulligan-return'
+              ? sequence * CARD_MOTION_LAYOUT.mulligan.stagger
+              : 0,
+          ease: 'none',
+          onUpdate: () => visual.update(clock.seconds)
+        })
+      )
+    } finally {
+      visual.dispose()
+      this.deckMotionVisuals.delete(visual)
+      this.deckMotionBodies.delete(slot)
+      if (!slot.destroyed) slot.alpha = 0
+    }
   }
 
   /**
@@ -9856,22 +10365,21 @@ export class GameBoardView extends Actor {
 
   private async animateDeckDeparture(
     target: GameCardSlot | Sprite,
-    duration: number,
     delay: number,
-    profile: CardDrawProfile = 'direct',
+    profile: CardDrawProfile = 'local-reveal',
     onBurnStart?: () => void
   ): Promise<void> {
     const deck = this.drawOrigins.get(target)
     this.drawOrigins.delete(target)
     if (!deck || this.destroyed) return
-    if (
-      (profile === 'local-reveal' || profile === 'public-reveal') &&
-      deck === this.deckViews.get(this.remoteParticipantId)?.drawOrigin
-    )
-      profile = profile === 'public-reveal' ? 'remote-public-reveal' : 'remote-reveal'
     const animation = new CardDrawAnimation(
       this.options.renderer,
-      this.travelLayer,
+      // The engine can already be past mulligan while its flights are queued.
+      // Use the presentation depth, not the engine phase, to include replacement.
+      target.parent === this.remoteHandLayer &&
+        this.travelLayer.zIndex === MATCH_LAYERS.mulliganTravel
+        ? this.remoteHandLayer
+        : this.travelLayer,
       deck,
       target,
       this.options.gameAssets.cardBack,
@@ -9879,20 +10387,37 @@ export class GameBoardView extends Actor {
       profile
     )
     this.drawAnimations.add(animation)
+    this.deckMotionBodies.add(target)
     const progress = { value: 0 }
     try {
       const timeline = this.timeline()
       const reveal = CARD_DRAW_LAYOUT.localReveal
       const onUpdate = (): void => animation.update(progress.value)
-      if (profile !== 'direct') {
-        const mulligan = profile === 'mulligan-reveal'
+      if (profile === 'mulligan-reveal' || profile === 'mulligan-replacement') {
+        timeline.to(progress, {
+          value: 1,
+          duration:
+            target instanceof GameCardSlot
+              ? CARD_DRAW_LAYOUT.localMulligan.approach +
+                CARD_DRAW_LAYOUT.localMulligan.settle
+              : profile === 'mulligan-reveal'
+                ? CARD_MOTION_LAYOUT.mulligan.deal + CARD_MOTION_LAYOUT.mulligan.spread
+                : CARD_MOTION_LAYOUT.mulligan.return,
+          delay,
+          ease: 'none',
+          onUpdate
+        })
+      } else if (profile !== 'hidden-draw') {
+        const remote = profile === 'remote-reveal' || profile === 'remote-public-reveal'
         const peakAt = reveal.reveal[reveal.reveal.length - 1].at
         const peakProgress = peakAt / reveal.duration
         // Normal draws start immediately; mulligan keeps its staggered departures.
         timeline.to(progress, {
           value: peakProgress,
-          duration: mulligan ? peakAt : reveal.normalAscentDuration,
-          delay: mulligan ? delay : 0,
+          duration: remote
+            ? CARD_MOTION_LAYOUT.publicDraw.show
+            : reveal.normalAscentDuration,
+          delay: 0,
           ease: 'none',
           onUpdate
         })
@@ -9907,20 +10432,19 @@ export class GameBoardView extends Actor {
               animation.updateBurn(burn.progress, this.options.gameAssets.burnNoise)
           })
         } else {
-          if (!mulligan)
-            timeline.to(
-              {},
-              {
-                duration:
-                  profile === 'public-reveal' || profile === 'remote-public-reveal'
-                    ? CARD_REVEAL_LAYOUT.hold
-                    : reveal.peakHold
-              }
-            )
+          timeline.to(
+            {},
+            {
+              duration:
+                profile === 'public-reveal' || profile === 'remote-public-reveal'
+                  ? CARD_REVEAL_LAYOUT.hold
+                  : reveal.peakHold
+            }
+          )
           timeline.to(progress, {
             value: 1,
-            duration: mulligan
-              ? reveal.mulliganDescentDuration
+            duration: remote
+              ? CARD_MOTION_LAYOUT.publicDraw.hide
               : reveal.normalDescentDuration,
             ease: 'none',
             onUpdate
@@ -9929,7 +10453,7 @@ export class GameBoardView extends Actor {
       } else {
         timeline.to(progress, {
           value: 1,
-          duration,
+          duration: CARD_MOTION_LAYOUT.remoteDraw.duration,
           delay,
           ease: 'none',
           onUpdate
@@ -9939,6 +10463,7 @@ export class GameBoardView extends Actor {
     } finally {
       animation.dispose()
       this.drawAnimations.delete(animation)
+      this.deckMotionBodies.delete(target)
     }
   }
 

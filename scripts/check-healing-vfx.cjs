@@ -123,7 +123,7 @@ async function main() {
     import { VfxLab } from './src/dev-tools/vfx-lab/vfx-lab';
     import { healingPreview } from './src/dev-tools/vfx-lab/healing-preview';
     import { DEFAULT_VFX_LAB_SETTINGS, settingsFromTemplate, templateFromSettings } from './src/dev-tools/vfx-lab/vfx-lab-model';
-    import rawLibrary from './config/vfx-templates.json';
+    import rawLibrary from './src/visual-components/effects/vfx-templates.json';
     const {ipcRenderer}=require('electron'); const fs=require('node:fs'); const checks=[];
     function check(v,message){if(!v)throw new Error(message);checks.push(message)}
     async function run(){

@@ -115,6 +115,15 @@ export const GAME_BOARD_LAYOUT = {
         scale: 0.55
       }
     ),
+    /** Golden local hero portrait, shifted slightly right in its board slot. */
+    localPremium: placement(
+      { x: 987, y: 825 },
+      { width: 345, height: 433 },
+      {
+        anchor: CENTER,
+        scale: 0.55
+      }
+    ),
     /** Remote hero portrait in its board slot (top of the screen). */
     remote: placement(
       { x: 985, y: 175 },
@@ -364,7 +373,7 @@ export const GAME_BOARD_LAYOUT = {
   heroPowers: {
     /** Local hero power card, right of the local hero portrait. */
     local: placement(
-      { x: 1160, y: 810 },
+      { x: 1168, y: 810 },
       { width: 150, height: 150 },
       {
         anchor: CENTER,
@@ -374,7 +383,7 @@ export const GAME_BOARD_LAYOUT = {
     ),
     /** Remote hero power card, right of the remote hero portrait. */
     remote: placement(
-      { x: 1160, y: 210 },
+      { x: 1168, y: 210 },
       { width: 150, height: 150 },
       {
         anchor: CENTER,
@@ -536,8 +545,6 @@ export const GAME_BOARD_LAYOUT = {
    * These are the start values of the deal animation, not a resting pose.
    */
   cardTravel: {
-    slotScale: { x: 0.08, y: 0.24 } satisfies LayoutPoint,
-    backScale: { x: 0.08, y: 0.12 } satisfies LayoutPoint,
     /** Small, upright pose used when an effect generates a hand card. */
     generatedSlotScale: 0.12,
     generatedBackScale: 0.1

@@ -15,7 +15,10 @@ import {
 } from '../../../game-rules/match'
 import { effectiveBoardMinionKeywords } from '../../../game-rules/match/rules/minion-attack-state'
 import { hasKnownCthunPayoff, unpaidActionPenalty } from './expert-ai-action-safety'
-import { wastesImmediateTemporaryMana } from './expert-temporary-mana'
+import {
+  wastesImmediateTemporaryMana,
+  wastesTemporarySpellDiscount
+} from './expert-temporary-mana'
 import { wastesEmptySelectorSpell } from './expert-empty-selector'
 import { predictableEndTurnDraws } from './expert-resource-evaluation'
 import { canonicalCommandKey } from '../../../game-rules/match/ai/legal-commands'
@@ -1013,6 +1016,8 @@ export function inspectExpertAction(
     )
       return { penalty: 0.35, reason: 'no-payoff' }
     if (wastesImmediateTemporaryMana(root, actorId, command))
+      return { penalty: 0.35, reason: 'no-payoff' }
+    if (wastesTemporarySpellDiscount(root, actorId, command, shouldStop))
       return { penalty: 0.35, reason: 'no-payoff' }
     const buff = unpaidOpponentBuff(root, actorId, command)
     if (buff.penalty > 0) return buff

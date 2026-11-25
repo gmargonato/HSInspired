@@ -1,42 +1,30 @@
 export interface WindfuryTuning {
   readonly speed: number
-  readonly thickness: number
-  readonly ribbons: number
-  readonly trailLength: number
-  readonly width: number
-  readonly orbitDepth: number
-  readonly spacing: number
-  readonly opacity: number
-  readonly softness: number
+  readonly scale: number
+  readonly intensity: number
+  readonly fresnelWidth: number
+  readonly fresnelIntensity: number
+  readonly fresnelAlpha: number
   readonly color: number
 }
-
-/** Multipliers preserve the original approved wind appearance at 1. */
+/** Multipliers over the recovered per-material values. White preserves native tint curves. */
 export const WINDFURY_DEFAULTS: WindfuryTuning = {
   speed: 1,
-  thickness: 1,
-  ribbons: 3,
-  trailLength: 1.15,
-  width: 1,
-  orbitDepth: 0.13,
-  spacing: 0.2,
-  opacity: 1,
-  softness: 1,
-  color: 0xe9f7ff
+  scale: 1,
+  intensity: 1,
+  fresnelWidth: 1,
+  fresnelIntensity: 1,
+  fresnelAlpha: 1,
+  color: 0xffffff
 }
-
 export const WINDFURY_RANGES = {
   speed: [0, 5],
-  thickness: [0.1, 5],
-  ribbons: [1, 8],
-  trailLength: [0.1, 1.95],
-  width: [0.5, 2],
-  orbitDepth: [0.02, 0.5],
-  spacing: [0, 0.4],
-  opacity: [0, 2],
-  softness: [0, 3]
+  scale: [0.5, 2],
+  intensity: [0, 4],
+  fresnelWidth: [0.1, 10],
+  fresnelIntensity: [0, 3],
+  fresnelAlpha: [0, 2]
 } as const
-
 export function parseWindfuryTuning(value: unknown): WindfuryTuning {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new Error('Invalid Windfury tuning')
@@ -51,7 +39,7 @@ export function parseWindfuryTuning(value: unknown): WindfuryTuning {
       !Number.isFinite(number) ||
       number < min ||
       number > max ||
-      ((key === 'ribbons' || key === 'color') && !Number.isInteger(number))
+      (key === 'color' && !Number.isInteger(number))
     )
       throw new Error(`Invalid Windfury ${key}`)
   }

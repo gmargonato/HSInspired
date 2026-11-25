@@ -1,5 +1,5 @@
 const { createServer } = require('vite')
-const vfxLibrary = require('../config/vfx-templates.json')
+const vfxLibrary = require('../src/visual-components/effects/vfx-templates.json')
 
 function auditVfxBindings(cards) {
   const ids = new Set(vfxLibrary.templates.map((template) => template.id))
